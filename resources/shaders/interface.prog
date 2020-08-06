@@ -1,0 +1,110 @@
+@vert
+#version 330 core
+
+in vec4 a_Position;
+in vec4 a_Color;
+in vec2 a_Tex;
+
+uniform mat4 u_Proj;
+uniform mat4 u_ModelView;
+
+uniform vec4 u_Color;
+uniform float u_Width;
+uniform float u_Height;
+
+out fragData
+{
+    smooth vec4 color;
+    smooth vec2 texCoord;
+};
+flat out float width;
+flat out float height;
+
+void main(void)
+{
+    gl_Position = u_Proj*u_ModelView*vec4(a_Position.x*u_Width, 
+        a_Position.y*u_Height, a_Position.z, a_Position.w);
+    color = a_Color*u_Color;
+    texCoord = a_Tex;
+    width = u_Width;
+    height = u_Height;
+}
+
+@frag
+#version 330 core
+
+in fragData
+{
+    smooth vec4 color;
+    smooth vec2 texCoord;
+};
+flat in float width;
+flat in float height;
+
+uniform uint u_WindowWidth;
+uniform uint u_WindowHeight;
+uniform int u_IsGradient;
+uniform vec4 u_GradientBottomLeftColor;
+uniform vec4 u_GradientBottomRightColor;
+uniform vec4 u_GradientTopRightColor;
+uniform vec4 u_GradientTopLeftColor;
+uniform int u_IsBorder;
+uniform vec4 u_BorderColor;
+uniform uint u_BorderThickness;
+uniform int u_IsTex;
+uniform uint u_TexWidth;
+uniform uint u_TexHeight;
+
+uniform samplerBuffer texBuf;
+
+out vec4 fragColor;
+
+vec4 sample_texture(void)
+{
+    return texelFetch(texBuf, clamp(int(float(u_TexWidth)*texCoord.x), 0, int(u_TexWidth) - 1) +
+        clamp(int(float(u_TexHeight)*texCoord.y), 0, int(u_TexHeight) - 1)*int(u_TexWidth));
+}
+
+void main(void)
+{
+    float pX = texCoord.x*width;
+    float pY = texCoord.y*height;
+
+    if (u_IsBorder == 1 &&
+        (
+            pX/100.f <= (float(u_BorderThickness)/u_WindowWidth) ||
+            pY/100.f <= (float(u_BorderThickness)/u_WindowHeight) ||
+            (width - pX)/100.f <= (float(u_BorderThickness)/u_WindowWidth) ||
+            (height - pY)/100.f <= (float(u_BorderThickness)/u_WindowHeight)
+        ))
+    {
+        fragColor = u_BorderColor;
+    }
+    else
+    {
+        fragColor = color;
+
+        if (u_IsGradient == 1)
+        {
+            vec4 gradColor = 
+                (1.f - texCoord.x)*(1.f - texCoord.y)*u_GradientBottomLeftColor +
+                (texCoord.x)*(1.f - texCoord.y)*u_GradientBottomRightColor +
+                (texCoord.x)*(texCoord.y)*u_GradientTopRightColor +
+                (1.f - texCoord.x)*(texCoord.y)*u_GradientTopLeftColor;
+
+            if (u_IsTex == 1)
+            {
+                float centerDist2 = distance(texCoord, vec2(0.5f, 0.5f));
+                fragColor *= centerDist2*2 < 1.f ? ((sample_texture())*pow(1.f - centerDist2, 1.f)) : (gradColor*(distance(1.0f, centerDist2*2/0.65f)))*0.5f + sample_texture()*.5f;
+            }
+            else
+            {
+                fragColor *= gradColor;
+            }
+        }
+        else if (u_IsTex == 1)
+        {
+            fragColor *= sample_texture();
+        }
+    }
+}

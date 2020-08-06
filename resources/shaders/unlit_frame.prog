@@ -1,0 +1,51 @@
+@vert
+#version 330 core
+
+in vec4 a_Position;
+in vec4 a_Color;
+in vec3 a_Barycentric;
+
+uniform mat4 u_Proj;
+uniform mat4 u_ModelView;
+
+uniform vec4 u_FrameColor;
+uniform float u_FrameThickness;
+
+out fragData
+{
+    vec4 color;
+    vec3 barycentric;
+    float thickness;
+};
+
+void main(void)
+{
+    gl_Position = u_Proj*u_ModelView*a_Position;
+    color = a_Color*u_FrameColor;
+    barycentric = a_Barycentric;
+    thickness = u_FrameThickness;
+}
+
+@frag
+#version 330 core
+
+in fragData
+{
+    vec4 color;
+    vec3 barycentric;
+    float thickness;
+};
+
+out vec4 fragColor;
+
+void main(void)
+{
+    if (any(lessThan(barycentric, vec3(thickness))))
+    {
+        fragColor = color;
+    }
+    else
+    {
+        fragColor = vec4(0.0);
+    }
+}

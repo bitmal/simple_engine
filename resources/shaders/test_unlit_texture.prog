@@ -1,0 +1,52 @@
+@vert
+#version 330 core
+
+in vec4 a_Position;
+in vec2 a_Tex;
+
+uniform mat4 u_Proj;
+uniform mat4 u_ModelView;
+
+uniform vec4 u_Color;
+uniform uint u_TexWidth;
+uniform uint u_TexHeight;
+
+smooth out fragData
+{
+    smooth vec4 color;
+    smooth vec2 texCoord;
+};
+flat out uint width;
+flat out uint height;
+
+void main(void)
+{
+    gl_Position = u_Proj*u_ModelView*a_Position;
+    color = u_Color;
+    texCoord = a_Tex;
+    width = u_TexWidth;
+    height = u_TexHeight;
+}
+
+@frag
+#version 330 core
+
+smooth in fragData
+{
+    smooth vec4 color;
+    smooth vec2 texCoord;
+};
+flat in uint width;
+flat in uint height;
+
+uniform samplerBuffer texBuf;
+
+out vec4 fragColor;
+
+void main(void)
+{
+    fragColor = vec4(texelFetch(texBuf, clamp(int(float(width)*texCoord.x), 0, int(width) - 1) +
+        clamp(int(float(height)*texCoord.y), 0, int(height) - 1)*int(width)).rgb, 
+        (1.f - (((gl_FragCoord.x/640.f)*(gl_FragCoord.x/640.f))*0.75 + 0.25f)/2.f) - 
+        ((((gl_FragCoord.y/480.f)*(gl_FragCoord.y/480.f))*0.75 + 0.25f)/2.f)) * color;
+}

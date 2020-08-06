@@ -1,0 +1,9 @@
+# build files
+**.exe
+**.ilk
+**.pdb
+**.obj
+build/**
+
+todo.txt
+render-properties.txt

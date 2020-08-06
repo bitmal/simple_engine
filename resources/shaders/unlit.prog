@@ -1,0 +1,39 @@
+@vert
+#version 330 core
+
+in vec4 a_Position;
+in vec4 a_Color;
+
+uniform mat4 u_Proj;
+uniform mat4 u_ModelView;
+
+uniform vec4 u_Color;
+uniform float u_Width;
+uniform float u_Height;
+
+out fragData
+{
+    vec4 color;
+};
+
+void main(void)
+{
+    gl_Position = u_Proj*u_ModelView*vec4(a_Position.x*u_Width, 
+        a_Position.y*u_Height, a_Position.z, a_Position.w);
+    color = a_Color*u_Color;
+}
+
+@frag
+#version 330 core
+
+in fragData
+{
+    vec4 color;
+};
+
+out vec4 fragColor;
+
+void main(void)
+{
+    fragColor = color;
+}

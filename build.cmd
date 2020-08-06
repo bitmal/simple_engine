@@ -1,0 +1,1 @@
+cl /Zi /MTd /Fesimple_engine.exe /TC .\src\main.c /link /SUBSYSTEM:WINDOWS glew32.lib opengl32.lib SDL2Main.lib SDL2.lib

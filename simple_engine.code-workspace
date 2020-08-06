@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"sdl.h": "c",
+			"xutility": "cpp",
+			"initializer_list": "cpp",
+			"type_traits": "cpp",
+			"xstring": "cpp",
+			"tuple": "c",
+			"utility": "c",
+			"xmemory": "c",
+			"xtr1common": "c"
+		}
+	}
+}
