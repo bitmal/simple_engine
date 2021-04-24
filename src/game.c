@@ -75,6 +75,7 @@ game_init(struct context *app)
     renderer_set_background_color(app->renderContext, &bgColor);
     
     renderer_load_program(app->renderContext, "unlit");
+    renderer_load_program(app->renderContext, "unlit_frame");
     renderer_load_program(app->renderContext, "unlit_texture");
     renderer_load_program(app->renderContext, "interface");
     
@@ -122,13 +123,28 @@ game_init(struct context *app)
 
     renderer_create_mesh(app->renderContext, "interface_quad", interfaceQuadVertices, sizeof(real32)*10, 
         4, interfaceQuadIndices, 6);
+    
+    real32 frameQuadVertices[] = {
+        0.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   1.f, 0.f, 0.f,
+        1.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   0.f, 1.f, 0.f,
+        1.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   1.f, 1.f,
+        0.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   0.f, 1.f
+    };
+
+    u16 frameQuadIndices[] = {
+        0, 1, 3,
+        1, 2, 3
+    };
+
+    renderer_create_mesh(app->renderContext, "frame_quad", interfaceQuadVertices, sizeof(real32)*10, 
+        4, interfaceQuadIndices, 6);
 
     g->gameInterface = interface_init(g->app->memoryContext);
     g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL);
 
     renderer_load_texture(g->app->renderContext, "test1", "test1", B32_TRUE);
 
-    for (i32 y = 0; y < 8; ++y)
+    /*for (i32 y = 0; y < 8; ++y)
     {
         for (i32 x = 0; x < 8; ++x)
         {
@@ -171,7 +187,25 @@ game_init(struct context *app)
             patterns[1].border.pixelThickness = 2;
             game_instantiate_interface_element(g, "panel4", patterns, sizeof(patterns)/sizeof(patterns[0]), 0.f, 50.f, 50.f, 50.f, 0xFFFFFFFF);
         }
-    }
+    }*/
+
+    game_id entity = game_create_entity(g, "player");
+    game_id transform = game_create_component(g, GAME_TRANSFORM);
+    game_attach_component(g, entity, transform);
+    struct game_transform *transformPtr = game_get_component(g, entity, GAME_TRANSFORM);
+    transformPtr->pivot.x = 0.5f;
+    transformPtr->pivot.y = 0.5f;
+    transformPtr->position.x = 5.f;
+    transformPtr->position.y = 5.f;
+    transformPtr->rotation = 0.f;
+    transformPtr->scale.x = 1.f;
+    transformPtr->scale.y = 1.f;
+    transformPtr->isDirty = B32_TRUE;
+    game_id renderComp = game_create_component(g, GAME_RENDER_COMPONENT);
+    game_attach_component(g, entity, renderComp);
+    struct game_render_component *renderCompPtr = game_get_component(g, entity, GAME_RENDER_COMPONENT);
+    renderer_id material = renderer_model_get_material(g->app->renderContext, renderCompPtr->rendererModelId);
+    renderer_material_set_program(g->app->renderContext, material, "unlit_frame");
 
     return g;
 }
