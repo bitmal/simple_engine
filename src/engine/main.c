@@ -27,7 +27,7 @@ MEMORY_DEFINE(game, GAME_MEMORY_SIZE);
 MEMORY_DEFINE(physics, PHYSICS_MEMORY_SIZE);
 MEMORY_DEFINE(graphics, GRAPHICS_MEMORY_SIZE);
 
-int main(int argc, char *argv[])
+int main(int argc, char **argv)
 {
     MEMORY_INIT(config);
 

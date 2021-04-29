@@ -19,7 +19,28 @@
 #include <math.h>
 #include <assert.h>
 
-// TODO: object pooling
+// TEST INTERFACE
+// ***************************************
+
+#define TEST_ENTITY_VEC4(name, x, y, z, w) \
+	struct vec4 name = {x, y, z, w}
+
+#define TEST_ENTITY_INIT_COUNT 1
+#define TEST_ENTITY_ANIMATION_TIMESTEP .0625f
+#define TEST_ENTITY_ANIMATION_SPEED 100.f
+#define TEST_ENTITY_START_POS \
+	TEST_ENTITY_VEC4(startPos, 0.f, 0.f, 0.f, 0.f)
+#define TEST_ENTITY_END_POS \
+	TEST_ENTITY_VEC4(startPos, 0.f, 0.f, 0.f, 0.f)
+
+struct test_entity
+{
+	game_id id;
+	game_id transform;
+	game_id renderComp;
+} g_testEntities[TEST_ENTITY_INIT_COUNT];
+
+// **************************************
 
 static void 
 _game_input_callback(const char *key, const char *action, void *dataPtr)
@@ -31,6 +52,32 @@ _game_input_callback(const char *key, const char *action, void *dataPtr)
     {
         g->app->isRunning = B32_FALSE;
     }
+}
+
+static void
+_game_test_entity_timer_callback(struct game *g, real32 elapsedTime, void *dataPtr)
+{
+	b32 isValid = B32_FALSE;
+
+	struct test_entity *entity;
+	struct game_transform *transform;
+	struct game_render_component *renderComp;
+	{
+		assert(entity = dataPtr);
+		assert(transform = game_get_component(g, entity->id, GAME_TRANSFORM));
+		assert(renderComp = game_get_component(g, entity->id, GAME_RENDER_COMPONENT));
+
+		isValid = B32_TRUE;
+	}
+
+	if (isValid)
+	{
+		transform->position.x += TEST_ENTITY_ANIMATION_SPEED*elapsedTime/2.f;
+		transform->position.y += TEST_ENTITY_ANIMATION_SPEED*elapsedTime/2.f;
+		transform->isDirty = B32_TRUE;
+		
+		game_start_timer(g, elapsedTime, _game_test_entity_timer_callback, &g_testEntities[0]);
+	}
 }
 
 struct game *
@@ -76,7 +123,7 @@ game_init(struct context *app)
     
     renderer_load_program(app->renderContext, "unlit");
     renderer_load_program(app->renderContext, "unlit_frame");
-    renderer_load_program(app->renderContext, "unlit_texture");
+    //renderer_load_program(app->renderContext, "unlit_texture");
     renderer_load_program(app->renderContext, "interface");
     
     real32 textureQuadVertices[] = {
@@ -142,71 +189,54 @@ game_init(struct context *app)
     g->gameInterface = interface_init(g->app->memoryContext);
     g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL);
 
-    renderer_load_texture(g->app->renderContext, "test1", "test1", B32_TRUE);
+		// TODO: (test startup code here)
+		
+		// instantiate and configure the entity
+		struct test_entity *entity0 = &g_testEntities[0];
 
-    /*for (i32 y = 0; y < 8; ++y)
-    {
-        for (i32 x = 0; x < 8; ++x)
-        {
-            struct interface_element_pattern patterns[3];
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[0].type) = INTERFACE_ELEMENT_PATTERN_GRADIENT;
-            patterns[0].gradient.bottomLeftColor = 0xFFFF0000;
-            patterns[0].gradient.bottomRightColor = 0xFF00FF00;
-            patterns[0].gradient.topRightColor = 0xFF0000FF;
-            patterns[0].gradient.topLeftColor = 0xFF00FFFF;
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[1].type) = INTERFACE_ELEMENT_PATTERN_BORDER;
-            patterns[1].border.color = 0xFF333333;
-            patterns[1].border.pixelThickness = 2;
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[2].type) = INTERFACE_ELEMENT_PATTERN_TEXTURE;
-            game_instantiate_interface_element(g, "panel1", patterns, sizeof(patterns)/sizeof(patterns[0]), (real32)x*(200.f/8.f), (real32)y*(50.f/8.f), 50.f/8.f, 50.f/8.f, 0xFFFFFFFF);
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[0].type) = INTERFACE_ELEMENT_PATTERN_GRADIENT;
-            patterns[0].gradient.bottomLeftColor = 0xFF000015;
-            patterns[0].gradient.bottomRightColor = 0xFF000015;
-            patterns[0].gradient.topRightColor = 0xFF0000FF;
-            patterns[0].gradient.topLeftColor = 0xFF0000FF;
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[1].type) = INTERFACE_ELEMENT_PATTERN_BORDER;
-            patterns[1].border.color = 0xFF000055;
-            patterns[1].border.pixelThickness = 2;
-            game_instantiate_interface_element(g, "panel2", patterns, sizeof(patterns)/sizeof(patterns[0]), 50.f, 0.f, 50.f, 50.f, 0xFFFFFFFF);
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[0].type) = INTERFACE_ELEMENT_PATTERN_GRADIENT;
-            patterns[0].gradient.bottomLeftColor = 0xFF150000;
-            patterns[0].gradient.bottomRightColor = 0xFF150000;
-            patterns[0].gradient.topRightColor = 0xFFFF0000;
-            patterns[0].gradient.topLeftColor = 0xFFFF0000;
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[1].type) = INTERFACE_ELEMENT_PATTERN_BORDER;
-            patterns[1].border.color = 0xFF550000;
-            patterns[1].border.pixelThickness = 2;
-            game_instantiate_interface_element(g, "panel3", patterns, sizeof(patterns)/sizeof(patterns[0]), 50.f, 50.f, 50.f, 50.f, 0xFFFFFFFF);
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[0].type) = INTERFACE_ELEMENT_PATTERN_GRADIENT;
-            patterns[0].gradient.bottomLeftColor = 0xFF000000;
-            patterns[0].gradient.bottomRightColor = 0xFF000000;
-            patterns[0].gradient.topRightColor = 0xFFEF00FF;
-            patterns[0].gradient.topLeftColor = 0xFFEF00FF;
-            UTILS_MUTABLE_CAST(enum interface_element_pattern_type, patterns[1].type) = INTERFACE_ELEMENT_PATTERN_BORDER;
-            patterns[1].border.color = 0xFF550055;
-            patterns[1].border.pixelThickness = 2;
-            game_instantiate_interface_element(g, "panel4", patterns, sizeof(patterns)/sizeof(patterns[0]), 0.f, 50.f, 50.f, 50.f, 0xFFFFFFFF);
-        }
-    }*/
+		entity0->id = game_create_entity(g, "default");
 
-    game_id entity = game_create_entity(g, "player");
-    game_id transform = game_create_component(g, GAME_TRANSFORM);
-    game_attach_component(g, entity, transform);
-    struct game_transform *transformPtr = game_get_component(g, entity, GAME_TRANSFORM);
-    transformPtr->pivot.x = 0.5f;
-    transformPtr->pivot.y = 0.5f;
-    transformPtr->position.x = 5.f;
-    transformPtr->position.y = 5.f;
-    transformPtr->rotation = 0.f;
-    transformPtr->scale.x = 1.f;
-    transformPtr->scale.y = 1.f;
-    transformPtr->isDirty = B32_TRUE;
-    game_id renderComp = game_create_component(g, GAME_RENDER_COMPONENT);
-    game_attach_component(g, entity, renderComp);
-    struct game_render_component *renderCompPtr = game_get_component(g, entity, GAME_RENDER_COMPONENT);
-    renderer_id material = renderer_model_get_material(g->app->renderContext, renderCompPtr->rendererModelId);
-    renderer_material_set_program(g->app->renderContext, material, "unlit_frame");
+		entity0->transform = game_create_component(g, GAME_TRANSFORM);
+		game_attach_component(g, entity0->id, entity0->transform);
+		struct game_transform *entity0Transf = game_get_component(g, entity0->id, 
+				GAME_TRANSFORM);
+		if (!entity0Transf)
+		{
+			fprintf(stderr, "Did not get transform component!\n");
+		}
+		entity0Transf->position.x = 20.f;
+		entity0Transf->position.y = 20.f;
+		entity0Transf->pivot.x = 0.f;
+		entity0Transf->pivot.y = 0.f;
+		entity0Transf->scale.x = 1.f;
+		entity0Transf->scale.y = 1.f;
+		entity0Transf->rotation = 0.f;
+		
+		entity0->renderComp = game_create_component(g, GAME_RENDER_COMPONENT);
+		game_attach_component(g, entity0->id, entity0->renderComp);
+		struct game_render_component *entity0RenderComp = game_get_component(g, 
+				entity0->id, GAME_RENDER_COMPONENT);
+		if (!entity0RenderComp)
+		{
+			fprintf(stderr, "Did not get render component!\n");
+		}
+		renderer_model_set_mesh(app->renderContext, entity0RenderComp->rendererModelId, "unlit_quad");
+		renderer_id entity0RenderCompMatId = renderer_model_get_material(app->renderContext,
+				entity0RenderComp->rendererModelId);
+		renderer_material_set_program(app->renderContext, entity0RenderCompMatId, "unlit");
+		float entity0Color[] = {1.f, 0.f, 0.f, 1.f};
+		renderer_material_update_property(app->renderContext, entity0RenderCompMatId, 
+				"u_Color", entity0Color);
+		float entity0Width = 20.f;
+		renderer_material_update_property(app->renderContext, entity0RenderCompMatId, 
+				"u_Width", &entity0Width);
+		float entity0Height = 20.f;
+		renderer_material_update_property(app->renderContext, entity0RenderCompMatId, 
+				"u_Height", &entity0Height);
 
+		// animate the entity
+		game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, _game_test_entity_timer_callback, &g_testEntities[0]);
+		
     return g;
 }
 
@@ -245,35 +275,40 @@ game_cycle(struct game *g, real32 dt)
          ++entityIndex)
     {
         struct game_entity *entity = &g->entities[entityIndex];
-
-        struct game_transform *transform;
-        if (entity->transform > GAME_NULL_ID)
-        {
-            transform = &g->transforms[g->components[entity->transform].index];
-        }
-        else
-        {
-            transform = NULL;
-        }
-        
-        struct game_physics_component *physicsComp;
-        if (entity->physicsComponent > GAME_NULL_ID)
-        {
-            physicsComp = &g->physicsComponents[g->components[entity->physicsComponent].index];
-        }
-        else
-        {
-            physicsComp = NULL;
-        }
-        
-        // PHYSICS
-        if (physicsComp && physicsComp->isActive && transform)
-        {
-            struct physics_rigidbody *rb = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
-            transform->position.x = rb->position[0];
-            transform->position.y = rb->position[1];
-            transform->rotation = rb->rotation[2];
-        }
+				{
+					struct game_transform *transform;
+					{
+						if (entity->transform > GAME_NULL_ID)
+        		{
+        		    transform = &g->transforms[g->components[entity->transform].index];
+        		}
+        		else
+        		{
+        		    transform = NULL;
+        		}
+					}
+        	
+        	struct game_physics_component *physicsComp;
+					{
+						if (entity->physicsComponent > GAME_NULL_ID)
+        		{
+        		    physicsComp = &g->physicsComponents[g->components[entity->physicsComponent].index];
+        		}
+        		else
+        		{
+        		    physicsComp = NULL;
+        		}
+        	
+						// PHYSICS
+        		if (physicsComp && physicsComp->isActive && transform)
+        		{
+        		    struct physics_rigidbody *rb = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
+        		    transform->position.x = rb->position[0];
+        		    transform->position.y = rb->position[1];
+        		    transform->rotation = rb->rotation[2];
+        		}
+					}
+				}
     }
 }
 
@@ -478,11 +513,13 @@ game_create_component(struct game *g, enum game_component_type type)
 
     if (g->components)
     {
-        g->components = memory_realloc(g->app->memoryContext, g->components, sizeof(struct game_component_index)*(++g->componentCount));
+        g->components = memory_realloc(g->app->memoryContext, g->components, sizeof(struct game_component_index)
+						*(++g->componentCount));
     }
     else
     {
-        g->components = memory_alloc(g->app->memoryContext, sizeof(struct game_component_index)*(++g->componentCount));
+        g->components = memory_alloc(g->app->memoryContext, sizeof(struct game_component_index)
+						*(++g->componentCount));
     }
 
     g->components[componentIndex].type = type;
@@ -495,11 +532,13 @@ game_create_component(struct game *g, enum game_component_type type)
 
             if (g->transforms)
             {
-                g->transforms = memory_realloc(g->app->memoryContext, g->transforms, sizeof(struct game_transform)*(++g->transformCount));
+                g->transforms = memory_realloc(g->app->memoryContext, g->transforms, sizeof(struct game_transform)
+										*(++g->transformCount));
             }
             else
             {
-                g->transforms = memory_alloc(g->app->memoryContext, sizeof(struct game_transform)*(++g->transformCount));
+                g->transforms = memory_alloc(g->app->memoryContext, sizeof(struct game_transform)
+										*(++g->transformCount));
             }
 
             g->transforms[transformIndex].id = transformIndex;
@@ -726,12 +765,14 @@ game_init_layer(struct game *g, const char *name, u32 layer)
 
         if (g->layerCount > 0)
         {
-            g->layers = memory_realloc(g->app->memoryContext, g->layers, sizeof(struct game_layer)*(++g->layerCount));
+            g->layers = memory_realloc(g->app->memoryContext, g->layers, sizeof(struct game_layer)
+								*(++g->layerCount));
             assert(g->layers);
         }
         else
         {
-            g->layers = memory_alloc(g->app->memoryContext, sizeof(struct game_layer)*(++g->layerCount));
+            g->layers = memory_alloc(g->app->memoryContext, sizeof(struct game_layer)
+								*(++g->layerCount));
         }
 
         const size_t nameSize = strlen(name) + 1;

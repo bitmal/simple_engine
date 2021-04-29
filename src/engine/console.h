@@ -5,8 +5,6 @@
 
 typedef i32 console_id;
 
-struct basic_dict;
-
 struct console_context
 {
     console_id id;
