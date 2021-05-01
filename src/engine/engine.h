@@ -8,6 +8,8 @@ struct physics;
 struct renderer;
 struct memory;
 struct config;
+struct input;
+struct statistics;
 
 struct context
 {
@@ -16,6 +18,7 @@ struct context
     struct physics *physics;
     struct renderer *renderContext;
     struct input *inputContext;
+		struct statistics *statsContext;
     b32 isRunning;
     u32 msSinceStart;
 };

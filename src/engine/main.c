@@ -21,6 +21,7 @@
 #include "renderer.c"
 #include "interface.c"
 #include "game.c"
+#include "statistics.c"
 
 MEMORY_DEFINE(config, 1 << 14);
 MEMORY_DEFINE(game, GAME_MEMORY_SIZE);
@@ -34,6 +35,8 @@ int main(int argc, char **argv)
     struct context app;
     app.config = config_init(MEMORY_PTR(config));
     config_load_config(app.config, "system");
+
+		app.statsContext = statistics_init(&app);
 
     MEMORY_INIT(game);
     MEMORY_INIT(physics);
