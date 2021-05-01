@@ -32,7 +32,7 @@
 	#define TEST_ENTITY_ANIMATION_FLAG_LOOP 0x10b
 	
 	#define TEST_ENTITY_0_SCALE 1.f
-	#define TEST_ENTITY_0_ANIMATION_DURATION 10.f
+	#define TEST_ENTITY_0_ANIMATION_DURATION 2.f
 	#define TEST_ENTITY_0_ANIMATION_START_POS {0.f, 0.f}
 	#define TEST_ENTITY_0_ANIMATION_END_POS \
 	{ \
@@ -99,75 +99,84 @@ _game_input_callback(const char *key, const char *action, void *dataPtr)
     }
 }
 
-static void
-_game_test_entity_0_timer_callback(struct game *g, real32 elapsedTime, void *dataPtr)
-{
-	b32 isValid = B32_FALSE;
-
-	struct test_entity *entity;
-	struct game_transform *transform;
-	struct game_render_component *renderComp;
+#ifdef TEST_ENTITY_ENABLED
+	static void
+	_game_test_entity_0_timer_callback(struct game *g, real32 elapsedTime, void *dataPtr)
 	{
-		assert(entity = dataPtr);
-		assert(transform = game_get_component(g, entity->id, GAME_TRANSFORM));
-		assert(renderComp = game_get_component(g, entity->id, GAME_RENDER_COMPONENT));
-
-		isValid = B32_TRUE;
-	}
-
-	// calculate the interpolation result of the animation, 
-	// according to a normalized scalar, known as 't'
-	if (isValid)
-	{
-		// determine in a normalized domain, the value of t
-		real32 d = entity->anim.durationSeconds;
-		real32 t0 = entity->anim.elapsedSeconds;
-		real32 t1 = t0 + elapsedTime;
-		{
-			t1 = (t1 >= d) ? d : t1;
-			entity->anim.elapsedSeconds = t1;
-		}
-		
-		real32 t = t1/d;
-
-		// transformation(s)
-		struct vec2 translationTotalVec = {entity->anim.endPos.x, entity->anim.endPos.y};
-		{
-			vec2_diff(&translationTotalVec, &entity->anim.startPos);
-		}
-
-		transform->position.x = entity->anim.startPos.x + (translationTotalVec.x*t);
-		transform->position.y = entity->anim.startPos.y + (translationTotalVec.y*t);
-		transform->isDirty = B32_TRUE;
-
-		// color interpolation(s)
-		struct vec4 interpolationVec = 
-		{
-			entity->anim.endColor.r, entity->anim.endColor.g,
-			entity->anim.endColor.b, entity->anim.endColor.a
-		};
-		{
-			vec4_3_diff(&interpolationVec, &entity->anim.startColor);
-		}
-
-		struct vec4 resultColor = 
-		{
-			entity->anim.startColor.r + (interpolationVec.r*t),
-			entity->anim.startColor.g + (interpolationVec.g*t),
-			entity->anim.startColor.b + (interpolationVec.b*t),
-			entity->anim.startColor.a + (interpolationVec.a*t)
-		};
-
-		renderer_material_update_property(g->app->renderContext, renderComp->rendererModelId, 
-				"u_Color", &resultColor._[0]);
+		b32 isValid = B32_FALSE;
 	
-		if (t < 1.f)
+		struct test_entity *entity;
+		struct game_transform *transform;
+		struct game_render_component *renderComp;
 		{
-			game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, _game_test_entity_0_timer_callback, 
-					&g_testEntities[0]);
+			assert(entity = dataPtr);
+			assert(transform = game_get_component(g, entity->id, GAME_TRANSFORM));
+			assert(renderComp = game_get_component(g, entity->id, GAME_RENDER_COMPONENT));
+	
+			isValid = B32_TRUE;
+		}
+	
+		// calculate the interpolation result of the animation, 
+		// according to a normalized scalar, known as 't'
+		if (isValid)
+		{
+			// determine in a normalized domain, the value of t
+			real32 d = entity->anim.durationSeconds;
+			real32 t0 = entity->anim.elapsedSeconds;
+			real32 t1 = t0 + elapsedTime;
+			{
+				t1 = (t1 >= d) ? d : t1;
+				entity->anim.elapsedSeconds = t1;
+			}
+			
+			real32 t = t1/d;
+	
+			// transformation(s)
+			struct vec2 translationTotalVec = {entity->anim.endPos.x, entity->anim.endPos.y};
+			{
+				vec2_diff(&translationTotalVec, &entity->anim.startPos);
+			}
+	
+			transform->position.x = entity->anim.startPos.x + (translationTotalVec.x*t);
+			transform->position.y = entity->anim.startPos.y + (translationTotalVec.y*t);
+			transform->isDirty = B32_TRUE;
+	
+			// color interpolation(s)
+			struct vec4 interpolationVec = 
+			{
+				entity->anim.endColor.r, entity->anim.endColor.g,
+				entity->anim.endColor.b, entity->anim.endColor.a
+			};
+			{
+				vec4_3_diff(&interpolationVec, &entity->anim.startColor);
+			}
+	
+			struct vec4 resultColor = 
+			{
+				entity->anim.startColor.r + (interpolationVec.r*t),
+				entity->anim.startColor.g + (interpolationVec.g*t),
+				entity->anim.startColor.b + (interpolationVec.b*t),
+				entity->anim.startColor.a + (interpolationVec.a*t)
+			};
+	
+			renderer_material_update_property(g->app->renderContext, renderComp->rendererModelId, 
+					"u_Color", &resultColor._[0]);
+	
+			b32 isLooping = entity->anim.flags & TEST_ENTITY_ANIMATION_FLAG_LOOP;
+	
+			if ((t < 1.f) || isLooping)
+			{
+				if ((t == 1.f) && isLooping)
+				{
+					entity->anim.elapsedSeconds = 0.f;
+				}
+	
+				game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, _game_test_entity_0_timer_callback, 
+						&g_testEntities[0]);
+			}
 		}
 	}
-}
+#endif
 
 struct game *
 game_init(struct context *app)
