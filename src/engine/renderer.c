@@ -127,7 +127,7 @@ renderer_load_program(struct renderer *context, const char *name)
 b32
 renderer_load_mesh(struct renderer *context, const char *name)
 {
-    // TODO:
+    // TODO: (REFACTOR)
     if (!basic_dict_get(context->meshMap, context->meshes, name))
     {
         char *path = memory_alloc(context->memoryContext, sizeof("meshes/") + strlen(name) + sizeof(".obj") - 1);
@@ -430,6 +430,7 @@ renderer_create_mesh(struct renderer *context, const char *name, void *vertices,
 b32
 renderer_save_texture(struct renderer *context, const char *name, const char* fileName, b32 isCompressed)
 {
+	// TODO: (VECTORIZE, REFACTOR)
     struct renderer_texture *texPtr;
     if (!(texPtr = basic_dict_get(context->textureMap, context->textures, name)))
     {

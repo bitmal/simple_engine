@@ -27,6 +27,4 @@ tags
 [._]*.un~
 
 ########### OTHER #################
-todo.txt
-mytodo.txt
-render-properties.txt
+**.txt

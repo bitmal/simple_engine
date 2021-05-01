@@ -27,7 +27,7 @@ real32 vec2_mag(const struct vec2 *v)
 
 real32 vec2_dot(const struct vec2 *lhs, const struct vec2 *rhs)
 {
-    return lhs->x*lhs->y + rhs->x*rhs->y;
+    return lhs->x*rhs->x + lhs->y*rhs->y;
 }
 
 struct vec2 vec2_normalized(const struct vec2 *v)
