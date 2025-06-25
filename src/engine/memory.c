@@ -64,9 +64,9 @@ _memory_event_push(struct memory *mem, void *alloc, enum memory_event_type type)
 }
 
 static void
-_memory_init(struct memory *mem)
+_memory_init(struct memory *mem, u64 size)
 {
-    assert(mem->size > MEMORY_MIN_ALLOC_SIZE);
+    assert(size > MEMORY_MIN_ALLOC_SIZE);
 
 #ifdef MEMORY_DEBUG
     static u64 privateKey = 0;
@@ -81,6 +81,7 @@ _memory_init(struct memory *mem)
     *(u64 *)&mem->_internal = privateKey;
 #endif
 
+    *((u64 *)&mem->size) = size;
     mem->_freeList = (struct memory_allocator *)((u64 *)mem->_memory + 1);
     mem->_tailFree = mem->_freeList;
     mem->_freeList->_next = NULL;
@@ -91,11 +92,11 @@ _memory_init(struct memory *mem)
 }
 
 void
-memory_init(struct memory *mem)
+memory_init(struct memory *mem, u64 size)
 {
     assert(mem);
 
-    _memory_init(mem);
+    _memory_init(mem, size);
 }
 
 void *

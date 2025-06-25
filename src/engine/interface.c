@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 
 struct interface *
 interface_init(struct memory *mem)
@@ -56,7 +57,7 @@ interface_create_element(struct interface *context, const char *name,
         elementPtr->prev = NULL;
         elementPtr->next = NULL;
         const u32 nameSize = strlen(name) + 1;
-        (char *)elementPtr->name = memory_alloc(context->_memoryContext, nameSize);
+        elementPtr->name = memory_alloc(context->_memoryContext, nameSize);
         strcpy((char *)elementPtr->name, name);
 
         if (patternCount > 0)

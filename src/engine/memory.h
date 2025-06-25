@@ -41,20 +41,18 @@ struct memory
     u8 _memory[];
 };
 
-#define MEMORY_TYPE_NAME(name) name##_memory
-#define MEMORY_PTR(name) ((struct memory *)&MEMORY_TYPE_NAME(name))
+#define MEMORY_TYPE_NAME(name)name##_memory##_t
+#define MEMORY_TYPE_ALIAS(name)name##_memory
+#define MEMORY_PTR(name)((struct memory *)&MEMORY_TYPE_ALIAS(g_##name))
 #ifdef MEMORY_DEBUG
     #define _MEMORY_DEFINE_HEAD(name) \
-        struct MEMORY_TYPE_NAME(name)##_t \
+        typedef struct MEMORY_TYPE_NAME(name) \
         { \
             const u64 _internal;
-    #define _MEMORY_DEFINE_INTERNAL_INIT \
-        0,
 #else
     #define _MEMORY_DEFINE_HEAD(name) \
-        struct MEMORY_TYPE_NAME(name)##_t \
+        typedef struct MEMORY_TYPE_NAME(name) \
         {
-    #define _MEMORY_DEFINE_INTERNAL_INIT
 #endif
 #define MEMORY_DEFINE(name, size) \
     _MEMORY_DEFINE_HEAD(name) \
@@ -67,15 +65,13 @@ struct memory
         u32 _eventCount; \
         u32 _eventCapacity; \
         u8 _memory[size]; \
-    } MEMORY_TYPE_NAME(name) = { \
-        _MEMORY_DEFINE_INTERNAL_INIT sizeof(MEMORY_TYPE_NAME(name)._memory), \
-            0, NULL, NULL, NULL, NULL, 0, 0, {0} \
-    }
+    } MEMORY_TYPE_ALIAS(name); \
+    static MEMORY_TYPE_ALIAS(name) g_##name##_memory
 #define MEMORY_INIT(name) \
-    memory_init(MEMORY_PTR(name));
+    memory_init(MEMORY_PTR(name), sizeof(g_##name##_memory._memory));
 
 void
-memory_init(struct memory *mem);
+memory_init(struct memory *mem, u64 size);
 
 void *
 memory_alloc(struct memory *mem, u64 size);

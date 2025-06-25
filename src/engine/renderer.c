@@ -5,7 +5,7 @@
 #include "memory.h"
 #include "opengl.h"
 
-#include "glew/glew.h"
+#include "GL/glew.h"
 
 #include <stdlib.h>
 #include <assert.h>

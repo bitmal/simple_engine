@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+#include <stdio.h>
+
 typedef i32 basic_dict_id;
 typedef u64 basic_dict_rel_ptr;
 

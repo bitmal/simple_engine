@@ -36,7 +36,7 @@ struct interface_element_pattern
 
         struct
         {
-            enum interface_element_pattern_textured_mode mode;
+            enum interface_element_pattern_texture_mode mode;
             u8 _padding[4];
             const char *textureName;
         } texture;

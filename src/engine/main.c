@@ -1,7 +1,7 @@
 #include "engine.h"
 
-#include "glew/glew.h"
-#include "SDL2/SDL.h"
+#include <GL/glew.h>
+#include <SDL3/SDL.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +28,8 @@ MEMORY_DEFINE(game, GAME_MEMORY_SIZE);
 MEMORY_DEFINE(physics, PHYSICS_MEMORY_SIZE);
 MEMORY_DEFINE(graphics, GRAPHICS_MEMORY_SIZE);
 
-int main(int argc, char **argv)
+int 
+main(int argc, char **argv)
 {
     MEMORY_INIT(config);
 
@@ -36,7 +37,7 @@ int main(int argc, char **argv)
     app.config = config_init(MEMORY_PTR(config));
     config_load_config(app.config, "system");
 
-		app.statsContext = statistics_init(&app);
+	app.statsContext = statistics_init(&app);
 
     MEMORY_INIT(game);
     MEMORY_INIT(physics);
@@ -55,8 +56,8 @@ int main(int argc, char **argv)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 
-    SDL_Window *window = SDL_CreateWindow("Simple Engine", SDL_WINDOWPOS_CENTERED, 
-        SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_OPENGL);
+    SDL_Window *window = SDL_CreateWindow("Simple Engine", 640, 480, 
+        SDL_WINDOW_OPENGL);
 
     SDL_GLContext gl = SDL_GL_CreateContext(window);
 
@@ -86,11 +87,11 @@ int main(int argc, char **argv)
         SDL_Event ev;
         while (SDL_PollEvent(&ev))
         {
-            if (ev.key.type == SDL_KEYDOWN)
+            if (ev.key.type == SDL_EVENT_KEY_DOWN)
             {
                 struct input_key *key = NULL;
 
-                switch (ev.key.keysym.sym)
+                switch (ev.key.key)
                 {
                     case SDLK_ESCAPE:
                     {
@@ -102,27 +103,27 @@ int main(int argc, char **argv)
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "space");
                     } break;
 
-                    case SDLK_a:
+                    case SDLK_A:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "a");
                     } break;
 
-                    case SDLK_d:
+                    case SDLK_D:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "d");
                     } break;
 
-                    case SDLK_s:
+                    case SDLK_S:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "s");
                     } break;
 
-                    case SDLK_w:
+                    case SDLK_W:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "w");
                     } break;
                     
-                    case SDLK_f:
+                    case SDLK_F:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "f");
                     } break;
@@ -141,11 +142,11 @@ int main(int argc, char **argv)
                     }
                 }
             }
-            else if (ev.key.type == SDL_KEYUP)
+            else if (ev.key.type == SDL_EVENT_KEY_UP)
             {
                 struct input_key *key = NULL;
 
-                switch (ev.key.keysym.sym)
+                switch (ev.key.key)
                 {
                     case SDLK_ESCAPE:
                     {
@@ -157,27 +158,27 @@ int main(int argc, char **argv)
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "space");
                     } break;
 
-                    case SDLK_a:
+                    case SDLK_A:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "a");
                     } break;
 
-                    case SDLK_d:
+                    case SDLK_D:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "d");
                     } break;
 
-                    case SDLK_s:
+                    case SDLK_S:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "s");
                     } break;
 
-                    case SDLK_w:
+                    case SDLK_W:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "w");
                     } break;
                     
-                    case SDLK_f:
+                    case SDLK_F:
                     {
                         key = basic_dict_get(app.inputContext->keyDict, app.inputContext->keys, "f");
                     } break;

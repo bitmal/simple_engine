@@ -2,6 +2,9 @@
 #define __OPENGL_H
 
 #include "types.h"
+#include <GL/glew.h>
+
+#include <stdlib.h>
 
 #define OPENGL_PROGRAM_ATTRIB_POSITION 0
 #define OPENGL_PROGRAM_ATTRIB_COLOR 1 

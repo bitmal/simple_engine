@@ -1,9 +1,11 @@
 #include "opengl.h"
+#include "basic_dict.h"
 #include "vec4.h"
+#include "utils.h"
 #include "types.h"
 #include "memory.h"
 
-#include "glew/glew.h"
+#include "GL/glew.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -497,7 +499,7 @@ opengl_load_program(struct opengl *context, const char *programName)
     GLint success;
 
     GLuint vertShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertShader, vertShaderStringCount, vertShaderSource, NULL);
+    glShaderSource(vertShader, vertShaderStringCount, (const GLchar **)vertShaderSource, NULL);
     glCompileShader(vertShader);
     glGetShaderiv(vertShader, GL_COMPILE_STATUS, &success);
     if (success == GL_FALSE)
@@ -512,7 +514,7 @@ opengl_load_program(struct opengl *context, const char *programName)
     }
     
     GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, fragShaderStringCount, fragShaderSource, NULL);
+    glShaderSource(fragShader, fragShaderStringCount, (const GLchar **)fragShaderSource, NULL);
     glCompileShader(fragShader);
     glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
     if (success == GL_FALSE)

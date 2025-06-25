@@ -1,6 +1,7 @@
 #ifndef __GAME_H
 #define __GAME_H
 
+#include "renderer.h"
 #include "types.h"
 #include "physics.h"
 #include "vec2.h"

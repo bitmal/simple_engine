@@ -12,6 +12,7 @@
 #include "physics.h"
 #include "config.h"
 #include "interface.h"
+#include "mem_vis.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -109,9 +110,9 @@ _game_input_callback(const char *key, const char *action, void *dataPtr)
 		struct game_transform *transform;
 		struct game_render_component *renderComp;
 		{
-			assert(entity = dataPtr);
-			assert(transform = game_get_component(g, entity->id, GAME_TRANSFORM));
-			assert(renderComp = game_get_component(g, entity->id, GAME_RENDER_COMPONENT));
+			assert((entity = dataPtr));
+			assert((transform = game_get_component(g, entity->id, GAME_TRANSFORM)));
+			assert((renderComp = game_get_component(g, entity->id, GAME_RENDER_COMPONENT)));
 	
 			isValid = B32_TRUE;
 		}
@@ -171,8 +172,8 @@ _game_input_callback(const char *key, const char *action, void *dataPtr)
 					entity->anim.elapsedSeconds = 0.f;
 				}
 	
-				game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, _game_test_entity_0_timer_callback, 
-						&g_testEntities[0]);
+				game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, 
+                    (game_timer_callback)_game_test_entity_0_timer_callback, &g_testEntities[0]);
 			}
 		}
 	}
@@ -365,7 +366,8 @@ game_init(struct context *app)
 		}
 
 		// animate the entity
-		game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, _game_test_entity_0_timer_callback, &g_testEntities[0]);
+		game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, (game_timer_callback)_game_test_entity_0_timer_callback, 
+            &g_testEntities[0]);
 #endif
 		
     return g;
@@ -391,7 +393,7 @@ game_cycle(struct game *g, real32 dt)
                 }
 
                 g->timers[timerIndex].isActive = B32_FALSE;
-                g->timers[timerIndex].callback(g, (real32)time/1000.f, g->timers[timerIndex].dataPtr);
+                g->timers[timerIndex].callback((void *)g, (real32)time/1000.f, g->timers[timerIndex].dataPtr);
             }
         }
         else if (timerIndex == (g->activeTimerCount - 1))
