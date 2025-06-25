@@ -72,7 +72,7 @@ game_init(struct context *app)
     
     renderer_load_program(app->renderContext, "unlit");
     renderer_load_program(app->renderContext, "unlit_frame");
-    //renderer_load_program(app->renderContext, "unlit_texture");
+    renderer_load_program(app->renderContext, "unlit_texture");
     renderer_load_program(app->renderContext, "interface");
     
     real32 textureQuadVertices[] = {
@@ -104,13 +104,13 @@ game_init(struct context *app)
     renderer_model_set_mesh(g->app->renderContext, entity0RenderPtr->rendererModelId, "texture_quad");
     renderer_material_set_texture(g->app->renderContext, renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId), 
         "test1");
-    //renderer_material_set_program(g->app->renderContext, renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId), "unlit_texture");
-    real32 entity0PropColor[] = {1.f, 0.f, 0.f, 1.f};
+    renderer_material_set_program(g->app->renderContext, renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId), "unlit_texture");
+    real32 entity0PropColor[] = {1.f, 1.f, 1.f, 1.f};
     renderer_material_update_property(g->app->renderContext, entity0Mat, "u_Color", entity0PropColor);
-    real32 entity0PropWidth = 25.f;
-    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_Width", &entity0PropWidth);
-    real32 entity0PropHeight = 25.f;
-    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_Height", &entity0PropHeight);
+    u32 entity0PropWidth = 50;
+    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_TexWidth", &entity0PropWidth);
+    u32 entity0PropHeight = 50;
+    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_TexHeight", &entity0PropHeight);
 
     game_id entity0Physics = game_create_component(g, GAME_PHYSICS_COMPONENT);
     game_attach_component(g, entity0, entity0Physics);
