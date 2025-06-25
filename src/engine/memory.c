@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <math.h>
 #include <stdint.h>
 #include <assert.h>
 #if defined(_WIN32) || defined(__WIN32) || defined(WIN32)

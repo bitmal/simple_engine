@@ -10,83 +10,12 @@
 #include "types.h"
 #include "memory.h"
 #include "physics.h"
-#include "config.h"
 #include "interface.h"
-#include "mem_vis.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 #include <assert.h>
-
-// TODO: TEST INTERFACE
-// ***************************************
-
-//#undef TEST_ENTITY_ENABLED
-#define TEST_ENTITY_ENABLED
-
-#ifdef TEST_ENTITY_ENABLED
-	#define TEST_ENTITY_INIT_COUNT 1
-	#define TEST_ENTITY_ANIMATION_TIMESTEP .0625f
-	#define TEST_ENTITY_ANIMATION_FLAG_MIRROR 0x1b
-	#define TEST_ENTITY_ANIMATION_FLAG_LOOP 0x10b
-	
-	#define TEST_ENTITY_0_SCALE 1.f
-	#define TEST_ENTITY_0_ANIMATION_DURATION 2.f
-	#define TEST_ENTITY_0_ANIMATION_START_POS {0.f, 0.f}
-	#define TEST_ENTITY_0_ANIMATION_END_POS \
-	{ \
-		50.f, \
-		50.f \
-	}
-	#define TEST_ENTITY_0_ANIMATION_START_COLOR \
-	{ \
-		1.f, \
-		0.f, \
-		1.f, \
-		1.f \
-	}
-	#define TEST_ENTITY_0_ANIMATION_END_COLOR \
-	{ \
-		1.f, \
-		1.f, \
-		0.f, \
-		1.f \
-	}
-	#define TEST_ENTITY_0_ANIMATION_FLAGS \
-	( \
-		TEST_ENTITY_ANIMATION_FLAG_MIRROR | \
-		TEST_ENTITY_ANIMATION_FLAG_LOOP \
-	)
-	
-	enum test_entity_animation_curve_type
-	{
-		TEST_ENTITY_ANIMATION_CURVE_LINEAR,
-		TEST_ENTITY_ANIMATION_CURVE_QUADRATIC
-	};
-	
-	struct test_entity
-	{
-		game_id id;
-		game_id transform;
-		game_id renderComp;
-	
-		struct
-		{
-			u32 flags;
-			enum test_entity_animation_curve_type curveType;
-			real32 durationSeconds;
-			real32 elapsedSeconds;
-			struct vec2 startPos;
-			struct vec2 endPos;
-			struct vec4 startColor;
-			struct vec4 endColor;
-		} anim;
-	} g_testEntities[TEST_ENTITY_INIT_COUNT];
-#endif
-
-// **************************************
 
 static void 
 _game_input_callback(const char *key, const char *action, void *dataPtr)
@@ -99,85 +28,6 @@ _game_input_callback(const char *key, const char *action, void *dataPtr)
         g->app->isRunning = B32_FALSE;
     }
 }
-
-#ifdef TEST_ENTITY_ENABLED
-	static void
-	_game_test_entity_0_timer_callback(struct game *g, real32 elapsedTime, void *dataPtr)
-	{
-		b32 isValid = B32_FALSE;
-	
-		struct test_entity *entity;
-		struct game_transform *transform;
-		struct game_render_component *renderComp;
-		{
-			assert((entity = dataPtr));
-			assert((transform = game_get_component(g, entity->id, GAME_TRANSFORM)));
-			assert((renderComp = game_get_component(g, entity->id, GAME_RENDER_COMPONENT)));
-	
-			isValid = B32_TRUE;
-		}
-	
-		// calculate the interpolation result of the animation, 
-		// according to a normalized scalar, known as 't'
-		if (isValid)
-		{
-			// determine in a normalized domain, the value of t
-			real32 d = entity->anim.durationSeconds;
-			real32 t0 = entity->anim.elapsedSeconds;
-			real32 t1 = t0 + elapsedTime;
-			{
-				t1 = (t1 >= d) ? d : t1;
-				entity->anim.elapsedSeconds = t1;
-			}
-			
-			real32 t = t1/d;
-	
-			// transformation(s)
-			struct vec2 translationTotalVec = {entity->anim.endPos.x, entity->anim.endPos.y};
-			{
-				vec2_diff(&translationTotalVec, &entity->anim.startPos);
-			}
-	
-			transform->position.x = entity->anim.startPos.x + (translationTotalVec.x*t);
-			transform->position.y = entity->anim.startPos.y + (translationTotalVec.y*t);
-			transform->isDirty = B32_TRUE;
-	
-			// color interpolation(s)
-			struct vec4 interpolationVec = 
-			{
-				entity->anim.endColor.r, entity->anim.endColor.g,
-				entity->anim.endColor.b, entity->anim.endColor.a
-			};
-			{
-				vec4_3_diff(&interpolationVec, &entity->anim.startColor);
-			}
-	
-			struct vec4 resultColor = 
-			{
-				entity->anim.startColor.r + (interpolationVec.r*t),
-				entity->anim.startColor.g + (interpolationVec.g*t),
-				entity->anim.startColor.b + (interpolationVec.b*t),
-				entity->anim.startColor.a + (interpolationVec.a*t)
-			};
-	
-			renderer_material_update_property(g->app->renderContext, renderComp->rendererModelId, 
-					"u_Color", &resultColor._[0]);
-	
-			b32 isLooping = entity->anim.flags & TEST_ENTITY_ANIMATION_FLAG_LOOP;
-	
-			if ((t < 1.f) || isLooping)
-			{
-				if ((t == 1.f) && isLooping)
-				{
-					entity->anim.elapsedSeconds = 0.f;
-				}
-	
-				game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, 
-                    (game_timer_callback)_game_test_entity_0_timer_callback, &g_testEntities[0]);
-			}
-		}
-	}
-#endif
 
 struct game *
 game_init(struct context *app)
@@ -239,137 +89,38 @@ game_init(struct context *app)
 
     renderer_create_mesh(app->renderContext, "texture_quad", textureQuadVertices, sizeof(real32)*6, 
         4, textureQuadIndices, 6);
+
+    renderer_load_texture(g->app->renderContext, "test1", "test1", B32_FALSE);
+
+    game_id entity0 = game_create_entity(g, "player");
+
+    game_id entity0Transf = game_create_component(g, GAME_TRANSFORM);
+    game_attach_component(g, entity0, entity0Transf);
+
+    game_id entity0Render = game_create_component(g, GAME_RENDER_COMPONENT);
+    game_attach_component(g, entity0, entity0Render);
+    struct game_render_component *entity0RenderPtr = game_get_component(g, entity0, GAME_RENDER_COMPONENT);
+    renderer_id entity0Mat = renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId);
+    renderer_model_set_mesh(g->app->renderContext, entity0RenderPtr->rendererModelId, "texture_quad");
+    renderer_material_set_texture(g->app->renderContext, renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId), 
+        "test1");
+    //renderer_material_set_program(g->app->renderContext, renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId), "unlit_texture");
+    real32 entity0PropColor[] = {1.f, 0.f, 0.f, 1.f};
+    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_Color", entity0PropColor);
+    real32 entity0PropWidth = 25.f;
+    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_Width", &entity0PropWidth);
+    real32 entity0PropHeight = 25.f;
+    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_Height", &entity0PropHeight);
+
+    game_id entity0Physics = game_create_component(g, GAME_PHYSICS_COMPONENT);
+    game_attach_component(g, entity0, entity0Physics);
+    struct game_physics_component *entity0PhysicsPtr = game_get_component(g, entity0, GAME_PHYSICS_COMPONENT);
+    real32 entity0PhysicsForce[] = {100.f, 100.f, 0.f};
+    physics_rigidbody_add_force(g->app->physics, entity0PhysicsPtr->rigidbody, &entity0PhysicsForce[0], 0.25f);
     
-    real32 unlitQuadVertices[] = {
-        0.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,
-        1.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,
-        1.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,
-        0.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f
-    };
-
-    u16 unlitQuadIndices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
-
-    renderer_create_mesh(app->renderContext, "unlit_quad", unlitQuadVertices, sizeof(real32)*8, 
-        4, unlitQuadIndices, 6);
-    
-    real32 interfaceQuadVertices[] = {
-        0.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   0.f, 0.f,
-        1.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   1.f, 0.f,
-        1.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   1.f, 1.f,
-        0.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   0.f, 1.f
-    };
-
-    u16 interfaceQuadIndices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
-
-    renderer_create_mesh(app->renderContext, "interface_quad", interfaceQuadVertices, sizeof(real32)*10, 
-        4, interfaceQuadIndices, 6);
-    
-    real32 frameQuadVertices[] = {
-        0.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   1.f, 0.f, 0.f,
-        1.f, 0.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   0.f, 1.f, 0.f,
-        1.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   1.f, 1.f,
-        0.f, 1.f, 0.f, 1.f,   1.f, 1.f, 1.f, 1.f,   0.f, 1.f
-    };
-
-    u16 frameQuadIndices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
-
-    renderer_create_mesh(app->renderContext, "frame_quad", interfaceQuadVertices, sizeof(real32)*10, 
-        4, interfaceQuadIndices, 6);
-
     g->gameInterface = interface_init(g->app->memoryContext);
     g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL);
 
-		// TODO: (test startup code here)
-
-#ifdef TEST_ENTITY_ENABLED		
-		// instantiate and configure the entity
-		struct test_entity *entity0 = &g_testEntities[0];
-		{
-			entity0->id = game_create_entity(g, "default");
-
-			// animation values & flags
-			{
-				entity0->anim.flags = TEST_ENTITY_0_ANIMATION_FLAGS;
-				entity0->anim.durationSeconds = TEST_ENTITY_0_ANIMATION_DURATION;
-				entity0->anim.elapsedSeconds = 0.f;
-				struct vec2 startPos = TEST_ENTITY_0_ANIMATION_START_POS;
-				entity0->anim.startPos.x = startPos.x;
-				entity0->anim.startPos.y = startPos.y;
-				struct vec2 endPos = TEST_ENTITY_0_ANIMATION_END_POS;
-				entity0->anim.endPos.x = endPos.x;
-				entity0->anim.endPos.y = endPos.y;
-				struct vec4 startColor = TEST_ENTITY_0_ANIMATION_START_COLOR;
-				entity0->anim.startColor.r = startColor.r;
-				entity0->anim.startColor.g = startColor.g;
-				entity0->anim.startColor.b = startColor.b;
-				entity0->anim.startColor.a = startColor.a;
-				struct vec4 endColor = TEST_ENTITY_0_ANIMATION_END_COLOR;
-				entity0->anim.endColor.r = endColor.r;
-				entity0->anim.endColor.g = endColor.g;
-				entity0->anim.endColor.b = endColor.b;
-				entity0->anim.endColor.a = endColor.a;
-			}
-
-			// transform values & flags
-			entity0->transform = game_create_component(g, GAME_TRANSFORM);
-			game_attach_component(g, entity0->id, entity0->transform);
-
-			struct game_transform *entity0Transf = game_get_component(g, entity0->id, 
-					GAME_TRANSFORM);
-			{
-				if (!entity0Transf)
-				{
-					fprintf(stderr, "Did not get transform component!\n");
-				}
-				entity0Transf->position.x = entity0->anim.startPos.x;
-				entity0Transf->position.y = entity0->anim.startPos.y;
-				entity0Transf->pivot.x = 0.f;
-				entity0Transf->pivot.y = 0.f;
-				entity0Transf->scale.x = TEST_ENTITY_0_SCALE;
-				entity0Transf->scale.y = TEST_ENTITY_0_SCALE;
-				entity0Transf->rotation = 0.f;
-			}
-		
-			// renderer values & flags
-			entity0->renderComp = game_create_component(g, GAME_RENDER_COMPONENT);
-			game_attach_component(g, entity0->id, entity0->renderComp);
-
-			struct game_render_component *entity0RenderComp = game_get_component(g, 
-					entity0->id, GAME_RENDER_COMPONENT);
-			{
-				if (!entity0RenderComp)
-				{
-					fprintf(stderr, "Did not get render component!\n");
-				}
-				renderer_model_set_mesh(app->renderContext, entity0RenderComp->rendererModelId, "unlit_quad");
-				renderer_id entity0RenderCompMatId = renderer_model_get_material(app->renderContext,
-						entity0RenderComp->rendererModelId);
-				renderer_material_set_program(app->renderContext, entity0RenderCompMatId, "unlit");
-				renderer_material_update_property(app->renderContext, entity0RenderCompMatId, 
-						"u_Color", &entity0->anim.startColor._[0]);
-				float entity0Width = 20.f;
-				renderer_material_update_property(app->renderContext, entity0RenderCompMatId, 
-						"u_Width", &entity0Width);
-				float entity0Height = 20.f;
-				renderer_material_update_property(app->renderContext, entity0RenderCompMatId, 
-						"u_Height", &entity0Height);
-			}
-		}
-
-		// animate the entity
-		game_start_timer(g, TEST_ENTITY_ANIMATION_TIMESTEP, (game_timer_callback)_game_test_entity_0_timer_callback, 
-            &g_testEntities[0]);
-#endif
-		
     return g;
 }
 
@@ -702,7 +453,7 @@ game_create_component(struct game *g, enum game_component_type type)
             }
 
             g->renderComponents[renderIndex].id = renderIndex;
-            g->renderComponents[renderIndex].rendererModelId = renderer_instantiate_model(g->app->renderContext, "unlit_quad", "unlit");
+            g->renderComponents[renderIndex].rendererModelId = renderer_instantiate_model(g->app->renderContext, "texture_quad", "unlit");
             g->components[componentIndex].index = renderIndex;
 
             real32 width = 1.f;

@@ -198,7 +198,7 @@ physics_rigidbody_add_force(struct physics *context, physics_id rigidbody,
     }
 
     struct physics_force *forcePtr = &rbPtr->forces[forceIndex];
-    memcpy(forcePtr->force, force, sizeof(*force));
+    memcpy(forcePtr->force, force, sizeof(real32)*3);
     forcePtr->timestamp = context->timeSinceStart;
     forcePtr->duration = duration;
 
