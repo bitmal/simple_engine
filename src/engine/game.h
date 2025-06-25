@@ -97,6 +97,7 @@ struct game
     struct game_timer *timers;
     struct game_layer *layers;
     struct basic_dict *layerDict;
+    game_id playerEntity;
     i32 entityCount;
     i32 componentCount;
     i32 transformCount;

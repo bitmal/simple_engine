@@ -27,6 +27,30 @@ _game_input_callback(const char *key, const char *action, void *dataPtr)
     {
         g->app->isRunning = B32_FALSE;
     }
+    else if (!strcmp(key, "w") && isKeyDown)
+    {
+        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
+        real32 force[] = {0.f, 10.f, 0.f};
+        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
+    }
+    else if (!strcmp(key, "a") && isKeyDown)
+    {
+        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
+        real32 force[] = {-10.f, 0.f, 0.f};
+        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
+    }
+    else if (!strcmp(key, "s") && isKeyDown)
+    {
+        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
+        real32 force[] = {0.f, -10.f, 0.f};
+        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
+    }
+    else if (!strcmp(key, "d") && isKeyDown)
+    {
+        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
+        real32 force[] = {10.f, 0.f, 0.f};
+        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
+    }
 }
 
 struct game *
@@ -66,6 +90,10 @@ game_init(struct context *app)
 
     input_bind_key(app->inputContext, g->app->memoryContext, "escape", _game_input_callback);
     input_bind_key(app->inputContext, g->app->memoryContext, "space", _game_input_callback);
+    input_bind_key(app->inputContext, g->app->memoryContext, "w", _game_input_callback);
+    input_bind_key(app->inputContext, g->app->memoryContext, "a", _game_input_callback);
+    input_bind_key(app->inputContext, g->app->memoryContext, "s", _game_input_callback);
+    input_bind_key(app->inputContext, g->app->memoryContext, "d", _game_input_callback);
 
     struct vec4 bgColor = {0.f, 0.f, 0.1f, 1.f};
     renderer_set_background_color(app->renderContext, &bgColor);
@@ -93,6 +121,7 @@ game_init(struct context *app)
     renderer_load_texture(g->app->renderContext, "test1", "test1", B32_FALSE);
 
     game_id entity0 = game_create_entity(g, "player");
+    g->playerEntity = entity0;
 
     game_id entity0Transf = game_create_component(g, GAME_TRANSFORM);
     game_attach_component(g, entity0, entity0Transf);
@@ -115,9 +144,9 @@ game_init(struct context *app)
     game_id entity0Physics = game_create_component(g, GAME_PHYSICS_COMPONENT);
     game_attach_component(g, entity0, entity0Physics);
     struct game_physics_component *entity0PhysicsPtr = game_get_component(g, entity0, GAME_PHYSICS_COMPONENT);
-    real32 entity0PhysicsForce[] = {100.f, 100.f, 0.f};
-    physics_rigidbody_add_force(g->app->physics, entity0PhysicsPtr->rigidbody, &entity0PhysicsForce[0], 0.25f);
-    
+    //real32 entity0PhysicsForce[] = {100.f, 100.f, 0.f};
+    //physics_rigidbody_add_force(g->app->physics, entity0PhysicsPtr->rigidbody, &entity0PhysicsForce[0], 0.25f);
+
     g->gameInterface = interface_init(g->app->memoryContext);
     g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL);
 
