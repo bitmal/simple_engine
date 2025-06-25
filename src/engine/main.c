@@ -3,6 +3,7 @@
 #include <GL/glew.h>
 #include <SDL3/SDL.h>
 
+#include <SDL3/SDL_timer.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -16,6 +17,7 @@
 #include "mat44_func.c"
 #include "basic_dict.c"
 #include "input.c"
+#include "physics_helpers.c"
 #include "physics.c"
 #include "opengl.c"
 #include "renderer.c"
@@ -72,7 +74,7 @@ main(int argc, char **argv)
     app.inputContext = input_init(MEMORY_PTR(game), NULL);
     app.isRunning = B32_TRUE;
     app.memoryContext = MEMORY_PTR(game);
-    app.msSinceStart = 0;
+    app.msSinceStart = SDL_GetTicks();
     app.physics = physics_init(MEMORY_PTR(physics));
     app.renderContext = renderer_create_context(MEMORY_PTR(graphics));
 

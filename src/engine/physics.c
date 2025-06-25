@@ -198,7 +198,7 @@ physics_rigidbody_add_force(struct physics *context, physics_id rigidbody,
     }
 
     struct physics_force *forcePtr = &rbPtr->forces[forceIndex];
-    memcpy(forcePtr->force, force, sizeof(force));
+    memcpy(forcePtr->force, force, sizeof(*force));
     forcePtr->timestamp = context->timeSinceStart;
     forcePtr->duration = duration;
 
@@ -450,9 +450,9 @@ physics_update(struct physics *context, real32 timestep)
         }
         
         real32 drag[3];
-        /*physics_helpers_calculate_drag(drag, materialPtr->dragCoefficient, context->airDensity, rbPtr->velocity, 
-            (colliderPtr->bounds.right - colliderPtr->bounds.left)*
-            (colliderPtr->bounds.top - colliderPtr->bounds.bottom));*/
+        physics_helpers_calculate_drag(drag, materialPtr->dragCoefficient, context->airDensity, rbPtr->velocity, 
+            ((colliderPtr->bounds.right - colliderPtr->bounds.left)*
+            (colliderPtr->bounds.top - colliderPtr->bounds.bottom)));
 
         real32 magAccelSqr = rbPtr->acceleration[0]*rbPtr->acceleration[0] + 
             rbPtr->acceleration[1]*rbPtr->acceleration[1] +

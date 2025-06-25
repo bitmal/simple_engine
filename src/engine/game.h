@@ -8,6 +8,7 @@
 
 struct context;
 struct interface;
+struct game;
 
 typedef i32 game_id;
 #define GAME_NULL_ID -1

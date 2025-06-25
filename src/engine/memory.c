@@ -318,7 +318,7 @@ memory_clean(struct memory *mem)
 void
 memory_free(struct memory *mem, void *alloc)
 {
-    assert(alloc >= mem->_memory && alloc < (mem->_memory + mem->size));
+    assert(((uint64_t)alloc >= (uint64_t)mem->_memory) && (uint64_t)alloc < ((uint64_t)mem->_memory + mem->size));
 
     struct memory_allocator *casted = alloc;
 
