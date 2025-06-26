@@ -5,6 +5,7 @@
 #include "types.h"
 #include "physics.h"
 #include "vec2.h"
+#include <SDL3/SDL_gamepad.h>
 
 struct context;
 struct interface;
@@ -83,6 +84,13 @@ struct game_timer
     b32 isActive;
 };
 
+struct player
+{
+    game_id entityId;
+    real32 movementAxisNormalized[2];
+    struct game_timer *animTimer;
+};
+
 struct game
 {
     struct context *app;
@@ -97,7 +105,7 @@ struct game
     struct game_timer *timers;
     struct game_layer *layers;
     struct basic_dict *layerDict;
-    game_id playerEntity;
+    struct player *player0;
     i32 entityCount;
     i32 componentCount;
     i32 transformCount;

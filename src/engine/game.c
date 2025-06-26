@@ -27,30 +27,91 @@ _game_input_callback(const char *key, const char *action, void *dataPtr)
     {
         g->app->isRunning = B32_FALSE;
     }
-    else if (!strcmp(key, "w") && isKeyDown)
+    else if (isKeyDown)
     {
-        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
-        real32 force[] = {0.f, 10.f, 0.f};
-        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
+        if (!strcmp(key, "w"))
+        {
+            g->player0->movementAxisNormalized[1] = 1.f;
+        }
+        else if (!strcmp(key, "s"))
+        {
+            g->player0->movementAxisNormalized[1] = -1.f;
+        }
+        if (!strcmp(key, "a"))
+        {
+            g->player0->movementAxisNormalized[0] = -1.f;
+        }
+        else if (!strcmp(key, "d"))
+        {
+            g->player0->movementAxisNormalized[0] = 1.f;
+        }
     }
-    else if (!strcmp(key, "a") && isKeyDown)
+    else if (!isKeyDown)
     {
-        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
-        real32 force[] = {-10.f, 0.f, 0.f};
-        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
+        if (!strcmp(key, "w"))
+        {
+            if (g->player0->movementAxisNormalized[1] == 1.f)
+            {
+                g->player0->movementAxisNormalized[1] = 0.f;
+            }
+        }
+        else if (!strcmp(key, "s"))
+        {
+            if (g->player0->movementAxisNormalized[1] == -1.f)
+            {
+                g->player0->movementAxisNormalized[1] = 0.f;
+            }
+        }
+        if (!strcmp(key, "a"))
+        {
+            if (g->player0->movementAxisNormalized[0] == -1.f)
+            {
+                g->player0->movementAxisNormalized[0] = 0.f;
+            }
+        }
+        else if (!strcmp(key, "d"))
+        {
+            if (g->player0->movementAxisNormalized[0] == 1.f)
+            {
+                g->player0->movementAxisNormalized[0] = 0.f;
+            }
+        }
     }
-    else if (!strcmp(key, "s") && isKeyDown)
-    {
-        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
-        real32 force[] = {0.f, -10.f, 0.f};
-        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
-    }
-    else if (!strcmp(key, "d") && isKeyDown)
-    {
-        struct game_physics_component *playerPhysicsPtr = game_get_component(g, g->playerEntity, GAME_PHYSICS_COMPONENT);
-        real32 force[] = {10.f, 0.f, 0.f};
-        physics_rigidbody_add_force(g->app->physics, playerPhysicsPtr->rigidbody, force, 0.f);
-    }
+}
+
+void
+_init_player_0(struct game *g)
+{
+    g->player0 = memory_alloc(g->app->memoryContext, sizeof(struct player));
+    
+    g->player0->entityId = game_create_entity(g, "player");
+    
+    game_id transfId = game_create_component(g, GAME_TRANSFORM);
+    game_attach_component(g, g->player0->entityId, transfId);
+    
+    game_id renderId = game_create_component(g, GAME_RENDER_COMPONENT);
+    game_attach_component(g, g->player0->entityId, renderId);
+    struct game_render_component *renderComp = game_get_component(g, g->player0->entityId, GAME_RENDER_COMPONENT);
+    renderer_id materialId = renderer_model_get_material(g->app->renderContext, renderComp->rendererModelId);
+
+    /*real32 color[] = {1.f, 1.f, 1.f, 1.f};
+    renderer_material_update_property(g->app->renderContext, materialId, "u_Color", color);
+    u32 width = 25;
+    renderer_material_update_property(g->app->renderContext, materialId, "u_TexWidth", &width);
+    u32 height = 25;
+    renderer_material_update_property(g->app->renderContext, materialId, "u_TexHeight", &height);*/
+    
+    game_id physicsId = game_create_component(g, GAME_PHYSICS_COMPONENT);
+    game_attach_component(g, g->player0->entityId, physicsId);
+    struct game_physics_component *physicsComp = &g->physicsComponents[physicsId];
+    
+    struct physics_rigidbody *rbPtr = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
+    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
+    *((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 2.f;
+
+    g->player0->movementAxisNormalized[0] = 0.f;
+    g->player0->movementAxisNormalized[1] = 0.f;
+    g->player0->animTimer = NULL;
 }
 
 struct game *
@@ -120,35 +181,10 @@ game_init(struct context *app)
 
     renderer_load_texture(g->app->renderContext, "test1", "test1", B32_FALSE);
 
-    game_id entity0 = game_create_entity(g, "player");
-    g->playerEntity = entity0;
-
-    game_id entity0Transf = game_create_component(g, GAME_TRANSFORM);
-    game_attach_component(g, entity0, entity0Transf);
-
-    game_id entity0Render = game_create_component(g, GAME_RENDER_COMPONENT);
-    game_attach_component(g, entity0, entity0Render);
-    struct game_render_component *entity0RenderPtr = game_get_component(g, entity0, GAME_RENDER_COMPONENT);
-    renderer_id entity0Mat = renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId);
-    renderer_model_set_mesh(g->app->renderContext, entity0RenderPtr->rendererModelId, "texture_quad");
-    renderer_material_set_texture(g->app->renderContext, renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId), 
-        "test1");
-    renderer_material_set_program(g->app->renderContext, renderer_model_get_material(g->app->renderContext, entity0RenderPtr->rendererModelId), "unlit_texture");
-    real32 entity0PropColor[] = {1.f, 1.f, 1.f, 1.f};
-    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_Color", entity0PropColor);
-    u32 entity0PropWidth = 50;
-    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_TexWidth", &entity0PropWidth);
-    u32 entity0PropHeight = 50;
-    renderer_material_update_property(g->app->renderContext, entity0Mat, "u_TexHeight", &entity0PropHeight);
-
-    game_id entity0Physics = game_create_component(g, GAME_PHYSICS_COMPONENT);
-    game_attach_component(g, entity0, entity0Physics);
-    struct game_physics_component *entity0PhysicsPtr = game_get_component(g, entity0, GAME_PHYSICS_COMPONENT);
-    //real32 entity0PhysicsForce[] = {100.f, 100.f, 0.f};
-    //physics_rigidbody_add_force(g->app->physics, entity0PhysicsPtr->rigidbody, &entity0PhysicsForce[0], 0.25f);
-
     g->gameInterface = interface_init(g->app->memoryContext);
     g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL);
+
+    _init_player_0(g);
 
     return g;
 }
@@ -188,40 +224,46 @@ game_cycle(struct game *g, real32 dt)
          ++entityIndex)
     {
         struct game_entity *entity = &g->entities[entityIndex];
-				{
-					struct game_transform *transform;
-					{
-						if (entity->transform > GAME_NULL_ID)
+		{
+			struct game_transform *transform;
+			{
+                if (entity->transform > GAME_NULL_ID)
         		{
         		    transform = &g->transforms[g->components[entity->transform].index];
         		}
-        		else
+                else
         		{
         		    transform = NULL;
         		}
-					}
+			}
         	
         	struct game_physics_component *physicsComp;
-					{
-						if (entity->physicsComponent > GAME_NULL_ID)
-        		{
-        		    physicsComp = &g->physicsComponents[g->components[entity->physicsComponent].index];
-        		}
-        		else
-        		{
-        		    physicsComp = NULL;
-        		}
+			{
+                if (entity->physicsComponent > GAME_NULL_ID)
+        	    {
+        	        physicsComp = &g->physicsComponents[g->components[entity->physicsComponent].index];
+        	    }
+                else
+        	    {
+        	        physicsComp = NULL;
+        	    }
         	
-						// PHYSICS
+				// PHYSICS
         		if (physicsComp && physicsComp->isActive && transform)
         		{
+                    if (entity->id == g->player0->entityId)
+                    {
+                        real32 force[] = {g->player0->movementAxisNormalized[0]*1.f, g->player0->movementAxisNormalized[1]*1.f, 0.f};
+                        physics_rigidbody_add_force(g->app->physics, physicsComp->rigidbody, force, 0.f);
+                    }
+                    
         		    struct physics_rigidbody *rb = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
         		    transform->position.x = rb->position[0];
         		    transform->position.y = rb->position[1];
         		    transform->rotation = rb->rotation[2];
         		}
-					}
-				}
+			}
+        }
     }
 }
 
@@ -482,20 +524,22 @@ game_create_component(struct game *g, enum game_component_type type)
             }
 
             g->renderComponents[renderIndex].id = renderIndex;
-            g->renderComponents[renderIndex].rendererModelId = renderer_instantiate_model(g->app->renderContext, "texture_quad", "unlit");
+            g->renderComponents[renderIndex].rendererModelId = renderer_instantiate_model(g->app->renderContext, "texture_quad", "unlit_texture");
             g->components[componentIndex].index = renderIndex;
 
-            real32 width = 1.f;
+            u32 width = 25;
             renderer_material_update_property(g->app->renderContext, renderer_model_get_material(g->app->renderContext,
-                g->renderComponents[renderIndex].rendererModelId), "u_Width", &width);
+                g->renderComponents[renderIndex].rendererModelId), "u_TexWidth", &width);
             
-            real32 height = 1.f;
+            u32 height = 25;
             renderer_material_update_property(g->app->renderContext, renderer_model_get_material(g->app->renderContext,
-                g->renderComponents[renderIndex].rendererModelId), "u_Height", &height);
+                g->renderComponents[renderIndex].rendererModelId), "u_TexHeight", &height);
 
             real32 color[] = {1.f, 1.f, 1.f, 1.f};
             renderer_material_update_property(g->app->renderContext, renderer_model_get_material(g->app->renderContext,
                 g->renderComponents[renderIndex].rendererModelId), "u_Color", color);
+
+            renderer_material_set_texture(g->app->renderContext, renderer_model_get_material(g->app->renderContext, g->renderComponents[renderIndex].rendererModelId), "test1");
         } break;
         
         case GAME_PHYSICS_COMPONENT:

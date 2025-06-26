@@ -54,6 +54,20 @@ struct physics_force
     real32 duration;
 };
 
+typedef enum physics_rigidbody_constraint_type
+{
+    PHYSICS_RB_CONSTRAINT_MAX_SPEED,
+    PHYSICS_RB_CONSTRAINT_MAX_ROTATION,
+    PHYSICS_RB_CONSTRAINT_TYPE_COUNT
+} physics_rigidbody_constraint_t;
+
+struct physics_rigidbody_constraint
+{
+    physics_rigidbody_constraint_t type;
+    void *data;
+    b32 isActive;
+};
+
 struct physics_rigidbody
 {
     physics_id id;
@@ -74,6 +88,7 @@ struct physics_rigidbody
     i32 freeForceCount;
     i32 freeForceCapacity;
     i32 *freeForces;
+    struct physics_rigidbody_constraint constraintArr[PHYSICS_RB_CONSTRAINT_TYPE_COUNT];
 };
 
 struct physics
@@ -100,6 +115,22 @@ physics_init(struct memory *mem);
 
 physics_id
 physics_create_rigidbody(struct physics *context);
+
+void
+physics_rigidbody_set_constraint(struct physics *context, physics_id rigidbody,
+    physics_rigidbody_constraint_t type, const void *data);
+
+void
+physics_rigidbody_get_constraint(struct physics *context, physics_id rigidbody,
+    physics_rigidbody_constraint_t type, void *outData);
+
+void
+physics_rigidbody_set_constraint_active(struct physics *context, physics_id rigidbody,
+    physics_rigidbody_constraint_t type, b32 isActive);
+
+b32
+physics_rigidbody_get_constraint_active(struct physics *context, physics_id rigidbody,
+    physics_rigidbody_constraint_t type);
 
 void
 physics_rigidbody_add_force(struct physics *context, physics_id rigidbody, 

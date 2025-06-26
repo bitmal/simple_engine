@@ -171,78 +171,45 @@ physics_create_rigidbody(struct physics *context)
     rbPtr->activeForceCount = rbPtr->activeForceCapacity = 0;
     rbPtr->freeForces = NULL;
     rbPtr->freeForceCount = rbPtr->freeForceCapacity = 0;
-    
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].type = PHYSICS_RB_CONSTRAINT_MAX_SPEED;
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_FALSE;
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data = memory_alloc(context->memoryContext, sizeof(real32));
-    *((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 0.f;
-    
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].type = PHYSICS_RB_CONSTRAINT_MAX_ROTATION;
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].isActive = B32_FALSE;
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].data = memory_alloc(context->memoryContext, sizeof(real32));
-    *((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].data) = 0.f;
+    rbPtr->constraintArr = NULL;
+    rbPtr->constraintCapacity = 0;
+    rbPtr->constraintDict = basic_dict_create(context->memoryContext, _physics_rigidbody_constraint_hash_func, 10);
 
     return rbId;
 }
 
-void
-physics_rigidbody_set_constraint(struct physics *context, physics_id rigidbody,
+struct physics_rigidbody_constraint *
+physics_rigidbody_add_constraint(struct physics *context, physics_id rigidbody,
     physics_rigidbody_constraint_t type, const void *data)
 {
     assert(data);
 
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[rigidbody];
+    struct physics_rigidbody_constraint *constraint = memory_alloc(context->memoryContext, 
+        sizeof(struct physics_rigidbody_constraint));
+
+    constraint->type = type;
+    constraint->isActive = B32_TRUE;
 
     switch(type)
     {
         case PHYSICS_RB_CONSTRAINT_MAX_SPEED:
         {
-            *((real32 *)rbPtr->constraintArr[type].data) = *((real32 *)data);
+            constraint->data = memory_alloc(context->memoryContext, sizeof(real32));
+            *((real32 *)constraint->data) = *((real32 *)data);
         } break;
         
         case PHYSICS_RB_CONSTRAINT_MAX_ROTATION:
         {
-            *((real32 *)rbPtr->constraintArr[type].data) = *((real32 *)data);
+            constraint->data = memory_alloc(context->memoryContext, sizeof(real32));
+            *((real32 *)constraint->data) = *((real32 *)data);
         } break;
 
         default: break;
     }
-}
 
-void
-physics_rigidbody_get_constraint(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, void *outData)
-{
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[rigidbody];
+    basic_dict_set(context->rigidbodies[rigidbody].constraintDict, context->memoryContext, context->rigidbodies[rigidbody].constraintArr, &type, sizeof(type), (void *)data);
 
-    switch(type)
-    {
-        case PHYSICS_RB_CONSTRAINT_MAX_SPEED:
-        {
-            *((real32 *)outData) = *((real32 *)rbPtr->constraintArr[type].data);
-        } break;
-        
-        case PHYSICS_RB_CONSTRAINT_MAX_ROTATION:
-        {
-            *((real32 *)outData) = *((real32 *)rbPtr->constraintArr[type].data);
-        } break;
-
-        default: break;
-    }
-}
-
-void
-physics_rigidbody_set_constraint_active(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, b32 isActive)
-{
-    context->rigidbodies[rigidbody].constraintArr[type].isActive = isActive;
-}
-
-b32
-physics_rigidbody_get_constraint_active(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type)
-{
-    return context->rigidbodies[rigidbody].constraintArr[type].isActive;
+    return constraint;
 }
 
 void
@@ -614,25 +581,6 @@ physics_update(struct physics *context, real32 timestep)
                 rbPtr->acceleration[0] = 0.f;
                 rbPtr->acceleration[1] = 0.f;
                 rbPtr->acceleration[2] = 0.f;
-            }
-        }
-
-        real32 magnitude = sqrtf(rbPtr->velocity[0]*rbPtr->velocity[0] + 
-            rbPtr->velocity[1]*rbPtr->velocity[1] + 
-            rbPtr->velocity[2]*rbPtr->velocity[2]);
-
-        if (rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive)
-        {
-            if (magnitude > *((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data))
-            {
-                rbPtr->velocity[0] = (rbPtr->velocity[0]/magnitude)*
-                    (*((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data));
-                
-               rbPtr->velocity[1] = (rbPtr->velocity[1]/magnitude)*
-                    (*((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data));
-               
-               rbPtr->velocity[2] = (rbPtr->velocity[2]/magnitude)*
-                    (*((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data));
             }
         }
 
