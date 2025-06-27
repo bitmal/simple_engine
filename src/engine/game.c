@@ -1,4 +1,5 @@
 #include "game.h"
+#include "config.h"
 #include "engine.h"
 #include "renderer.h"
 #include "vec2.h"
@@ -88,7 +89,11 @@ _init_player_0(struct game *g)
     
     game_id transfId = game_create_component(g, GAME_TRANSFORM);
     game_attach_component(g, g->player0->entityId, transfId);
+    struct game_transform *transf = game_get_component(g, g->player0->entityId, GAME_TRANSFORM);
+    transf->position.x = 0.f;
     
+    config_get_var_number(g->app->config, "game_grid_height", &transf->position.y);
+
     game_id renderId = game_create_component(g, GAME_RENDER_COMPONENT);
     game_attach_component(g, g->player0->entityId, renderId);
     struct game_render_component *renderComp = game_get_component(g, g->player0->entityId, GAME_RENDER_COMPONENT);
@@ -106,8 +111,12 @@ _init_player_0(struct game *g)
     struct game_physics_component *physicsComp = &g->physicsComponents[physicsId];
     
     struct physics_rigidbody *rbPtr = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
-    *((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 2.f;
+    //rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
+    //*((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 10.f;
+    rbPtr->isGravity = B32_TRUE;
+    rbPtr->position[0] = transf->position.x;
+    rbPtr->position[1] = transf->position.y;
+    rbPtr->position[2] = 1.f;
 
     g->player0->movementAxisNormalized[0] = 0.f;
     g->player0->movementAxisNormalized[1] = 0.f;
@@ -178,6 +187,19 @@ game_init(struct context *app)
 
     renderer_create_mesh(app->renderContext, "texture_quad", textureQuadVertices, sizeof(real32)*6, 
         4, textureQuadIndices, 6);
+    
+    real32 frameQuadVertices[] = {
+        0.f, 0.f, 0.f, 1.f,  1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 0.f,
+        25.f, 0.f, 0.f, 1.f,  1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 0.f,
+        12.f, 25.f, 0.f, 1.f,  1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 0.f
+    };
+
+    u16 frameQuadIndices[] = {
+        0, 1, 2
+    };
+
+    renderer_create_mesh(app->renderContext, "frame_triangle", frameQuadVertices, sizeof(real32)*11, 
+        3, frameQuadIndices, 3);
 
     renderer_load_texture(g->app->renderContext, "test1", "test1", B32_FALSE);
 
@@ -185,6 +207,42 @@ game_init(struct context *app)
     g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL);
 
     _init_player_0(g);
+
+    game_id wallId = game_create_entity(g, "foreground");
+    
+    game_id wallTransfId = game_create_component(g, GAME_TRANSFORM);
+    game_attach_component(g, wallId, wallTransfId);
+
+    struct game_transform *wallTransf = game_get_component(g, wallId, GAME_TRANSFORM);
+    wallTransf->position.x = 50.f;
+    wallTransf->position.y = 50.f;
+
+    game_id wallRenderId = game_create_component(g, GAME_RENDER_COMPONENT);
+    game_attach_component(g, wallId, wallRenderId);
+    
+    struct game_render_component *wallRender = game_get_component(g, wallId, GAME_RENDER_COMPONENT);
+
+    renderer_id wallRenderMaterialId = renderer_model_get_material(g->app->renderContext, wallRender->rendererModelId);
+    renderer_model_set_mesh(g->app->renderContext, wallRender->rendererModelId, "frame_triangle");
+    renderer_material_set_program(g->app->renderContext, wallRenderMaterialId, "unlit_frame");
+
+    real32 frameColor[] = {1.f, 0.f, 0.f, 1.f};
+    renderer_material_update_property(g->app->renderContext, wallRenderMaterialId, "u_FrameColor", frameColor);
+    real32 frameThickness = 0.1f;
+    renderer_material_update_property(g->app->renderContext, wallRenderMaterialId, "u_FrameThickness", &frameThickness);
+
+    physics_id wallPhysicsId = game_create_component(g, GAME_PHYSICS_COMPONENT);
+    game_attach_component(g, wallId, wallPhysicsId);
+
+    struct game_physics_component *wallPhysics = game_get_component(g, wallId, GAME_PHYSICS_COMPONENT);
+    struct physics_rigidbody *wallPhysicsRb = physics_get_rigidbody(g->app->physics, wallPhysics->rigidbody);
+    struct physics_material *wallPhysicsMaterial = physics_get_material(g->app->physics, wallPhysicsRb->material);
+
+    wallPhysicsRb->isGravity = B32_TRUE;
+
+    wallPhysicsRb->position[0] = wallTransf->position.x;
+    wallPhysicsRb->position[1] = wallTransf->position.y;
+    wallPhysicsRb->position[2] = 1.f;
 
     return g;
 }
@@ -251,13 +309,18 @@ game_cycle(struct game *g, real32 dt)
 				// PHYSICS
         		if (physicsComp && physicsComp->isActive && transform)
         		{
+                    #define ACCEL 2.f
+
+                    struct physics_rigidbody *rb = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
+
                     if (entity->id == g->player0->entityId)
                     {
-                        real32 force[] = {g->player0->movementAxisNormalized[0]*1.f, g->player0->movementAxisNormalized[1]*1.f, 0.f};
+                        real32 force[] = {g->player0->movementAxisNormalized[0]*ACCEL, 
+                            g->player0->movementAxisNormalized[1]*ACCEL, 
+                            0.f};
                         physics_rigidbody_add_force(g->app->physics, physicsComp->rigidbody, force, 0.f);
                     }
                     
-        		    struct physics_rigidbody *rb = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
         		    transform->position.x = rb->position[0];
         		    transform->position.y = rb->position[1];
         		    transform->rotation = rb->rotation[2];
@@ -539,7 +602,8 @@ game_create_component(struct game *g, enum game_component_type type)
             renderer_material_update_property(g->app->renderContext, renderer_model_get_material(g->app->renderContext,
                 g->renderComponents[renderIndex].rendererModelId), "u_Color", color);
 
-            renderer_material_set_texture(g->app->renderContext, renderer_model_get_material(g->app->renderContext, g->renderComponents[renderIndex].rendererModelId), "test1");
+            renderer_material_set_texture(g->app->renderContext, renderer_model_get_material(g->app->renderContext, 
+                g->renderComponents[renderIndex].rendererModelId), "test1");
         } break;
         
         case GAME_PHYSICS_COMPONENT:

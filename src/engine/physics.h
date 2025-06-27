@@ -12,7 +12,7 @@ struct basic_dict;
 #define PHYSICS_DEFAULT_MASS 1.f
 #define PHYSICS_DEFAULT_AIR_DENSITY 0.2f
 #define PHYSICS_DEFAULT_GRAVITY_X 0.f
-#define PHYSICS_DEFAULT_GRAVITY_Y -1.f
+#define PHYSICS_DEFAULT_GRAVITY_Y -9.72f
 #define PHYSICS_DEFAULT_GRAVITY_Z 0.f
 
 #define PHYSICS_COLLISION_ARENA_BASE_SIZE 5
@@ -80,6 +80,7 @@ struct physics_rigidbody
     real32 rotationVelocity[3];
     real32 rotationAcceleration[3];
     real32 mass;
+    b32 isGravity;
     i32 forcesCount;
     struct physics_force *forces;
     i32 activeForceCount;

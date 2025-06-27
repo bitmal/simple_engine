@@ -38,6 +38,7 @@ main(int argc, char **argv)
     struct context app;
     app.config = config_init(MEMORY_PTR(config));
     config_load_config(app.config, "system");
+    config_load_config(app.config, "game");
 
 	app.statsContext = statistics_init(&app);
 

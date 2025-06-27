@@ -145,6 +145,7 @@ physics_create_rigidbody(struct physics *context)
     struct physics_rigidbody *rbPtr = &context->rigidbodies[rbId];
     rbPtr->id = rbId;
     rbPtr->mass = PHYSICS_DEFAULT_MASS;
+    rbPtr->isGravity = B32_FALSE;
     rbPtr->position[0] = 0.f;
     rbPtr->position[1] = 0.f;
     rbPtr->position[2] = 0.f;
@@ -306,6 +307,16 @@ physics_update(struct physics *context, real32 timestep)
         struct physics_rigidbody *rbPtr = &context->rigidbodies[rbIndex];
         struct physics_material *materialPtr = &context->materials[rbPtr->material];
         struct physics_collider *colliderPtr = &context->colliders[rbPtr->collider];
+
+        if (rbPtr->isGravity)
+        {
+            real32 gravityForce[3];
+            gravityForce[0] = context->gravity[0]*rbPtr->mass;
+            gravityForce[1] = context->gravity[1]*rbPtr->mass;
+            gravityForce[2] = context->gravity[2]*rbPtr->mass;
+
+            physics_rigidbody_add_force(context, rbPtr->id, gravityForce, 0.f);
+        }
         
         for (i32 rhsIndex = 0; rhsIndex < context->rigidbodyCount; ++rhsIndex)
         {
@@ -313,7 +324,7 @@ physics_update(struct physics *context, real32 timestep)
             {
                 continue;
             }
-            
+
             while (context->collisionCount > 0 && !_physics_rigidbody_collider_is_overlap(context, 
                    &context->rigidbodies[context->collisions[context->collisionCount - 1].rbLhs],
                    &context->rigidbodies[context->collisions[context->collisionCount - 1].rbRhs]))
@@ -321,7 +332,7 @@ physics_update(struct physics *context, real32 timestep)
                 u64 collHash;
                 memcpy(&collHash, &context->collisions[context->collisionCount - 1].rbLhs, 
                     sizeof(physics_id));
-                memcpy(&(((u32 *)&collHash)[1]), &context->collisions[context->collisionCount - 1].rbRhs, 
+                memcpy(&(((physics_id *)&collHash)[1]), &context->collisions[context->collisionCount - 1].rbRhs, 
                     sizeof(physics_id));
 
                 basic_dict_set(context->collisionMap, context->memoryContext, 
