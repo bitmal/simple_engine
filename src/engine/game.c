@@ -99,24 +99,33 @@ _init_player_0(struct game *g)
     struct game_render_component *renderComp = game_get_component(g, g->player0->entityId, GAME_RENDER_COMPONENT);
     renderer_id materialId = renderer_model_get_material(g->app->renderContext, renderComp->rendererModelId);
 
-    /*real32 color[] = {1.f, 1.f, 1.f, 1.f};
+    real32 color[] = {1.f, 1.f, 1.f, 1.f};
     renderer_material_update_property(g->app->renderContext, materialId, "u_Color", color);
     u32 width = 25;
     renderer_material_update_property(g->app->renderContext, materialId, "u_TexWidth", &width);
     u32 height = 25;
-    renderer_material_update_property(g->app->renderContext, materialId, "u_TexHeight", &height);*/
+    renderer_material_update_property(g->app->renderContext, materialId, "u_TexHeight", &height);
     
     game_id physicsId = game_create_component(g, GAME_PHYSICS_COMPONENT);
     game_attach_component(g, g->player0->entityId, physicsId);
     struct game_physics_component *physicsComp = &g->physicsComponents[physicsId];
     
     struct physics_rigidbody *rbPtr = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
-    //rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
-    //*((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 10.f;
-    rbPtr->isGravity = B32_TRUE;
+    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
+    *((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 25.f;
+    rbPtr->isGravity = B32_FALSE;
     rbPtr->position[0] = transf->position.x;
     rbPtr->position[1] = transf->position.y;
     rbPtr->position[2] = 1.f;
+
+    struct physics_material *physicsMaterial = physics_get_material(g->app->physics, rbPtr->material);
+    physicsMaterial->dragCoefficient = 0.02f;
+
+    struct physics_collider *collider = physics_get_collider(g->app->physics, rbPtr->collider);
+    collider->bounds.bottom = 0.f;
+    collider->bounds.top = 25.f;
+    collider->bounds.left = 0.f;
+    collider->bounds.right = 25.f;
 
     g->player0->movementAxisNormalized[0] = 0.f;
     g->player0->movementAxisNormalized[1] = 0.f;
@@ -214,8 +223,8 @@ game_init(struct context *app)
     game_attach_component(g, wallId, wallTransfId);
 
     struct game_transform *wallTransf = game_get_component(g, wallId, GAME_TRANSFORM);
-    wallTransf->position.x = 50.f;
-    wallTransf->position.y = 50.f;
+    wallTransf->position.x = 0.f;
+    wallTransf->position.y = 0.f;
 
     game_id wallRenderId = game_create_component(g, GAME_RENDER_COMPONENT);
     game_attach_component(g, wallId, wallRenderId);
@@ -238,7 +247,13 @@ game_init(struct context *app)
     struct physics_rigidbody *wallPhysicsRb = physics_get_rigidbody(g->app->physics, wallPhysics->rigidbody);
     struct physics_material *wallPhysicsMaterial = physics_get_material(g->app->physics, wallPhysicsRb->material);
 
-    wallPhysicsRb->isGravity = B32_TRUE;
+    //wallPhysicsRb->isGravity = B32_TRUE;
+    
+    struct physics_collider *collider = physics_get_collider(g->app->physics, wallPhysicsRb->collider);
+    collider->bounds.bottom = 0.f;
+    collider->bounds.top = 25.f;
+    collider->bounds.left = 0.f;
+    collider->bounds.right = 25.f;
 
     wallPhysicsRb->position[0] = wallTransf->position.x;
     wallPhysicsRb->position[1] = wallTransf->position.y;
