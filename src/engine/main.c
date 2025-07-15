@@ -2,8 +2,13 @@
 
 #include <GL/glew.h>
 #include <SDL3/SDL.h>
-
 #include <SDL3/SDL_timer.h>
+
+//#include <dlfcn.h>
+
+#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
+#include "cimgui.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -33,18 +38,41 @@ MEMORY_DEFINE(graphics, GRAPHICS_MEMORY_SIZE);
 int 
 main(int argc, char **argv)
 {
+    #if 0
+    void *cimguiPlugin = dlopen("libcimgui.so", RTLD_NOW);
+    if (!cimguiPlugin)
+    {
+        fprintf(stderr, "Failure to load %s at runtime!\ndl_error: %s\n", "libcimgui", dlerror());
+
+        return -1;
+    }
+
+    void *init = dlsym(cimguiPlugin, "init");
+
+    const char *result = dlerror();
+    if (result)
+    {
+        fprintf(stderr, "Failure to load init at runtime!\ndl_error: %s\n", result);
+        return -1;
+    }
+    #endif
+
     MEMORY_INIT(config);
 
     struct context app;
+    
     app.config = config_init(MEMORY_PTR(config));
     config_load_config(app.config, "system");
     config_load_config(app.config, "game");
+    config_load_config(app.config, "physics");
 
 	app.statsContext = statistics_init(&app);
 
     MEMORY_INIT(game);
     MEMORY_INIT(physics);
     MEMORY_INIT(graphics);
+    
+    ImGuiContext *imguiContext = igCreateContext(NULL);
     
     SDL_Init(SDL_INIT_VIDEO);
 

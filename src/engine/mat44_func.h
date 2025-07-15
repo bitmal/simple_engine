@@ -24,4 +24,7 @@ struct mat44 mat44_func_yaw(real32 theta);
 
 struct mat44 mat44_func_roll(real32 theta);
 
+struct vec4
+mat44_func_multiply_vec4(const struct mat44 *lhsMatrix, const struct vec4 *rhsVector);
+
 #endif

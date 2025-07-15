@@ -37,7 +37,7 @@ basic_dict_create(struct memory *memory, basic_dict_hash_func hashFunc, i32 init
 #define DICTIONARY(memoryContext, hashFunc) basic_dict_create(memoryContext, hashFunc, BASIC_DICT_DEFAULT_BUCKET_COUNT)
 
 void *
-basic_dict_get(struct basic_dict *dict, void *database, const void *key);
+basic_dict_get(const struct basic_dict *dict, void *database, const void *key);
 
 b32
 basic_dict_set(struct basic_dict *dict, struct memory *mem, void *database, const void *key, size_t keySize, void *data);

@@ -87,7 +87,6 @@ struct game_timer
 struct player
 {
     game_id entityId;
-    real32 movementAxisNormalized[2];
     struct game_timer *animTimer;
 };
 

@@ -18,64 +18,19 @@
 #include <string.h>
 #include <assert.h>
 
+#include <math.h>
+
 static void 
 _game_input_callback(const char *key, const char *action, void *dataPtr)
 {
     struct game *g = (struct game *)dataPtr;
     const b32 isKeyDown = !strcmp(action, "KEYDOWN");
 
-    if (!strcmp(key, "escape") && !isKeyDown)
+    if (isKeyDown)
     {
-        g->app->isRunning = B32_FALSE;
-    }
-    else if (isKeyDown)
-    {
-        if (!strcmp(key, "w"))
+        if (!strcmp(key, "escape"))
         {
-            g->player0->movementAxisNormalized[1] = 1.f;
-        }
-        else if (!strcmp(key, "s"))
-        {
-            g->player0->movementAxisNormalized[1] = -1.f;
-        }
-        if (!strcmp(key, "a"))
-        {
-            g->player0->movementAxisNormalized[0] = -1.f;
-        }
-        else if (!strcmp(key, "d"))
-        {
-            g->player0->movementAxisNormalized[0] = 1.f;
-        }
-    }
-    else if (!isKeyDown)
-    {
-        if (!strcmp(key, "w"))
-        {
-            if (g->player0->movementAxisNormalized[1] == 1.f)
-            {
-                g->player0->movementAxisNormalized[1] = 0.f;
-            }
-        }
-        else if (!strcmp(key, "s"))
-        {
-            if (g->player0->movementAxisNormalized[1] == -1.f)
-            {
-                g->player0->movementAxisNormalized[1] = 0.f;
-            }
-        }
-        if (!strcmp(key, "a"))
-        {
-            if (g->player0->movementAxisNormalized[0] == -1.f)
-            {
-                g->player0->movementAxisNormalized[0] = 0.f;
-            }
-        }
-        else if (!strcmp(key, "d"))
-        {
-            if (g->player0->movementAxisNormalized[0] == 1.f)
-            {
-                g->player0->movementAxisNormalized[0] = 0.f;
-            }
+            g->app->isRunning = B32_FALSE;
         }
     }
 }
@@ -90,9 +45,9 @@ _init_player_0(struct game *g)
     game_id transfId = game_create_component(g, GAME_TRANSFORM);
     game_attach_component(g, g->player0->entityId, transfId);
     struct game_transform *transf = game_get_component(g, g->player0->entityId, GAME_TRANSFORM);
-    transf->position.x = 0.f;
-    
-    config_get_var_number(g->app->config, "game_grid_height", &transf->position.y);
+    transf->position.x = *(real32 *)config_get_var(g->app->config, "GAME_grid_width", 0)/2.f;
+    transf->position.y = *(real32 *)config_get_var(g->app->config, "GAME_grid_height", 0)/2.f;
+    transf->rotation = 0.f;
 
     game_id renderId = game_create_component(g, GAME_RENDER_COMPONENT);
     game_attach_component(g, g->player0->entityId, renderId);
@@ -111,24 +66,25 @@ _init_player_0(struct game *g)
     struct game_physics_component *physicsComp = &g->physicsComponents[physicsId];
     
     struct physics_rigidbody *rbPtr = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
-    *((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 25.f;
+    //rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
+    //*((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 15.f;
     rbPtr->isGravity = B32_FALSE;
     rbPtr->position[0] = transf->position.x;
     rbPtr->position[1] = transf->position.y;
     rbPtr->position[2] = 1.f;
+    rbPtr->rotation[0] = 0.f;
+    rbPtr->rotation[1] = 0.f;
+    rbPtr->rotation[2] = transf->rotation;
 
     struct physics_material *physicsMaterial = physics_get_material(g->app->physics, rbPtr->material);
-    physicsMaterial->dragCoefficient = 0.02f;
+    physicsMaterial->dragCoefficient = 0.01f;
 
     struct physics_collider *collider = physics_get_collider(g->app->physics, rbPtr->collider);
     collider->bounds.bottom = 0.f;
-    collider->bounds.top = 25.f;
+    collider->bounds.top = 10.f;
     collider->bounds.left = 0.f;
-    collider->bounds.right = 25.f;
+    collider->bounds.right = 10.f;
 
-    g->player0->movementAxisNormalized[0] = 0.f;
-    g->player0->movementAxisNormalized[1] = 0.f;
     g->player0->animTimer = NULL;
 }
 
@@ -251,13 +207,13 @@ game_init(struct context *app)
     
     struct physics_collider *collider = physics_get_collider(g->app->physics, wallPhysicsRb->collider);
     collider->bounds.bottom = 0.f;
-    collider->bounds.top = 25.f;
+    collider->bounds.top = 10.f;
     collider->bounds.left = 0.f;
     collider->bounds.right = 25.f;
 
     wallPhysicsRb->position[0] = wallTransf->position.x;
     wallPhysicsRb->position[1] = wallTransf->position.y;
-    wallPhysicsRb->position[2] = 1.f;
+    wallPhysicsRb->position[2] = 10.f;
 
     return g;
 }
@@ -324,23 +280,113 @@ game_cycle(struct game *g, real32 dt)
 				// PHYSICS
         		if (physicsComp && physicsComp->isActive && transform)
         		{
-                    #define ACCEL 2.f
+                    #define ACCEL 100.f
 
-                    struct physics_rigidbody *rb = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
+                    struct physics_rigidbody *rbPtr = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
 
                     if (entity->id == g->player0->entityId)
                     {
-                        real32 force[] = {g->player0->movementAxisNormalized[0]*ACCEL, 
-                            g->player0->movementAxisNormalized[1]*ACCEL, 
-                            0.f};
-                        physics_rigidbody_add_force(g->app->physics, physicsComp->rigidbody, force, 0.f);
+                        real32 normalizedInputAxis[2];
+                        normalizedInputAxis[0] = normalizedInputAxis[1] = 0.f;
+
+                        if (input_get_key_down(g->app->inputContext, "a"))
+                        {
+                            normalizedInputAxis[0] = -1.f;
+                        }
+                        else if (input_get_key_down(g->app->inputContext, "d"))
+                        {
+                            normalizedInputAxis[0] = 1.f;
+                        }
+                        if (input_get_key_down(g->app->inputContext, "s"))
+                        {
+                            normalizedInputAxis[1] = -1.f;
+                        }
+                        else if (input_get_key_down(g->app->inputContext, "w"))
+                        {
+                            normalizedInputAxis[1] = 1.f;
+                        }
+                        
+                        real32 rotationAxisMagnitude = fabsf(normalizedInputAxis[0]);
+                        i32 rotationAxisSign = (rotationAxisMagnitude > 0.f) ? ((i32)ceilf(normalizedInputAxis[0]/rotationAxisMagnitude)) : 0;
+                        real32 movementAxisMagnitude = fabsf(normalizedInputAxis[1]);
+                        i32 movementAxisSign = (movementAxisMagnitude > 0.f) ? ((i32)ceilf(normalizedInputAxis[1]/movementAxisMagnitude)) : 0;
+
+                        #define ROTATION_ACCEL (M_PI*2.f)
+
+                        if (rotationAxisMagnitude > 0.f)
+                        {
+                            rbPtr->rotationVelocity[2] += normalizedInputAxis[0]*ROTATION_ACCEL*dt;
+                        }
+                        else
+                        {
+                            rbPtr->rotationVelocity[2] = 0.f;
+                        }
+                        
+                        if (movementAxisMagnitude > 0.f)
+                        {
+                            struct mat44 rotationMatrix = mat44_func_roll(rbPtr->rotation[2]);
+                            struct vec4 inputAxisDirection = {0.f, normalizedInputAxis[1], 0.f, 0.f};
+
+                            struct vec4 movementDirection = mat44_func_multiply_vec4(&rotationMatrix, &inputAxisDirection);
+
+                            physics_rigidbody_add_force(g->app->physics, physicsComp->rigidbody, &movementDirection._[0], rbPtr->mass*(movementAxisMagnitude*ACCEL), 
+                                0.f);
+                        }
                     }
                     
-        		    transform->position.x = rb->position[0];
-        		    transform->position.y = rb->position[1];
-        		    transform->rotation = rb->rotation[2];
+        		    transform->position.x = rbPtr->position[0];
+        		    transform->position.y = rbPtr->position[1];
+        		    transform->rotation = rbPtr->rotation[2];
         		}
 			}
+
+            //if (entity->id == g->player0->entityId)
+            {
+                const real32 gameGridWidth = *((real32 *)config_get_var(g->app->config, "GAME_grid_width", 0));
+                const real32 gameGridHeight = *((real32 *)config_get_var(g->app->config, "GAME_grid_height", 0));
+
+                struct physics_rigidbody *rbPtr = physicsComp ? physics_get_rigidbody(g->app->physics, physicsComp->rigidbody) : NULL;
+
+                const real32 offsetPositionBufferSize = 5.f;
+
+                if (transform->position.x >= (gameGridWidth + offsetPositionBufferSize))
+                {
+                    transform->position.x = -offsetPositionBufferSize;
+
+                    if (rbPtr)
+                    {
+                        rbPtr->position[0] = transform->position.x;
+                    }
+                }
+                else if (transform->position.x <= -offsetPositionBufferSize)
+                {
+                    transform->position.x = gameGridWidth + offsetPositionBufferSize - 0.1f;
+
+                    if (rbPtr)
+                    {
+                        rbPtr->position[0] = transform->position.x;
+                    }
+                }
+                
+                if (transform->position.y >= (gameGridHeight + offsetPositionBufferSize))
+                {
+                    transform->position.y = -offsetPositionBufferSize;
+
+                    if (rbPtr)
+                    {
+                        rbPtr->position[1] = transform->position.y;
+                    }
+                }
+                else if (transform->position.y <= -offsetPositionBufferSize)
+                {
+                    transform->position.y = gameGridHeight + offsetPositionBufferSize;
+
+                    if (rbPtr)
+                    {
+                        rbPtr->position[1] = transform->position.y;
+                    }
+                }
+            }
         }
     }
 }

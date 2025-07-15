@@ -1,0 +1,428 @@
+==00:00:00:00.000 99674== Memcheck, a memory error detector
+==00:00:00:00.000 99674== Copyright (C) 2002-2024, and GNU GPL'd, by Julian Seward et al.
+==00:00:00:00.000 99674== Using Valgrind-3.25.1-4441567fbe-20250520 and LibVEX; rerun with -h for copyright info
+==00:00:00:00.000 99674== Command: ./build/simple_engine
+==00:00:00:00.000 99674== 
+--00:00:00:00.000 99674-- Valgrind options:
+--00:00:00:00.000 99674--    --verbose
+--00:00:00:00.000 99674--    --time-stamp=yes
+--00:00:00:00.000 99674-- Contents of /proc/version:
+--00:00:00:00.000 99674--   Linux version 6.15.3-arch1-1 (linux@archlinux) (gcc (GCC) 15.1.1 20250425, GNU ld (GNU Binutils) 2.44.0) #1 SMP PREEMPT_DYNAMIC Thu, 19 Jun 2025 14:41:19 +0000
+--00:00:00:00.000 99674-- 
+--00:00:00:00.000 99674-- Arch and hwcaps: AMD64, LittleEndian, amd64-cx16-lzcnt-rdtscp-sse3-ssse3-avx-avx2-bmi-f16c-rdrand-rdseed-fma
+--00:00:00:00.000 99674-- Page sizes: currently 4096, max supported 4096
+--00:00:00:00.000 99674-- Valgrind library directory: /usr/lib/valgrind
+--00:00:00:00.001 99674-- Reading syms from /home/derek/.src/simple_engine/build/simple_engine
+--00:00:00:00.002 99674-- Reading syms from /usr/lib/ld-linux-x86-64.so.2
+==00:00:00:00.003 99674== Downloading debug info for /usr/lib/ld-linux-x86-64.so.2...
+--00:00:00:00.015 99674--   Considering /home/derek/.cache/debuginfod_client/880803fb40ebf69518d6a56628ce2be9c5f5c89b/debuginfo ..
+--00:00:00:00.024 99674--   .. CRC is valid
+==00:00:00:00.024 99674== Successfully downloaded debug file for /usr/lib/ld-linux-x86-64.so.2
+--00:00:00:00.050 99674-- Reading syms from /usr/lib/valgrind/memcheck-amd64-linux
+--00:00:00:00.053 99674--    object doesn't have a dynamic symbol table
+--00:00:00:00.063 99674-- Scheduler: using generic scheduler lock implementation.
+--00:00:00:00.065 99674-- Reading suppressions file: /usr/lib/valgrind/default.supp
+==00:00:00:00.068 99674== embedded gdbserver: reading from /tmp/vgdb-pipe-from-vgdb-to-99674-by-derek-on-???
+==00:00:00:00.068 99674== embedded gdbserver: writing to   /tmp/vgdb-pipe-to-vgdb-from-99674-by-derek-on-???
+==00:00:00:00.068 99674== embedded gdbserver: shared mem   /tmp/vgdb-pipe-shared-mem-vgdb-99674-by-derek-on-???
+==00:00:00:00.068 99674== 
+==00:00:00:00.068 99674== TO CONTROL THIS PROCESS USING vgdb (which you probably
+==00:00:00:00.068 99674== don't want to do, unless you know exactly what you're doing,
+==00:00:00:00.068 99674== or are doing some strange experiment):
+==00:00:00:00.068 99674==   /usr/lib/valgrind/../../bin/vgdb --pid=99674 ...command...
+==00:00:00:00.068 99674== 
+==00:00:00:00.068 99674== TO DEBUG THIS PROCESS USING GDB: start GDB like this
+==00:00:00:00.068 99674==   /path/to/gdb ./build/simple_engine
+==00:00:00:00.068 99674== and then give GDB the following command
+==00:00:00:00.068 99674==   target remote | /usr/lib/valgrind/../../bin/vgdb --pid=99674
+==00:00:00:00.068 99674== --pid is optional if only one valgrind process is running
+==00:00:00:00.068 99674== 
+==00:00:00:00.118 99674== Downloading debug info for /usr/lib/valgrind/memcheck-amd64-linux...
+--00:00:00:00.130 99674--   Considering /home/derek/.cache/debuginfod_client/d3be6428a75911b4e88b7f513aaf1d171beabc21/debuginfo ..
+--00:00:00:00.260 99674--   .. CRC is valid
+==00:00:00:00.261 99674== Successfully downloaded debug file for /usr/lib/valgrind/memcheck-amd64-linux
+--00:00:00:00.318 99674-- Warning: cross-CU LIMITATION: some inlined fn names
+--00:00:00:00.318 99674-- might be shown as UnknownInlinedFun
+--00:00:00:00.457 99674-- REDIR: 0x13a48520 (ld-linux-x86-64.so.2:strlen) redirected to 0x5823f6d2 (vgPlain_amd64_linux_REDIR_FOR_strlen)
+--00:00:00:00.473 99674-- REDIR: 0x13a46ee0 (ld-linux-x86-64.so.2:strcmp) redirected to 0x5823f6ec (vgPlain_amd64_linux_REDIR_FOR_strcmp)
+--00:00:00:00.481 99674-- REDIR: 0x13a46cb0 (ld-linux-x86-64.so.2:index) redirected to 0x5823f725 (vgPlain_amd64_linux_REDIR_FOR_index)
+--00:00:00:00.485 99674-- REDIR: 0x13a46040 (ld-linux-x86-64.so.2:bcmp) redirected to 0x5823f707 (vgPlain_amd64_linux_REDIR_FOR_memcmp)
+--00:00:00:00.519 99674-- Reading syms from /usr/lib/valgrind/vgpreload_core-amd64-linux.so
+--00:00:00:00.534 99674-- Reading syms from /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so
+==00:00:00:00.545 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:00.545 99674--     old: 0x13a46ee0 (strcmp              ) R-> (0000.0) 0x5823f6ec vgPlain_amd64_linux_REDIR_FOR_strcmp
+==00:00:00:00.545 99674== Downloading debug info for /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so...
+--00:00:00:00.558 99674--   Considering /home/derek/.cache/debuginfod_client/403753d6c7387bebdec4dfaaa93f7790525577d9/debuginfo ..
+--00:00:00:00.560 99674--   .. CRC is valid
+==00:00:00:00.560 99674== Successfully downloaded debug file for /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so
+--00:00:00:00.563 99674--     new: 0x13a46ee0 (strcmp              ) R-> (2016.0) 0x142712f0 strcmp
+==00:00:00:00.563 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:00.563 99674--     old: 0x13a48520 (strlen              ) R-> (0000.0) 0x5823f6d2 vgPlain_amd64_linux_REDIR_FOR_strlen
+--00:00:00:00.563 99674--     new: 0x13a48520 (strlen              ) R-> (2007.0) 0x1426fe80 strlen
+--00:00:00:00.585 99674-- REDIR: 0x13a46310 (ld-linux-x86-64.so.2:mempcpy) redirected to 0x14275a80 (mempcpy)
+--00:00:00:00.587 99674-- Reading syms from /usr/lib/libm.so.6
+--00:00:00:00.596 99674-- Reading syms from /usr/lib/libGL.so.1.7.0
+--00:00:00:00.599 99674-- Reading syms from /usr/lib/libSDL3.so.0.2.16
+--00:00:00:00.617 99674-- Reading syms from /usr/lib/libGLEW.so.2.2.0
+--00:00:00:00.625 99674-- Reading syms from /usr/lib/libc.so.6
+==00:00:00:00.635 99674== Downloading debug info for /usr/lib/libc.so.6...
+--00:00:00:00.645 99674--   Considering /home/derek/.cache/debuginfod_client/468e3585c794491a48ea75fceb9e4d6b1464fc35/debuginfo ..
+--00:00:00:00.728 99674--   .. CRC is valid
+==00:00:00:00.728 99674== Successfully downloaded debug file for /usr/lib/libc.so.6
+--00:00:00:01.147 99674-- Reading syms from /usr/lib/libGLdispatch.so.0.0.0
+--00:00:00:01.148 99674-- Reading syms from /usr/lib/libGLX.so.0.0.0
+--00:00:00:01.149 99674-- Reading syms from /usr/lib/libEGL.so.1.1.0
+--00:00:00:01.151 99674-- Reading syms from /usr/lib/libX11.so.6.4.0
+--00:00:00:01.160 99674-- Reading syms from /usr/lib/libxcb.so.1.1.0
+--00:00:00:01.164 99674-- Reading syms from /usr/lib/libXau.so.6.0.0
+--00:00:00:01.165 99674-- Reading syms from /usr/lib/libXdmcp.so.6.0.0
+--00:00:00:01.186 99674-- REDIR: 0x13a486c0 (ld-linux-x86-64.so.2:strncmp) redirected to 0x14270a50 (strncmp)
+==00:00:00:01.221 99674== Downloading debug info for /usr/lib/valgrind/vgpreload_core-amd64-linux.so...
+--00:00:00:01.234 99674--   Considering /home/derek/.cache/debuginfod_client/0c51105d9993ab51719a1f2cded9603486a0d0b6/debuginfo ..
+--00:00:00:01.234 99674--   .. CRC is valid
+==00:00:00:01.234 99674== Successfully downloaded debug file for /usr/lib/valgrind/vgpreload_core-amd64-linux.so
+--00:00:00:01.235 99674-- REDIR: 0x1483c140 (libc.so.6:strncasecmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.236 99674-- REDIR: 0x148393d0 (libc.so.6:mempcpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.237 99674-- REDIR: 0x1484f890 (libc.so.6:wcpncpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.238 99674-- REDIR: 0x14839740 (libc.so.6:stpcpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.239 99674-- REDIR: 0x148b3320 (libc.so.6:__memmove_chk) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.240 99674-- REDIR: 0x1485de20 (libc.so.6:wmemcmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.242 99674-- REDIR: 0x1483a390 (libc.so.6:strcat) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.244 99674-- REDIR: 0x14838a00 (libc.so.6:memcpy@@GLIBC_2.14) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.245 99674-- REDIR: 0x14851740 (libc.so.6:wcsncpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.246 99674-- REDIR: 0x148b3210 (libc.so.6:__memcpy_chk) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+==00:00:00:01.247 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:01.247 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:01.247 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+--00:00:00:01.248 99674-- REDIR: 0x14850e80 (libc.so.6:wcslen) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.249 99674-- REDIR: 0x14839560 (libc.so.6:memset) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.250 99674-- REDIR: 0x148517b0 (libc.so.6:wcsnlen) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.251 99674-- REDIR: 0x1483c440 (libc.so.6:strnlen) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.252 99674-- REDIR: 0x1483c4c0 (libc.so.6:strpbrk) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.252 99674-- REDIR: 0x1483a500 (libc.so.6:strcmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.253 99674-- REDIR: 0x148394e0 (libc.so.6:memrchr) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.254 99674-- REDIR: 0x1484fca0 (libc.so.6:wcschr) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.255 99674-- REDIR: 0x1483a400 (libc.so.6:index) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.256 99674-- REDIR: 0x1483c4f0 (libc.so.6:rindex) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.257 99674-- REDIR: 0x1484fd40 (libc.so.6:wcscmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.258 99674-- REDIR: 0x148397b0 (libc.so.6:stpncpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.259 99674-- REDIR: 0x1485dda0 (libc.so.6:wmemchr) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.260 99674-- REDIR: 0x1483c2e0 (libc.so.6:strncmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.261 99674-- REDIR: 0x14839810 (libc.so.6:strcasecmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.262 99674-- REDIR: 0x1483b5e0 (libc.so.6:strcspn) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.262 99674-- REDIR: 0x14850c60 (libc.so.6:wcscpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.263 99674-- REDIR: 0x1483c1e0 (libc.so.6:strncasecmp_l) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.264 99674-- REDIR: 0x1483a480 (libc.so.6:strchrnul) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.264 99674-- REDIR: 0x14838910 (libc.so.6:bcmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.266 99674-- REDIR: 0x1483b570 (libc.so.6:strcpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.267 99674-- REDIR: 0x148398b0 (libc.so.6:strcasecmp_l) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.268 99674-- REDIR: 0x1483c0c0 (libc.so.6:strlen) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.269 99674-- REDIR: 0x1483c380 (libc.so.6:strncpy) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.270 99674-- REDIR: 0x148392c0 (libc.so.6:memmove) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+==00:00:00:01.271 99674== Preferring higher priority redirection:
+--00:00:00:01.271 99674--     old: 0x148f9f80 (__memcpy_avx_unalign) R-> (2018.0) 0x142729a0 __memcpy_avx_unaligned_erms
+--00:00:00:01.271 99674--     new: 0x148f9f80 (__memcpy_avx_unalign) R-> (2018.1) 0x14274730 memmove
+--00:00:00:01.271 99674-- REDIR: 0x14838890 (libc.so.6:memchr) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.271 99674-- REDIR: 0x1483c6f0 (libc.so.6:strspn) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+==00:00:00:01.285 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:01.285 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:01.285 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+--00:00:00:01.287 99674-- REDIR: 0x1483cff0 (libc.so.6:strstr) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+==00:00:00:01.289 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:01.289 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:01.289 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:01.290 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:01.290 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:01.290 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:01.290 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:01.290 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:01.290 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:01.290 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:01.290 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:01.290 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:01.324 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:01.324 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:01.324 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+--00:00:00:01.324 99674-- REDIR: 0x148516c0 (libc.so.6:wcsncmp) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+--00:00:00:01.364 99674-- REDIR: 0x148febb0 (libc.so.6:__strrchr_avx2) redirected to 0x1426f5e0 (rindex)
+--00:00:00:01.367 99674-- REDIR: 0x14834610 (libc.so.6:malloc) redirected to 0x14266730 (malloc)
+==00:00:00:01.369 99674== Downloading debug info for /usr/lib/libX11.so.6.4.0...
+--00:00:00:01.379 99674--   Considering /home/derek/.cache/debuginfod_client/ffd4558aaf9494d0348653a35dca385b3d93403d/debuginfo ..
+--00:00:00:01.478 99674--   .. CRC is valid
+==00:00:00:01.478 99674== Successfully downloaded debug file for /usr/lib/libX11.so.6.4.0
+--00:00:00:01.536 99674-- REDIR: 0x148fcd00 (libc.so.6:__strlen_avx2) redirected to 0x1426fd60 (strlen)
+--00:00:00:01.536 99674-- REDIR: 0x148fdde0 (libc.so.6:__strncmp_avx2) redirected to 0x14270820 (strncmp)
+==00:00:00:01.562 99674== Downloading debug info for /usr/lib/libGLdispatch.so.0.0.0...
+--00:00:00:01.574 99674--   Considering /home/derek/.cache/debuginfod_client/a2384eed21f17c8f91ee60ea12e60eed3b19c955/debuginfo ..
+--00:00:00:01.577 99674--   .. CRC is valid
+==00:00:00:01.577 99674== Successfully downloaded debug file for /usr/lib/libGLdispatch.so.0.0.0
+==00:00:00:01.579 99674== Downloading debug info for /usr/lib/libEGL.so.1.1.0...
+--00:00:00:01.592 99674--   Considering /home/derek/.cache/debuginfod_client/7d3ff5f8b125de60c06698057a839fc0e816caf8/debuginfo ..
+--00:00:00:01.596 99674--   .. CRC is valid
+==00:00:00:01.596 99674== Successfully downloaded debug file for /usr/lib/libEGL.so.1.1.0
+--00:00:00:01.605 99674-- REDIR: 0x148350f0 (libc.so.6:realloc) redirected to 0x1426ddd0 (realloc)
+--00:00:00:01.607 99674-- REDIR: 0x148f9f50 (libc.so.6:__memcpy_chk_avx_unaligned_erms) redirected to 0x14275460 (__memmove_chk)
+--00:00:00:01.609 99674-- REDIR: 0x148fc550 (libc.so.6:__strcmp_avx2) redirected to 0x14271180 (strcmp)
+==00:00:00:01.618 99674== Downloading debug info for /usr/lib/libGLX.so.0.0.0...
+--00:00:00:01.629 99674--   Considering /home/derek/.cache/debuginfod_client/8d2ccec407d6dc8b6f83faf7c89b415ce184e7d3/debuginfo ..
+--00:00:00:01.635 99674--   .. CRC is valid
+==00:00:00:01.635 99674== Successfully downloaded debug file for /usr/lib/libGLX.so.0.0.0
+==00:00:00:01.643 99674== Downloading debug info for /usr/lib/libGL.so.1.7.0...
+--00:00:00:01.653 99674--   Considering /home/derek/.cache/debuginfod_client/0b7fdd8fd266b7677f0d9948d00fbf7de3be9a10/debuginfo ..
+--00:00:00:01.655 99674--   .. CRC is valid
+==00:00:00:01.655 99674== Successfully downloaded debug file for /usr/lib/libGL.so.1.7.0
+--00:00:00:01.676 99674-- REDIR: 0x148fa980 (libc.so.6:__memset_avx2_unaligned_erms) redirected to 0x14274600 (memset)
+--00:00:00:01.680 99674-- REDIR: 0x148fbe10 (libc.so.6:__strcat_avx2) redirected to 0x1426f8a0 (strcat)
+--00:00:00:01.694 99674-- REDIR: 0x148fc120 (libc.so.6:__strchr_avx2) redirected to 0x1426f860 (index)
+--00:00:00:01.705 99674-- REDIR: 0x148f9580 (libc.so.6:__memchr_avx2) redirected to 0x142713b0 (memchr)
+--00:00:00:01.706 99674-- REDIR: 0x148f9f80 (libc.so.6:__memcpy_avx_unaligned_erms) redirected to 0x14274730 (memmove)
+--00:00:00:01.711 99674-- REDIR: 0x1491c4b0 (libc.so.6:__strspn_sse42) redirected to 0x14275f00 (strspn)
+--00:00:00:01.712 99674-- REDIR: 0x14919780 (libc.so.6:__strcspn_sse42) redirected to 0x14275e00 (strcspn)
+--00:00:00:01.765 99674-- REDIR: 0x14834d60 (libc.so.6:free) redirected to 0x14269880 (free)
+--00:00:00:01.800 99674-- REDIR: 0x14835900 (libc.so.6:calloc) redirected to 0x1426db60 (calloc)
+==00:00:00:01.801 99674== Downloading debug info for /usr/lib/libSDL3.so.0.2.16...
+--00:00:00:01.812 99674--   Considering /home/derek/.cache/debuginfod_client/d5d9a839369f6d4021f6c1c8ebd0cc02db83050a/debuginfo ..
+--00:00:00:01.929 99674--   .. CRC is valid
+==00:00:00:01.929 99674== Successfully downloaded debug file for /usr/lib/libSDL3.so.0.2.16
+--00:00:00:02.136 99674-- Reading syms from /usr/lib/libdbus-1.so.3.38.3
+--00:00:00:02.143 99674-- Reading syms from /usr/lib/libsystemd.so.0.40.0
+--00:00:00:02.153 99674-- Reading syms from /usr/lib/libcap.so.2.76
+--00:00:00:02.154 99674-- Reading syms from /usr/lib/libgcc_s.so.1
+==00:00:00:02.162 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:02.162 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:02.162 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:02.164 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:02.164 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:02.164 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:02.169 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:02.169 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:02.169 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:02.209 99674== Downloading debug info for /usr/lib/libdbus-1.so.3.38.3...
+--00:00:00:02.225 99674--   Considering /home/derek/.cache/debuginfod_client/65f44f39f68b8f63de82c45fc6108bfc66c0247a/debuginfo ..
+--00:00:00:02.235 99674--   .. CRC is valid
+==00:00:00:02.235 99674== Successfully downloaded debug file for /usr/lib/libdbus-1.so.3.38.3
+--00:00:00:02.292 99674-- REDIR: 0x148fe440 (libc.so.6:__strncpy_avx2) redirected to 0x14270070 (strncpy)
+--00:00:00:02.309 99674-- REDIR: 0x148fc360 (libc.so.6:__strchrnul_avx2) redirected to 0x14275510 (strchrnul)
+--00:00:00:02.645 99674-- Reading syms from /usr/lib/libXext.so.6.4.0
+--00:00:00:02.649 99674-- Reading syms from /usr/lib/libXcursor.so.1.0.2
+--00:00:00:02.650 99674-- Reading syms from /usr/lib/libXrender.so.1.3.0
+--00:00:00:02.651 99674-- Reading syms from /usr/lib/libXfixes.so.3.1.0
+--00:00:00:02.654 99674-- Reading syms from /usr/lib/libXi.so.6.1.0
+==00:00:00:02.656 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:02.656 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:02.656 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+--00:00:00:02.660 99674-- Reading syms from /usr/lib/libXrandr.so.2.2.0
+--00:00:00:02.663 99674-- Reading syms from /usr/lib/libXss.so.1.0.0
+--00:00:00:02.698 99674-- REDIR: 0x148fac90 (libc.so.6:__stpcpy_avx2) redirected to 0x14273e60 (stpcpy)
+--00:00:00:02.699 99674-- REDIR: 0x148f9f40 (libc.so.6:__mempcpy_avx_unaligned_erms) redirected to 0x14275640 (mempcpy)
+==00:00:00:02.787 99674== Downloading debug info for /usr/lib/libxcb.so.1.1.0...
+--00:00:00:02.802 99674--   Considering /home/derek/.cache/debuginfod_client/000512796d517237a3358266e464b28718ad96a5/debuginfo ..
+--00:00:00:02.810 99674--   .. CRC is valid
+==00:00:00:02.810 99674== Successfully downloaded debug file for /usr/lib/libxcb.so.1.1.0
+--00:00:00:02.825 99674-- REDIR: 0x148b3e40 (libc.so.6:__strcpy_chk) redirected to 0x14275580 (__strcpy_chk)
+==00:00:00:02.831 99674== Downloading debug info for /usr/lib/libXau.so.6.0.0...
+--00:00:00:02.844 99674--   Considering /home/derek/.cache/debuginfod_client/70cbe26a6761a8cf3314e8ef19ddd9e1eaa3eef5/debuginfo ..
+--00:00:00:02.845 99674--   .. CRC is valid
+==00:00:00:02.845 99674== Successfully downloaded debug file for /usr/lib/libXau.so.6.0.0
+--00:00:00:02.857 99674-- REDIR: 0x148f9820 (libc.so.6:__memcmp_avx2_movbe) redirected to 0x14273d20 (bcmp)
+==00:00:00:03.050 99674== Downloading debug info for /usr/lib/libXext.so.6.4.0...
+--00:00:00:03.066 99674--   Considering /home/derek/.cache/debuginfod_client/6831a77ee8af0e641a9d63702d7b360b9982b811/debuginfo ..
+--00:00:00:03.073 99674--   .. CRC is valid
+==00:00:00:03.073 99674== Successfully downloaded debug file for /usr/lib/libXext.so.6.4.0
+==00:00:00:03.076 99674== Downloading debug info for /usr/lib/libXrandr.so.2.2.0...
+--00:00:00:03.088 99674--   Considering /home/derek/.cache/debuginfod_client/ea8bd85d3d58ddbe0e452a284c6002fdd83f65ab/debuginfo ..
+--00:00:00:03.091 99674--   .. CRC is valid
+==00:00:00:03.091 99674== Successfully downloaded debug file for /usr/lib/libXrandr.so.2.2.0
+--00:00:00:03.124 99674-- REDIR: 0x14836cc0 (libc.so.6:reallocarray) redirected to 0x1426e0f0 (reallocarray)
+--00:00:00:03.133 99674-- REDIR: 0x1483c050 (libc.so.6:strlcpy) redirected to 0x142706e0 (strlcpy)
+==00:00:00:03.183 99674== Downloading debug info for /usr/lib/libXi.so.6.1.0...
+--00:00:00:03.198 99674--   Considering /home/derek/.cache/debuginfod_client/a145e6a8b282dabb00af28dc724e82e4a7512213/debuginfo ..
+--00:00:00:03.213 99674--   .. CRC is valid
+==00:00:00:03.213 99674== Successfully downloaded debug file for /usr/lib/libXi.so.6.1.0
+==00:00:00:03.268 99674== Downloading debug info for /usr/lib/libXfixes.so.3.1.0...
+--00:00:00:03.283 99674--   Considering /home/derek/.cache/debuginfod_client/a43cf8422e78bdf739d9c453deb81df4a0e91ca6/debuginfo ..
+--00:00:00:03.285 99674--   .. CRC is valid
+==00:00:00:03.285 99674== Successfully downloaded debug file for /usr/lib/libXfixes.so.3.1.0
+--00:00:00:03.363 99674-- REDIR: 0x1484d160 (libc.so.6:__strstr_sse2_unaligned) redirected to 0x14275c10 (strstr)
+--00:00:00:03.428 99674-- REDIR: 0x148fcab0 (libc.so.6:__strcpy_avx2) redirected to 0x1426feb0 (strcpy)
+==00:00:00:04.133 99674== Downloading debug info for /usr/lib/libXcursor.so.1.0.2...
+--00:00:00:04.151 99674--   Considering /home/derek/.cache/debuginfod_client/154203e1adcf252afb76bf247e0421aca5a0a6da/debuginfo ..
+--00:00:00:04.154 99674--   .. CRC is valid
+==00:00:00:04.154 99674== Successfully downloaded debug file for /usr/lib/libXcursor.so.1.0.2
+==00:00:00:04.161 99674== Downloading debug info for /usr/lib/libXrender.so.1.3.0...
+--00:00:00:04.176 99674--   Considering /home/derek/.cache/debuginfod_client/dabb6f1b08c3a0e283632e598449947e08120e15/debuginfo ..
+--00:00:00:04.180 99674--   .. CRC is valid
+==00:00:00:04.180 99674== Successfully downloaded debug file for /usr/lib/libXrender.so.1.3.0
+==00:00:00:04.332 99674== Downloading debug info for /usr/lib/libXss.so.1.0.0...
+--00:00:00:04.343 99674--   Considering /home/derek/.cache/debuginfod_client/9748ec51b2bf756e2687c3f5704b83887c04ea44/debuginfo ..
+--00:00:00:04.344 99674--   .. CRC is valid
+==00:00:00:04.344 99674== Successfully downloaded debug file for /usr/lib/libXss.so.1.0.0
+--00:00:00:04.437 99674-- Reading syms from /usr/lib/libGLX_mesa.so.0.0.0
+--00:00:00:04.442 99674-- Reading syms from /usr/lib/libgallium-25.1.4-arch1.1.so
+--00:00:00:04.541 99674-- Reading syms from /usr/lib/libdrm.so.2.125.0
+--00:00:00:04.543 99674-- Reading syms from /usr/lib/libxcb-glx.so.0.0.0
+--00:00:00:04.547 99674-- Reading syms from /usr/lib/libX11-xcb.so.1.0.0
+--00:00:00:04.548 99674-- Reading syms from /usr/lib/libXxf86vm.so.1.0.0
+--00:00:00:04.549 99674-- Reading syms from /usr/lib/libxcb-shm.so.0.0.0
+--00:00:00:04.549 99674-- Reading syms from /usr/lib/libexpat.so.1.10.2
+--00:00:00:04.551 99674-- Reading syms from /usr/lib/libxcb-dri3.so.0.1.0
+--00:00:00:04.551 99674-- Reading syms from /usr/lib/libxcb-present.so.0.0.0
+--00:00:00:04.552 99674-- Reading syms from /usr/lib/libxcb-xfixes.so.0.0.0
+--00:00:00:04.553 99674-- Reading syms from /usr/lib/libLLVM.so.20.1
+--00:00:00:05.107 99674-- Reading syms from /usr/lib/libz.so.1.3.1
+--00:00:00:05.108 99674-- Reading syms from /usr/lib/libzstd.so.1.5.7
+--00:00:00:05.113 99674-- Reading syms from /usr/lib/libSPIRV-Tools.so
+--00:00:00:05.121 99674-- Reading syms from /usr/lib/libsensors.so.5.0.0
+--00:00:00:05.121 99674-- Reading syms from /usr/lib/libxcb-randr.so.0.1.0
+--00:00:00:05.124 99674-- Reading syms from /usr/lib/libxcb-sync.so.1.0.0
+--00:00:00:05.125 99674-- Reading syms from /usr/lib/libxshmfence.so.1.0.0
+--00:00:00:05.126 99674-- Reading syms from /usr/lib/libelf-0.193.so
+--00:00:00:05.127 99674-- Reading syms from /usr/lib/libdrm_amdgpu.so.1.125.0
+--00:00:00:05.128 99674-- Reading syms from /usr/lib/libdrm_intel.so.1.125.0
+--00:00:00:05.130 99674-- Reading syms from /usr/lib/libstdc++.so.6.0.34
+--00:00:00:05.224 99674-- Reading syms from /usr/lib/libffi.so.8.2.0
+--00:00:00:05.225 99674-- Reading syms from /usr/lib/libedit.so.0.0.75
+--00:00:00:05.228 99674-- Reading syms from /usr/lib/libxml2.so.16.0.4
+--00:00:00:05.240 99674-- Reading syms from /usr/lib/libpciaccess.so.0.11.1
+--00:00:00:05.241 99674-- Reading syms from /usr/lib/libncursesw.so.6.5
+--00:00:00:05.246 99674-- Reading syms from /usr/lib/liblzma.so.5.8.1
+--00:00:00:05.247 99674-- Reading syms from /usr/lib/libicuuc.so.76.1
+==00:00:00:05.308 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.308 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.308 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.318 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.318 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.318 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+--00:00:00:05.321 99674-- REDIR: 0x1483c280 (libc.so.6:strncat) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+==00:00:00:05.323 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.323 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.323 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.330 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.330 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.330 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.338 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.338 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.338 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.339 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.339 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.339 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.340 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.340 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.340 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.343 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.343 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.343 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+--00:00:00:05.345 99674-- REDIR: 0x14839680 (libc.so.6:rawmemchr) redirected to 0x1425b1a0 (_vgnU_ifunc_wrapper)
+==00:00:00:05.346 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.346 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.346 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.352 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.352 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.352 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.444 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.444 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.444 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.500 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.500 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.500 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.512 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:05.512 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:05.512 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:05.936 99674== Downloading debug info for /usr/lib/libLLVM.so.20.1...
+--00:00:00:05.952 99674--   Considering /home/derek/.cache/debuginfod_client/5d5a779954c5f8dd87b7ef0897db32dad0fa192c/debuginfo ..
+--00:00:00:09.326 99674--   .. CRC is valid
+==00:00:00:09.326 99674== Successfully downloaded debug file for /usr/lib/libLLVM.so.20.1
+--00:00:00:29.484 99674-- REDIR: 0x21986570 (libstdc++.so.6:operator new(unsigned long, std::align_val_t, std::nothrow_t const&)) redirected to 0x14267f10 (operator new(unsigned long, std::align_val_t, std::nothrow_t const&))
+--00:00:00:29.491 99674-- REDIR: 0x21986420 (libstdc++.so.6:operator new(unsigned long)) redirected to 0x14266f20 (operator new(unsigned long))
+--00:00:00:29.552 99674-- REDIR: 0x21984390 (libstdc++.so.6:operator delete(void*, unsigned long)) redirected to 0x1426a7f0 (operator delete(void*, unsigned long))
+==00:00:00:34.422 99674== Downloading debug info for /usr/lib/libgallium-25.1.4-arch1.1.so...
+--00:00:00:34.467 99674--   Considering /home/derek/.cache/debuginfod_client/6cb258919aba5277e1c584f0eee724e76cee09ef/debuginfo ..
+--00:00:00:34.793 99674--   .. CRC is valid
+==00:00:00:34.793 99674== Successfully downloaded debug file for /usr/lib/libgallium-25.1.4-arch1.1.so
+==00:00:00:36.940 99674== Downloading debug info for /usr/lib/libGLX_mesa.so.0.0.0...
+--00:00:00:36.975 99674--   Considering /home/derek/.cache/debuginfod_client/0c56aea1905d188b5f7ff1b863e563b2c62c6e93/debuginfo ..
+--00:00:00:36.979 99674--   .. CRC is valid
+==00:00:00:36.979 99674== Successfully downloaded debug file for /usr/lib/libGLX_mesa.so.0.0.0
+==00:00:00:36.995 99674== Downloading debug info for /usr/lib/libxcb-glx.so.0.0.0...
+--00:00:00:37.030 99674--   Considering /home/derek/.cache/debuginfod_client/c2367e88b40000d0866499c780cdce03f39534a7/debuginfo ..
+--00:00:00:37.032 99674--   .. CRC is valid
+==00:00:00:37.032 99674== Successfully downloaded debug file for /usr/lib/libxcb-glx.so.0.0.0
+==00:00:00:37.045 99674== Downloading debug info for /usr/lib/libxcb-dri3.so.0.1.0...
+--00:00:00:37.082 99674--   Considering /home/derek/.cache/debuginfod_client/81e599ccef356dcd56eee45e615603ea2d605b22/debuginfo ..
+--00:00:00:37.082 99674--   .. CRC is valid
+==00:00:00:37.082 99674== Successfully downloaded debug file for /usr/lib/libxcb-dri3.so.0.1.0
+==00:00:00:37.084 99674== Downloading debug info for /usr/lib/libxcb-present.so.0.0.0...
+--00:00:00:37.118 99674--   Considering /home/derek/.cache/debuginfod_client/536a5240bdfb99c79a0f00f382ee9d3e31cef8a0/debuginfo ..
+--00:00:00:37.118 99674--   .. CRC is valid
+==00:00:00:37.118 99674== Successfully downloaded debug file for /usr/lib/libxcb-present.so.0.0.0
+==00:00:00:37.132 99674== Downloading debug info for /usr/lib/libxcb-xfixes.so.0.0.0...
+--00:00:00:37.165 99674--   Considering /home/derek/.cache/debuginfod_client/6fd138990ec28aa6a98ec9ae790595b330cbf4a1/debuginfo ..
+--00:00:00:37.165 99674--   .. CRC is valid
+==00:00:00:37.165 99674== Successfully downloaded debug file for /usr/lib/libxcb-xfixes.so.0.0.0
+==00:00:00:37.197 99674== Downloading debug info for /usr/lib/libexpat.so.1.10.2...
+--00:00:00:37.229 99674--   Considering /home/derek/.cache/debuginfod_client/2e809cef207d2341499beacdff4faaafc74fc9b2/debuginfo ..
+--00:00:00:37.232 99674--   .. CRC is valid
+==00:00:00:37.232 99674== Successfully downloaded debug file for /usr/lib/libexpat.so.1.10.2
+==00:00:00:37.520 99674== Downloading debug info for /usr/lib/libdrm.so.2.125.0...
+--00:00:00:37.553 99674--   Considering /home/derek/.cache/debuginfod_client/4e2e3b023d1e3a7103fc854cd6a5d8222d58e541/debuginfo ..
+--00:00:00:37.555 99674--   .. CRC is valid
+==00:00:00:37.555 99674== Successfully downloaded debug file for /usr/lib/libdrm.so.2.125.0
+--00:00:00:37.583 99674-- REDIR: 0x148fe8e0 (libc.so.6:__strnlen_avx2) redirected to 0x1426fd00 (strnlen)
+--00:00:00:37.819 99674-- memcheck GC: 1000 nodes, 208 survivors (20.8%)
+--00:00:00:37.819 99674-- memcheck GC: 1014 new table size (driftup)
+--00:00:00:39.316 99674-- REDIR: 0x148366c0 (libc.so.6:posix_memalign) redirected to 0x1426e9d0 (posix_memalign)
+==00:00:00:39.969 99674== Downloading debug info for /usr/lib/libxcb-sync.so.1.0.0...
+--00:00:00:40.003 99674--   Considering /home/derek/.cache/debuginfod_client/d1b37402faa437e852c3aadcacbca233e1d866bc/debuginfo ..
+--00:00:00:40.004 99674--   .. CRC is valid
+==00:00:00:40.004 99674== Successfully downloaded debug file for /usr/lib/libxcb-sync.so.1.0.0
+==00:00:00:40.644 99674== Downloading debug info for /usr/lib/libGLEW.so.2.2.0...
+--00:00:00:40.680 99674--   Considering /home/derek/.cache/debuginfod_client/f68a8103f8c7b1358b115ea31e4143b420f6c0ca/debuginfo ..
+--00:00:00:40.682 99674--   .. CRC is valid
+==00:00:00:40.682 99674== Successfully downloaded debug file for /usr/lib/libGLEW.so.2.2.0
+--00:00:00:41.017 99674-- Reading syms from /usr/lib/libEGL_mesa.so.0.0.0
+--00:00:00:41.019 99674-- Reading syms from /usr/lib/libgbm.so.1.0.0
+--00:00:00:41.020 99674-- Reading syms from /usr/lib/libwayland-client.so.0.23.1
+--00:00:00:41.021 99674-- Reading syms from /usr/lib/libwayland-server.so.0.23.1
+==00:00:00:41.028 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:41.028 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:41.028 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:41.029 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:41.029 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:41.029 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:41.031 99674== WARNING: new redirection conflicts with existing -- ignoring it
+--00:00:00:41.031 99674--     old: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2024.0) 0x14275460 __memmove_chk
+--00:00:00:41.031 99674--     new: 0x148f9f50 (__memcpy_chk_avx_una) R-> (2030.0) 0x14275b90 __memcpy_chk
+==00:00:00:44.139 99674== Downloading debug info for /usr/lib/libzstd.so.1.5.7...
+--00:00:00:44.175 99674--   Considering /home/derek/.cache/debuginfod_client/9723b93a8052010d25908aaa6174df6de760859a/debuginfo ..
+--00:00:00:44.222 99674--   .. CRC is valid
+==00:00:00:44.222 99674== Successfully downloaded debug file for /usr/lib/libzstd.so.1.5.7
+--00:00:00:46.606 99674-- REDIR: 0x21986490 (libstdc++.so.6:operator new[](unsigned long)) redirected to 0x142685a0 (operator new[](unsigned long))
+--00:00:00:46.609 99674-- REDIR: 0x219843b0 (libstdc++.so.6:operator delete[](void*)) redirected to 0x1426c180 (operator delete[](void*))
+--00:00:00:47.061 99674-- REDIR: 0x219843c0 (libstdc++.so.6:operator delete[](void*, unsigned long)) redirected to 0x1426c630 (operator delete[](void*, unsigned long))
+simple_engine: ../src/engine/physics.c:107: _physics_rigidbody_free_force_id: Assertion `forceIdPtr->isActive' failed.
+==00:00:00:58.641 99674== 
+==00:00:00:58.641 99674== Process terminating with default action of signal 6 (SIGABRT): dumping core
+==00:00:00:58.641 99674==    at 0x1482574C: __pthread_kill_implementation (pthread_kill.c:44)
+==00:00:00:58.641 99674==    by 0x147CBDBF: raise (raise.c:26)
+==00:00:00:58.641 99674==    by 0x147B3579: abort (abort.c:73)
+==00:00:00:58.641 99674==    by 0x147B34E2: __assert_fail_base.cold (assert.c:118)
+==00:00:00:58.641 99674==    by 0x40082DF: _physics_rigidbody_free_force_id (physics.c:107)
+==00:00:00:58.641 99674==    by 0x4009317: physics_update (physics.c:484)
+==00:00:00:58.641 99674==    by 0x4016898: main (main.c:213)
+==00:00:00:59.126 99674== 
+==00:00:00:59.131 99674== HEAP SUMMARY:
+==00:00:00:59.131 99674==     in use at exit: 14,131,014 bytes in 92,857 blocks
+==00:00:00:59.131 99674==   total heap usage: 136,290 allocs, 43,433 frees, 23,349,718 bytes allocated
+==00:00:00:59.131 99674== 
+==00:00:00:59.167 99674== Searching for pointers to 92,857 not-freed blocks
+==00:00:01:00.024 99674== Checked 314,228,992 bytes
+==00:00:01:00.024 99674== 
+==00:00:01:01.339 99674== LEAK SUMMARY:
+==00:00:01:01.339 99674==    definitely lost: 0 bytes in 0 blocks
+==00:00:01:01.339 99674==    indirectly lost: 0 bytes in 0 blocks
+==00:00:01:01.339 99674==      possibly lost: 10,722,322 bytes in 66,877 blocks
+==00:00:01:01.339 99674==    still reachable: 3,408,692 bytes in 25,980 blocks
+==00:00:01:01.339 99674==         suppressed: 0 bytes in 0 blocks
+==00:00:01:01.339 99674== Rerun with --leak-check=full to see details of leaked memory
+==00:00:01:01.339 99674== 
+==00:00:01:01.339 99674== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

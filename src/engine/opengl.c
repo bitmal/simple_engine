@@ -182,136 +182,137 @@ __opengl_sort_attrib_replace_func(struct memory *mem, void *lhs, size_t lhsIndex
 const char *
 opengl_helper_type_to_literal_str(u32 type)
 {
-    const u64 offset = sizeof("GL_") - 1;
+    const char *_ptr;
+    //const u64 offset = sizeof("GL_") - 1;
 
     switch(type)
     {
         case GL_FLOAT:
         {
-            return "GL_FLOAT" + offset;
+            _ptr = "GL_FLOAT";
         } break;
         
         case GL_INT:
         {
-            return "GL_INT" + offset;
+            _ptr = "GL_INT";
         } break;
         
         case GL_UNSIGNED_INT:
         {
-            return "GL_UNSIGNED_INT" + offset;
+            _ptr = "GL_UNSIGNED_INT";
         } break;
         
         case GL_FLOAT_VEC2:
         {
-            return "GL_FLOAT_VEC2" + offset;
+            _ptr = "GL_FLOAT_VEC2";
         } break;
         
         case GL_FLOAT_VEC3:
         {
-            return "GL_FLOAT_VEC3" + offset;
+            _ptr = "GL_FLOAT_VEC3";
         } break;
         
         case GL_FLOAT_VEC4:
         {
-            return "GL_FLOAT_VEC4" + offset;
+            _ptr = "GL_FLOAT_VEC4";
         } break;
         
         case GL_INT_VEC2:
         {
-            return "GL_INT_VEC2" + offset;
+            _ptr = "GL_INT_VEC2";
         } break;
         
         case GL_INT_VEC3:
         {
-            return "GL_INT_VEC3" + offset;
+            _ptr = "GL_INT_VEC3";
         } break;
         
         case GL_INT_VEC4:
         {
-            return "GL_INT_VEC4" + offset;
+            _ptr = "GL_INT_VEC4";
         } break;
         
         case GL_UNSIGNED_INT_VEC2:
         {
-            return "GL_UNSIGNED_INT_VEC2" + offset;
+            _ptr = "GL_UNSIGNED_INT_VEC2";
         } break;
         
         case GL_UNSIGNED_INT_VEC3:
         {
-            return "GL_UNSIGNED_INT_VEC3" + offset;
+            _ptr = "GL_UNSIGNED_INT_VEC3";
         } break;
         
         case GL_UNSIGNED_INT_VEC4:
         {
-            return "GL_UNSIGNED_INT_VEC4" + offset;
+            _ptr = "GL_UNSIGNED_INT_VEC4";
         } break;
         
         case GL_FLOAT_MAT4:
         {
-            return "GL_FLOAT_MAT4" + offset;
+            _ptr = "GL_FLOAT_MAT4";
         } break;
 
         default:
         {
-            return "GL_NONE" + offset;
+            _ptr = "GL_NONE";
         }
     }
+
+    return _ptr; // + offset;
 }
 
 u32
 opengl_helper_literal_str_to_type(const char *typeStr)
 {
-    const char *offsetPtr = typeStr - (sizeof("GL_") - 1);
-
-    if (offsetPtr == "GL_FLOAT")
+    if (!strcmp(typeStr, "GL_FLOAT"))
     {
         return GL_FLOAT;
     }
-    else if (offsetPtr == "GL_INT")
+    else if (!strcmp(typeStr, "GL_INT"))
     {
         return GL_INT;
     }
-    else if (offsetPtr == "GL_UNSIGNED_INT")
+    else if (!strcmp(typeStr, "GL_UNSIGNED_INT"))
     {
         return GL_UNSIGNED_INT;
     }
-    else if (offsetPtr == "GL_FLOAT_VEC2")
+    else if (!strcmp(typeStr, "GL_FLOAT_VEC2"))
     {
         return GL_FLOAT_VEC2;
     }
-    else if (offsetPtr == "GL_INT_VEC2")
+    else if (!strcmp(typeStr, "GL_INT_VEC2"))
     {
         return GL_INT_VEC2;
     }
-    else if (offsetPtr == "GL_UNSIGNED_INT_VEC2")
+    else if (!strcmp(typeStr, "GL_UNSIGNED_INT_VEC2"))
     {
         return GL_UNSIGNED_INT_VEC2;
     }
-    else if (offsetPtr == "GL_FLOAT_VEC3")
+    else if (!strcmp(typeStr, "GL_FLOAT_VEC3"))
     {
         return GL_FLOAT_VEC3;
     }
-    else if (offsetPtr == "GL_INT_VEC3")
+    else if (!strcmp(typeStr, "GL_INT_VEC3"))
     {
         return GL_INT_VEC3;
     }
-    else if (offsetPtr == "GL_UNSIGNED_INT_VEC3")
+    else if (!strcmp(typeStr, "GL_UNSIGNED_INT_VEC3"))
     {
         return GL_UNSIGNED_INT_VEC3;
     }
-    else if (offsetPtr == "GL_FLOAT_VEC4")
+    else if (!strcmp(typeStr, "GL_FLOAT_VEC4"))
     {
         return GL_FLOAT_VEC4;
     }
-    else if (offsetPtr == "GL_INT_VEC4")
+    else if (!strcmp(typeStr, "GL_INT_VEC4"))
     {
         return GL_INT_VEC4;
     }
-    else if (offsetPtr == "GL_UNSIGNED_INT_VEC4")
+    else if (!strcmp(typeStr, "GL_UNSIGNED_INT_VEC4"))
     {
         return GL_UNSIGNED_INT_VEC4;
     }
-    else if (offsetPtr == "GL_FLOAT_MAT4")
+    else if (!strcmp(typeStr, "GL_FLOAT_MAT4"))
     {
         return GL_FLOAT_MAT4;
     }

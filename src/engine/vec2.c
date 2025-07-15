@@ -35,5 +35,6 @@ struct vec2 vec2_normalized(const struct vec2 *v)
     real32 mag = vec2_mag(v);
 
     struct vec2 result = {v->x/mag, v->y/mag};
+    
     return result;
 }

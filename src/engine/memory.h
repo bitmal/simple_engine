@@ -69,6 +69,11 @@ struct memory
     static MEMORY_TYPE_ALIAS(name) g_##name##_memory
 #define MEMORY_INIT(name) \
     memory_init(MEMORY_PTR(name), sizeof(g_##name##_memory._memory));
+#define MEMORY_CLEAR(memoryPtr, patternPtr, patternSizePtr) \
+    assert((patternPtr) ? ((patternSizePtr) && (*(u64 *)(patternSizePtr) > 0)) : B32_TRUE); \
+    memory_set_offset(memoryPtr, (u64)0, B32_TRUE, (patternSizePtr) ? (*(u64 *)(patternSizePtr)) : (u64)0x0, patternPtr)
+#define MEMORY_ZERO(memoryPtr) \
+    memory_set_offset(memoryPtr, (u64)0, B32_TRUE, (u64)0, NULL)
 
 void
 memory_init(struct memory *mem, u64 size);
@@ -90,5 +95,8 @@ memory_free(struct memory *mem, void *alloc);
 
 const struct memory_event *
 memory_event_pop(struct memory *mem);
+
+void
+memory_set_offset(struct memory *memPtr, u64 memOffset, b32 isValueRepeating, u64 valueSize, const void *valuePtr);
 
 #endif

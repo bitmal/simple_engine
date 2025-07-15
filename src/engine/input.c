@@ -1,5 +1,7 @@
 #include "input.h"
 #include "basic_dict.h"
+#include "memory.h"
+#include "utils.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -49,7 +51,7 @@ input_bind_key(struct input *inputContext, struct memory *mem, const char *key, 
 {
     const i32 index = inputContext->keybindCount;
 
-    if (inputContext->keybinds)
+    if (inputContext->keybindCount > 0)
     {
         inputContext->keybinds = memory_realloc(mem, inputContext->keybinds, sizeof(struct input_keybind)*(++inputContext->keybindCount));
     }
@@ -59,13 +61,30 @@ input_bind_key(struct input *inputContext, struct memory *mem, const char *key, 
     }
 
     inputContext->keybinds[index].callback = cb;
-    inputContext->keybinds[index].key = key;
+    inputContext->keybinds[index].key = memory_alloc(mem, strlen(key) + 1);
 
-    basic_dict_set(inputContext->keybindDict, mem, inputContext->keybinds, key, strlen(key) + 1, cb);
+    sprintf(UTILS_MUTABLE_CAST(char *, inputContext->keybinds[index].key), "%s", key);
+
+    basic_dict_set(inputContext->keybindDict, mem, inputContext->keybinds, key, strlen(key) + 1, &cb);
 }
 
 b32
-input_key_down(struct input *inputContext, const char *key)
+input_set_key_down(struct input *inputContext, const char *key, b32 isKeyDown)
+{
+    struct input_key *keyPtr = basic_dict_get(inputContext->keyDict, inputContext->keys, key);
+
+    if (keyPtr)
+    {
+        keyPtr->isDown = isKeyDown;
+
+        return B32_TRUE;
+    }
+    
+    return B32_FALSE;
+}
+
+b32
+input_get_key_down(struct input *inputContext, const char *key)
 {
     struct input_key *keyPtr = basic_dict_get(inputContext->keyDict, inputContext->keys, key);
 

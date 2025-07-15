@@ -1,6 +1,7 @@
 #include "config.h"
 #include "memory.h"
 #include "basic_dict.h"
+#include "types.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -8,18 +9,67 @@
 #include <assert.h>
 #include <ctype.h>
 
+i32
+_config_get_type_size(enum config_var_type type)
+{
+    i32 typeSize;
+    switch (type)
+    {
+        case CONFIG_VAR_REAL32:
+        {
+            typeSize = CONFIG_VAR_REAL32_SIZE;
+        } break;
+        
+        case CONFIG_VAR_REAL64:
+        {
+            typeSize = CONFIG_VAR_REAL64_SIZE;
+        } break;
+        
+        case CONFIG_VAR_I32:
+        {
+            typeSize = CONFIG_VAR_I32_SIZE;
+        } break;
+        
+        case CONFIG_VAR_U32:
+        {
+            typeSize = CONFIG_VAR_U32_SIZE;
+        } break;
+        
+        case CONFIG_VAR_BOOL:
+        {
+            typeSize = CONFIG_VAR_BOOL_SIZE;
+        } break;
+        
+        case CONFIG_VAR_PTR:
+        {
+            typeSize = CONFIG_VAR_PTR_SIZE;
+        } break;
+        
+        case CONFIG_VAR_PTR32:
+        {
+            typeSize = CONFIG_VAR_PTR32_SIZE;
+        } break;
+
+        default: 
+        {
+            typeSize = 0;
+        } break;
+    }
+
+    return typeSize;
+}
+
 struct config *
 config_init(struct memory *mem)
 {
     assert(mem);
 
     struct config *context = memory_alloc(mem, sizeof(struct config));
-    context->_mem = mem;
-    context->_var = NULL;
-    context->_varCount = 0;
-    context->_varMap = DICTIONARY(mem, NULL);
     context->_arenaOffset = 0;
     context->_arenaSize = 0;
+    context->_varCount = 0;
+    context->_mem = mem;
+    context->_varMap = DICTIONARY(mem, NULL);
 
     return context;
 }
@@ -89,7 +139,7 @@ config_load_config(struct config *context, const char *fileName)
             }
             else if (!type)
             {
-                while (isalpha(start[length]))
+                while (isalnum(start[length]))
                 {
                     ++length;
                 }
@@ -155,13 +205,83 @@ config_load_config(struct config *context, const char *fileName)
 
         if (name && type && value)
         {
-            if (!strcmp(type, "number"))
+            if (!strcmp(type, "real32"))
             {
                 real32 num;
 
                 if (sscanf(value, "%f", &num) > 0)
                 {
-                    config_set_var_number(context, name, num);
+                    config_set_var(context, name, CONFIG_VAR_REAL32, 1, &num);
+                }
+                else
+                {
+                    fprintf(stderr, "config_load_config error: Invalid number value \"%s\" for var \"%s\" in \"%s\".\n", 
+                        value, name, fileName);
+                }
+            }
+            else if (!strcmp(type, "i32"))
+            {
+                i32 num;
+
+                if (sscanf(value, "%d", &num) > 0)
+                {
+                    config_set_var(context, name, CONFIG_VAR_I32, 1, &num);
+                }
+                else
+                {
+                    fprintf(stderr, "config_load_config error: Invalid number value \"%s\" for var \"%s\" in \"%s\".\n", 
+                        value, name, fileName);
+                }
+            }
+            else if (!strcmp(type, "i64"))
+            {
+                i64 num;
+
+                if (sscanf(value, "%ld", &num) > 0)
+                {
+                    config_set_var(context, name, CONFIG_VAR_I64, 1, &num);
+                }
+                else
+                {
+                    fprintf(stderr, "config_load_config error: Invalid number value \"%s\" for var \"%s\" in \"%s\".\n", 
+                        value, name, fileName);
+                }
+            }
+            else if (!strcmp(type, "u64"))
+            {
+                u64 num;
+
+                if (sscanf(value, "%lu", &num) > 0)
+                {
+                    config_set_var(context, name, CONFIG_VAR_U64, 1, &num);
+                }
+                else
+                {
+                    fprintf(stderr, "config_load_config error: Invalid number value \"%s\" for var \"%s\" in \"%s\".\n", 
+                        value, name, fileName);
+                }
+            }
+            else if (!strcmp(type, "real64"))
+            {
+                real64 num;
+
+                if (sscanf(value, "%lf", &num) > 0)
+                {
+                    config_set_var(context, name, CONFIG_VAR_REAL64, 1, &num);
+                }
+                else
+                {
+                    fprintf(stderr, "config_load_config error: Invalid number value \"%s\" for var \"%s\" in \"%s\".\n", 
+                        value, name, fileName);
+                }
+            }
+            else if (!strcmp(type, "real"))
+            {
+                real32 num;
+
+                if (sscanf(value, "%f", &num) > 0)
+                {
+                    config_set_var(context, name, CONFIG_VAR_REAL32, 1, &num);
                 }
                 else
                 {
@@ -173,12 +293,13 @@ config_load_config(struct config *context, const char *fileName)
             {
                 if (!strcmp(value, "NULL"))
                 {
-                    config_set_var_string(context, name, NULL);
+                    char value1[] = "\0";
+                    config_set_var(context, name, CONFIG_VAR_STRING, 1, value1);
                 }
                 else if (value[0] == '\"' && value[valueLength - 1] == '\"')
                 {
                     value[valueLength - 1] = '\0';
-                    config_set_var_string(context, name, value + 1);
+                    config_set_var(context, name, CONFIG_VAR_STRING, 1, value + 1);
                 }
                 else
                 {
@@ -190,11 +311,13 @@ config_load_config(struct config *context, const char *fileName)
             {
                 if (!strcmp(value, "false"))
                 {
-                    config_set_var_boolean(context, name, B32_FALSE);
+                    b32 value = B32_FALSE;
+                    config_set_var(context, name, CONFIG_VAR_BOOL, 1, &value);
                 }
                 else if (!strcmp(value, "true"))
                 {
-                    config_set_var_boolean(context, name, B32_TRUE);
+                    b32 value = B32_TRUE;
+                    config_set_var(context, name, CONFIG_VAR_BOOL, 1, &value);
                 }
                 else
                 {
@@ -213,12 +336,19 @@ config_load_config(struct config *context, const char *fileName)
     return B32_TRUE;
 }
 
-void
-config_save_var_config(struct config *context, const char *fileName);
+b32
+config_save_var_config(struct config *context, const char *fileName, const char *varName)
+{
+    // TODO
+    return B32_FALSE;
+}
 
 b32
-config_set_var_number(struct config *context, const char *name, real32 value)
+config_set_var(struct config *context, const char *name, enum config_var_type type, 
+    i32 arrLength, const void *valueArr)
 {
+    assert(arrLength > 0);
+
     for (const char *c = name; ; ++c)
     {
         if (c == name && !isalpha(*c))
@@ -244,23 +374,26 @@ config_set_var_number(struct config *context, const char *name, real32 value)
             return B32_FALSE;
         }
     }
-
+    
     struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, name);
+    
+    i32 typeSize = _config_get_type_size(type);
 
     if (!varPtr)
     {
         u32 diff = context->_arenaSize - context->_arenaOffset;
-        u32 size = sizeof(struct config_var_header) + sizeof(value);
+
+        u32 size = sizeof(struct config_var_header) + typeSize*arrLength;
 
         if (diff < size)
         {
             if (context->_arenaSize > 0)
             {
-                context->_var = memory_realloc(context->_mem, context->_var, context->_arenaSize += size);
+                context->_var = memory_realloc(context->_mem, context->_var, (context->_arenaSize += size));
             }
             else
             {
-                context->_var = memory_alloc(context->_mem, context->_arenaSize += size);
+                context->_var = memory_alloc(context->_mem, (context->_arenaSize += size));
             }
         }
 
@@ -268,282 +401,72 @@ config_set_var_number(struct config *context, const char *name, real32 value)
         u32 nameLength = strlen(name) + 1;
         varPtr->name = memory_alloc(context->_mem, nameLength);
         memcpy(UTILS_MUTABLE_CAST(char *, varPtr->name), name, nameLength);
-        varPtr->size = CONFIG_VAR_NUMBER_SIZE;
-        varPtr->type = CONFIG_VAR_NUMBER;
-        varPtr->valueCount = 1;
-        
-        basic_dict_set(context->_varMap, context->_mem, context->_var, name, nameLength, varPtr);
+        varPtr->memoryCapacity = typeSize*arrLength + sizeof(struct config_var_header);
+        varPtr->memoryOffset = context->_arenaOffset;
+        varPtr->arrLength = arrLength;
 
         context->_arenaOffset += size;
         ++context->_varCount;
     }
-    else if (varPtr->type != CONFIG_VAR_NUMBER)
+    else
     {
-        fprintf(stderr, "config_set_var_number error: Cannot set value \"%s\". Stored type is not a number.\n", name);
+        if (varPtr->memoryCapacity < (typeSize*arrLength + sizeof(struct config_var_header)))
+        {
+            context->_var = memory_realloc(context->_mem, context->_var, (context->_arenaSize += typeSize*arrLength + sizeof(struct config_var_header)));
 
-        return B32_FALSE;
+            memcpy((u8 *)context->_var + context->_arenaOffset, varPtr, sizeof(struct config_var_header));
+
+            varPtr = (struct config_var_header *)((u8 *)context->_var + context->_arenaOffset);
+            varPtr->memoryOffset = context->_arenaOffset;
+            varPtr->memoryCapacity = sizeof(struct config_var_header) + typeSize*arrLength;
+
+            context->_arenaOffset = context->_arenaSize;
+            context->_arenaOffset = context->_arenaSize;
+        }
+
+        varPtr->arrLength = arrLength;
     }
 
-    *(real32 *)(varPtr + 1) = value;
-    
+    varPtr->type = type;
+
+    if (valueArr)
+    {
+        memcpy((u8 *)context->_var + varPtr->memoryOffset + sizeof(struct config_var_header), valueArr, typeSize*arrLength);
+    }
+
+    basic_dict_set(context->_varMap, context->_mem, context->_var, name, strlen(name) + 1, varPtr);
+
     return B32_TRUE;
 }
 
-b32
-config_set_var_string(struct config *context, const char *name, const char *value)
+const struct config_var_header *
+config_get_var_header(struct config *context, const char *name)
 {
-    for (const char *c = name; ; ++c)
-    {
-        if (c == name && !isalpha(*c))
-        {
-            if (*c != '\0')
-            {
-                fprintf(stderr, "config_set_var_string error: Invalid var name \"%s\". Must start with alphabetical.\n", name);
-            }
-            else
-            {
-                fprintf(stderr, "config_set_var_string error: Invalid var name. Empty string.\n");
-            }
-            
-            return B32_FALSE;
-        }
-        else if (*c == '\0')
-        {
-            break;
-        }
-        else if (!isalnum(*c) && *c != '_')
-        {
-            fprintf(stderr, "config_set_var_string error: Invalid var name \"%s\". Must contain only alphanumerics, or '_'.\n", name);
-            return B32_FALSE;
-        }
-    }
+    return basic_dict_get(context->_varMap, context->_var, name);
+}
 
+const void *
+config_get_var(struct config *context, const char *name, i32 arrIndex)
+{
     struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, name);
 
-    if (!varPtr)
+    if (varPtr)
     {
-        u32 diff = context->_arenaSize - context->_arenaOffset;
-        u32 size = sizeof(struct config_var_header) + sizeof(value);
-
-        if (diff < size)
+        if (arrIndex >= varPtr->arrLength)
         {
-            if (context->_arenaSize > 0)
-            {
-                context->_var = memory_realloc(context->_mem, context->_var, context->_arenaSize += size);
-            }
-            else
-            {
-                context->_var = memory_alloc(context->_mem, context->_arenaSize += size);
-            }
+            fprintf(stderr, "config_get_var('%d'): Error for var ('%s'), arrIndex out of range('%d').", 
+                __LINE__, name, arrIndex);
+
+            return NULL;
         }
 
-        varPtr = (struct config_var_header *)((u8 *)context->_var + context->_arenaOffset);
-        u32 nameLength = strlen(name) + 1;
-        varPtr->name = memory_alloc(context->_mem, nameLength);
-        memcpy(UTILS_MUTABLE_CAST(char *, varPtr->name), name, nameLength);
-        varPtr->type = CONFIG_VAR_STRING;
-        varPtr->valueCount = 1;
+        i32 typeSize = _config_get_type_size(varPtr->type);
 
-        if (value)
-        {
-            u32 valueLength = strlen(value) + 1;
-            varPtr->size = valueLength;
-            *(char **)(varPtr + 1) = memory_alloc(context->_mem, valueLength);
-            memcpy(*(char **)(varPtr + 1), value, valueLength);
-        }
-        else
-        {
-            varPtr->size = 0;
-            *(char **)(varPtr + 1) = NULL;
-        }
-
-        basic_dict_set(context->_varMap, context->_mem, context->_var, name, nameLength, varPtr);
-
-        context->_arenaOffset += size;
-        ++context->_varCount;
-    }
-    else if (varPtr->type != CONFIG_VAR_STRING)
-    {
-        fprintf(stderr, "config_set_var_string error: Cannot set value \"%s\". Stored type is not a string.\n", name);
-
-        return B32_FALSE;
-    }
-    else if (value)
-    {
-        u32 valueLength = strlen(value) + 1;
-
-        if (valueLength > varPtr->size)
-        {
-            if (varPtr->size > 0)
-            {
-                *(char **)(varPtr + 1) = memory_realloc(context->_mem, *(char **)(varPtr + 1), valueLength);
-            }
-            else
-            {
-                *(char **)(varPtr + 1) = memory_alloc(context->_mem, valueLength);
-            }
-            
-            varPtr->size = valueLength;
-        }
-        
-        memcpy(*(char **)(varPtr + 1), value, valueLength);
-    }
-    else if (*(char **)(varPtr + 1))
-    {
-        memory_free(context->_mem, *(char **)(varPtr + 1));
-        *(char **)(varPtr + 1) = NULL;
-        varPtr->size = 0;
+        return &((u8 *)context->_var + varPtr->memoryOffset + sizeof(struct config_var_header))[typeSize*arrIndex];
     }
 
-    return B32_TRUE;
-}
+    fprintf(stderr, "config_get_var('%d'): Error for var ('%s'), var was not found.", 
+        __LINE__, name);
 
-b32
-config_set_var_boolean(struct config *context, const char *name, b32 value)
-{
-    for (const char *c = name; ; ++c)
-    {
-        if (c == name && !isalpha(*c))
-        {
-            if (*c != '\0')
-            {
-                fprintf(stderr, "config_set_var_boolean error: Invalid var name \"%s\". Must start with alphabetical.\n", name);
-            }
-            else
-            {
-                fprintf(stderr, "config_set_var_boolean error: Invalid var name. Empty string.\n");
-            }
-            
-            return B32_FALSE;
-        }
-        else if (*c == '\0')
-        {
-            break;
-        }
-        else if (!isalnum(*c) && *c != '_')
-        {
-            fprintf(stderr, "config_set_var_boolean error: Invalid var name \"%s\". Must contain only alphanumerics, or '_'.\n", name);
-            return B32_FALSE;
-        }
-    }
-
-    assert(value == B32_FALSE || value == B32_TRUE);
-
-    struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, name);
-
-    if (!varPtr)
-    {
-        u32 diff = context->_arenaSize - context->_arenaOffset;
-        u32 size = sizeof(struct config_var_header) + sizeof(value);
-
-        if (diff < size)
-        {
-            if (context->_arenaSize > 0)
-            {
-                context->_var = memory_realloc(context->_mem, context->_var, context->_arenaSize += size);
-            }
-            else
-            {
-                context->_var = memory_alloc(context->_mem, context->_arenaSize += size);
-            }
-        }
-
-        varPtr = (struct config_var_header *)((u8 *)context->_var + context->_arenaOffset);
-        u32 nameLength = strlen(name) + 1;
-        varPtr->name = memory_alloc(context->_mem, nameLength);
-        memcpy(UTILS_MUTABLE_CAST(char *, varPtr->name), name, nameLength);
-        varPtr->size = sizeof(b32);
-        varPtr->type = CONFIG_VAR_BOOLEAN;
-        varPtr->valueCount = 1;
-        
-        basic_dict_set(context->_varMap, context->_mem, context->_var, name, nameLength, varPtr);
-
-        context->_arenaOffset += size;
-        ++context->_varCount;
-    }
-    else if (varPtr->type != CONFIG_VAR_BOOLEAN)
-    {
-        fprintf(stderr, "config_set_var_boolean error: Cannot set value \"%s\". Stored type is not a boolean.\n", name);
-
-        return B32_FALSE;
-    }
-
-    *(b32 *)(varPtr + 1) = value;
-
-    return B32_TRUE;
-}
-
-b32
-config_get_var_number(struct config *context, const char *name, real32 *out)
-{
-    assert(out);
-
-    struct config_var_header *header = basic_dict_get(context->_varMap, context->_var, name);
-    
-    if (!header)
-    {
-        fprintf(stderr, "config_get_var_number error: Cannot get value \"%s\". Does not exist.\n", name);
-
-        return B32_FALSE;
-    }
-    else if (header->type != CONFIG_VAR_NUMBER)
-    {
-        fprintf(stderr, "config_get_var_number error: Cannot get value \"%s\". Stored type is not a number.\n", name);
-
-        return B32_FALSE;
-    }
-
-    *out = *(real32 *)(header + 1);
-
-    return B32_TRUE;
-}
-
-b32
-config_get_var_string(struct config *context, const char *name, const char **out)
-{
-    assert(out);
-
-    struct config_var_header *header = basic_dict_get(context->_varMap, context->_var, name);
-    
-    if (!header)
-    {
-        fprintf(stderr, "config_get_var_string error: Cannot get value \"%s\". Does not exist.\n", name);
-
-        return B32_FALSE;
-    }
-    else if (header->type != CONFIG_VAR_STRING)
-    {
-        fprintf(stderr, "config_get_var_string error: Cannot get value \"%s\". Stored type is not a string.\n", name);
-
-        return B32_FALSE;
-    }
-
-    *out = *(const char **)(header + 1);
-
-    return B32_TRUE;
-}
-
-b32
-config_get_var_boolean(struct config *context, const char *name, b32 *out)
-{
-    assert(out);
-
-    struct config_var_header *header = basic_dict_get(context->_varMap, context->_var, name);
-    
-    if (!header)
-    {
-        fprintf(stderr, "config_get_var_boolean error: Cannot get value \"%s\". Does not exist.\n", name);
-
-        return B32_FALSE;
-    }
-    else if (header->type != CONFIG_VAR_BOOLEAN)
-    {
-        fprintf(stderr, "config_get_var_string error: Cannot get value \"%s\". Stored type is not a boolean.\n", name);
-
-        return B32_FALSE;
-    }
-
-    *out = *(b32 *)(header + 1);
-
-    return B32_TRUE;
+    return NULL;
 }

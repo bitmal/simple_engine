@@ -129,3 +129,18 @@ struct mat44 mat44_func_roll(real32 theta)
 
     return m;
 }
+
+struct vec4
+mat44_func_multiply_vec4(const struct mat44 *lhsMatrix, const struct vec4 *rhsVector)
+{
+    struct vec4 result = {(lhsMatrix->_0[0]*rhsVector->x + lhsMatrix->_1[0]*rhsVector->y + 
+        lhsMatrix->_2[0]*rhsVector->z + lhsMatrix->_3[0]*rhsVector->w),
+        (lhsMatrix->_0[1]*rhsVector->x + lhsMatrix->_1[1]*rhsVector->y +
+        lhsMatrix->_2[1]*rhsVector->z + lhsMatrix->_3[1]*rhsVector->w),
+        (lhsMatrix->_0[2]*rhsVector->x + lhsMatrix->_1[2]*rhsVector->y +
+        lhsMatrix->_2[2]*rhsVector->z + lhsMatrix->_3[2]*rhsVector->w),
+        (lhsMatrix->_0[3]*rhsVector->x + lhsMatrix->_1[3]*rhsVector->y +
+        lhsMatrix->_2[3]*rhsVector->z + lhsMatrix->_3[3]*rhsVector->w)};
+
+    return result;
+}

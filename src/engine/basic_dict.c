@@ -24,7 +24,7 @@ basic_dict_create(struct memory *mem, basic_dict_hash_func hashFunc, i32 initBuc
 }
 
 void *
-basic_dict_get(struct basic_dict *dict, void *database, const void *key)
+basic_dict_get(const struct basic_dict *dict, void *database, const void *key)
 {
     const u64 hash = dict->__hashFunc(dict, key);
     struct basic_dict_pair *pair = dict->__table[hash%dict->buckets];

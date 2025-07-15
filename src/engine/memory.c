@@ -364,3 +364,79 @@ memory_event_pop(struct memory *mem)
     return NULL;
 #endif
 }
+
+void
+memory_set_offset(struct memory *memPtr, u64 memOffset, b32 isValueRepeating, u64 valueSize, const void *valuePtr)
+{
+    assert(((valueSize > 0) ? (valuePtr != NULL) : B32_TRUE));
+    assert(memOffset < memPtr->size);
+
+    const u64 valueSizeBounded = valueSize > 0 ? valueSize : sizeof(u32);
+
+    u32 valueBlockSize;
+    if (valueSizeBounded < 8)
+    {
+        valueBlockSize = 0x4;
+    }
+    else 
+    {
+        valueBlockSize = 0x8;
+    }
+
+    const u32 valueBlockSizeRemainder = valueSizeBounded%valueBlockSize;
+    const u64 valueBlockCount = (memPtr->size - memOffset)/valueBlockSize;
+    
+    const u8 *valuePtrBounded;
+    if (valueSize > 0)
+    {
+        valuePtrBounded = valuePtr;
+    }
+    else 
+    {
+        valuePtrBounded = memory_alloc(memPtr, valueBlockSize);
+    }
+
+    for (u64 valueBlockIndex = 0; valueBlockIndex < valueBlockCount; ++valueBlockIndex)
+    {
+        u64 valueBlockByteOffset = valueBlockIndex*(valueBlockSize + valueBlockSizeRemainder);
+
+        switch (valueBlockSize)
+        {
+            case 0x4:
+            {
+                *(u32 *)(&memPtr->_memory[valueBlockByteOffset]) = *(const u32 *)valuePtrBounded;
+
+                for (u32 remainderByteOffset = 0; remainderByteOffset < valueBlockSizeRemainder; ++remainderByteOffset)
+                {
+                    memPtr->_memory[valueBlockByteOffset + valueBlockSize + remainderByteOffset] = ((u8 *)valuePtrBounded)[valueBlockSize];
+                }
+            } break;
+            
+            case 0x8:
+            {
+                *(u64 *)(&memPtr->_memory[valueBlockByteOffset]) = *(const u64 *)valuePtrBounded;
+                
+                for (u32 remainderMultipleByteOffset = 0; remainderMultipleByteOffset < valueBlockSizeRemainder; ++remainderMultipleByteOffset)
+                {
+                    memPtr->_memory[valueBlockByteOffset + valueBlockSize + (remainderMultipleByteOffset*sizeof(u64))] = ((u8 *)valuePtrBounded)[valueBlockSize];
+                }
+                
+                const u32 remainderMultipleByteRemainder = valueBlockSizeRemainder%sizeof(u64);
+                const u32 remainderMultipleCount = valueBlockSizeRemainder/sizeof(u64);
+
+                for (u32 remainderMultipleByteRemainderOffset = 0; remainderMultipleByteRemainderOffset < remainderMultipleByteRemainder; ++remainderMultipleByteRemainderOffset)
+                {
+                    memPtr->_memory[valueBlockByteOffset + valueBlockSize + (remainderMultipleCount*sizeof(u64)) + remainderMultipleByteRemainderOffset] = 
+                        valuePtrBounded[valueBlockSize + (remainderMultipleCount*sizeof(u64)) + remainderMultipleByteRemainderOffset];
+                }
+            } break;
+
+            default: break;
+        }
+    }
+
+    if (valuePtrBounded != valuePtr)
+    {
+        memory_free(memPtr, (u8 *)valuePtrBounded);
+    }
+}

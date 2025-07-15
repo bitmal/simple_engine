@@ -40,7 +40,16 @@ input_add_keys(struct input *inputContext, struct memory *mem, const char *keys[
 void
 input_bind_key(struct input *inputContext, struct memory *mem, const char *key, input_key_callback cb);
 
+const struct input_key *
+input_get_key(struct input *inputContext, const char *key);
+
+const struct input_keybind *
+input_get_keybind(struct input *inputContext, const char *key);
+
 b32
-input_key_down(struct input *inputContext, const char *key);
+input_set_key_down(struct input *inputContext, const char *key, b32 isKeyDown);
+
+b32
+input_get_key_down(struct input *inputContext, const char *key);
 
 #endif

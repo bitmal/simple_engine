@@ -1,0 +1,50 @@
+@vert
+#version 330 core
+
+in vec4 a_Position;
+in vec4 a_Color;
+
+uniform mat4 u_Proj;
+uniform mat4 u_ModelView;
+
+uniform uint u_BoxWidth;
+uniform uint u_BoxHeight;
+uniform float u_Transparency;
+
+out fragData
+{
+    smooth vec4 boxColor;
+    smooth vec2 texCoord;
+    flat float transparency;
+    flat float boxWidth;
+    flat float boxHeight;
+};
+
+void main(void)
+{
+    boxColor = a_Color;
+    texCoord = a_TexCoord;
+    transparency = u_Transparency;
+    boxWidth = u_BoxWidth;
+    boxHeight = u_BoxHeight;
+    
+    gl_Position = u_Proj*u_ModelView*a_Position;
+}
+
+@frag
+#version 330 core
+
+in fragData
+{
+    vec4 boxColor;
+    vec2 texCoord;
+    float transparency;
+    float boxWidth;
+    float boxHeight;
+};
+
+out vec4 fragColor;
+
+void main(void)
+{
+}
