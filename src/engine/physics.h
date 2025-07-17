@@ -2,12 +2,12 @@
 #define __PHYSICS_H
 
 #include "types.h"
+#include "renderer.h"
 
 #include <stdio.h>
 
-#include "renderer.h"
-
 typedef i32 physics_id;
+typedef i64 physics_wide_id;
 #define PHYSICS_NULL_ID -1
 
 struct memory;
@@ -19,8 +19,8 @@ struct basic_dict;
 #define PHYSICS_DEFAULT_GRAVITY_Y -9.72f
 #define PHYSICS_DEFAULT_GRAVITY_Z 0.f
 
-#define PHYSICS_COLLISION_ARENA_BASE_SIZE 5
-#define PHYSICS_COLLISION_ARENA_ALLOC_MULTIPLIER 5 
+#define PHYSICS_COLLISION_ARENA_BASE_LENGTH 0
+#define PHYSICS_COLLISION_ARENA_LENGTH_REALLOC_MULTIPLIER 2
 
 struct physics_collider_bounds
 {
@@ -34,16 +34,17 @@ struct physics_collider
 {
     physics_id id;
     struct physics_collider_bounds bounds;
-    b32 isTrigger;
+    //b32 isTrigger; // TODO: implement triggers vs solid objects rigidbody collisions
     renderer_id displayBoundsRenderId;
     b32 isDisplayBounds;
 };
 
 struct physics_collision
 {
-    physics_id rbLhs;
-    physics_id rbRhs;
-    real32 normal[3];
+    physics_wide_id wideId;
+    physics_id rbLhsId;
+    physics_id rbRhsId;
+    b32 isActive;
 };
 
 struct physics_material
@@ -55,6 +56,7 @@ struct physics_material
 
 struct physics_force
 {
+    physics_wide_id allocationId;
     physics_id id;
     real32 direction[3];
     real32 magnitude;
@@ -67,6 +69,7 @@ struct physics_force
 
 struct physics_force_id
 {
+    physics_wide_id allocationId;
     physics_id id;
     b32 isActive;
     struct physics_force_id *prev;
@@ -98,6 +101,7 @@ struct physics_rigidbody
     real32 rotationVelocity[3];
     real32 mass;
     b32 isGravity;
+    b32 isKinematic;
     struct physics_force *forceArr;
     i32 forceCapacity;
     struct physics_force_id *forceIdArr;
@@ -163,12 +167,14 @@ struct physics
     struct physics_material *materials;
     i32 colliderCount;
     struct physics_collider *colliders;
+    i32 collisionArenaCapacity;
+    u32 collisionArenaFreeAllocationIndex;
+    struct physics_collision *collisionArena;
+    struct basic_dict *collisionDict;
     i32 rigidbodyCount;
     struct physics_rigidbody *rigidbodies;
     i32 collisionCapacity;
     i32 collisionCount;
-    struct physics_collision *collisions;
-    struct basic_dict *collisionMap;
     struct physics_log *log;
 };
 

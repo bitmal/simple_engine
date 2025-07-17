@@ -4,6 +4,7 @@
 #include "basic_dict.h"
 #include "memory.h"
 #include "opengl.h"
+#include "utils.h"
 
 #include "GL/glew.h"
 
@@ -12,6 +13,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <math.h>
 
 #define RENDERER_VERTEX_BUFFER_SIZE 1024*1024
 #define RENDERER_INDEX_BUFFER_SIZE 1024*1024
@@ -22,7 +24,7 @@
 // layer >> program >> mesh >> texture >> models
 
 static u64
-__renderer_batch_hash_func(const struct basic_dict *dict, const void *key)
+__renderer_batch_hash_func(struct basic_dict *dict, void *key)
 {
     // TODO: limit these stored resource ids to 2 bytes per (currently i32s)
     const struct renderer_batch_key *keyCast = key;
@@ -60,7 +62,7 @@ __renderer_layer_sort_replace_func(struct memory *mem, void *lhs, size_t lhsInde
     struct renderer_layer *lhsLayer = lhs;
     struct renderer_layer *rhsLayer = rhs;
 
-    basic_dict_set(context->layerDict, mem, context->layers, lhsLayer->name, 
+    basic_dict_set(context->layerDict, mem, context->layers, (char *)lhsLayer->name, 
         strlen(lhsLayer->name) + 1, &context->layers[rhsIndex]);
 
     *lhsLayer = *rhsLayer;
@@ -76,11 +78,11 @@ renderer_create_context(struct memory *memoryContext)
 
     context->glContext = opengl_create_context(memoryContext);
 
-    context->textureMap = DICTIONARY(memoryContext, NULL);
-    context->programMap = DICTIONARY(memoryContext, NULL);
-    context->meshMap = DICTIONARY(memoryContext, NULL);
-    context->layerDict = DICTIONARY(memoryContext, NULL);
-    context->batchMap = DICTIONARY(memoryContext, __renderer_batch_hash_func);
+    context->textureMap = DICTIONARY(memoryContext, NULL, NULL);
+    context->programMap = DICTIONARY(memoryContext, NULL, NULL);
+    context->meshMap = DICTIONARY(memoryContext, NULL, NULL);
+    context->layerDict = DICTIONARY(memoryContext, NULL, NULL);
+    context->batchMap = DICTIONARY(memoryContext, __renderer_batch_hash_func, NULL);
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -96,7 +98,7 @@ renderer_set_background_color(struct renderer *context, const struct vec4 *color
 b32
 renderer_load_program(struct renderer *context, const char *name)
 {
-    if (!basic_dict_get(context->programMap, context->programs, name))
+    if (!basic_dict_get(context->programMap, context->programs, (char *)name))
     {
         struct opengl_program_info program = opengl_load_program(context->glContext, name);
 
@@ -115,7 +117,7 @@ renderer_load_program(struct renderer *context, const char *name)
             }
 
             memcpy(&context->programs[index], &program, sizeof(struct opengl_program_info));
-            basic_dict_set(context->programMap, context->memoryContext, context->programs, name, strlen(name) + 1, &context->programs[index]);
+            basic_dict_set(context->programMap, context->memoryContext, context->programs, (char *)name, strlen(name) + 1, &context->programs[index]);
 
             return B32_TRUE;
         }
@@ -128,7 +130,7 @@ b32
 renderer_load_mesh(struct renderer *context, const char *name)
 {
     // TODO: (REFACTOR)
-    if (!basic_dict_get(context->meshMap, context->meshes, name))
+    if (!basic_dict_get(context->meshMap, context->meshes, (char *)name))
     {
         char *path = memory_alloc(context->memoryContext, sizeof("meshes/") + strlen(name) + sizeof(".obj") - 1);
         sprintf(path, "meshes/%s.obj", name);
@@ -273,7 +275,7 @@ b32
 renderer_create_mesh(struct renderer *context, const char *name, void *vertices, size_t vertexSize, size_t verticesCount,
     u16 *indices, size_t indicesCount)
 {
-    if (!basic_dict_get(context->meshMap, context->meshes, name))
+    if (!basic_dict_get(context->meshMap, context->meshes, (char *)name))
     {
         struct renderer_mesh mesh;
 
@@ -415,7 +417,7 @@ renderer_create_mesh(struct renderer *context, const char *name, void *vertices,
         }
 
         memcpy(&context->meshes[meshIndex], &mesh, sizeof(mesh));
-        basic_dict_set(context->meshMap, context->memoryContext, context->meshes, name, strlen(name) + 1, &context->meshes[meshIndex]);
+        basic_dict_set(context->meshMap, context->memoryContext, context->meshes, (char *)name, strlen(name) + 1, &context->meshes[meshIndex]);
         
         return B32_TRUE;
     }
@@ -432,7 +434,7 @@ renderer_save_texture(struct renderer *context, const char *name, const char* fi
 {
 	// TODO: (VECTORIZE, REFACTOR)
     struct renderer_texture *texPtr;
-    if (!(texPtr = basic_dict_get(context->textureMap, context->textures, name)))
+    if (!(texPtr = basic_dict_get(context->textureMap, context->textures, (char *)name)))
     {
         fprintf(stderr, "renderer_save_texture error: Texture \"%s\" does not exist in memory. Cannot save to disk as \"%s\".\n", name, fileName);
 
@@ -695,7 +697,7 @@ renderer_save_texture(struct renderer *context, const char *name, const char* fi
 b32
 renderer_load_texture(struct renderer *context, const char* fileName, const char *name, b32 isDynamic)
 {
-    if (basic_dict_get(context->textureMap, context->textures, name))
+    if (basic_dict_get(context->textureMap, context->textures, (char *)name))
     {
         fprintf(stderr, "renderer_load_texture error: Cannot load texture \"%s\" as \"%s\". Name already exists.\n", fileName, name);
 
@@ -805,7 +807,7 @@ renderer_create_texture(struct renderer *context, const char *name, enum rendere
         return B32_FALSE;
     }
 
-    if (basic_dict_get(context->textureMap, context->textures, name))
+    if (basic_dict_get(context->textureMap, context->textures, (char *)name))
     {
         fprintf(stderr, "renderer_create_texture error: Cannot create texture \"%s\". Name already exists.\n", name);
 
@@ -908,7 +910,7 @@ renderer_create_texture(struct renderer *context, const char *name, enum rendere
     context->textures[texIndex].name = memory_alloc(context->memoryContext, nameLength);
     context->textures[texIndex].isDynamic = isDynamic;
     memcpy((void *)context->textures[texIndex].name, name, nameLength);
-    basic_dict_set(context->textureMap, context->memoryContext, context->textures, name, nameLength, &context->textures[texIndex]);
+    basic_dict_set(context->textureMap, context->memoryContext, context->textures, (char *)name, nameLength, &context->textures[texIndex]);
     
     return B32_TRUE;
 }
@@ -1075,7 +1077,7 @@ renderer_clear_texture(struct renderer *context, renderer_id texture, u32 x, u32
 renderer_id
 renderer_get_texture(struct renderer *context, const char *name)
 {
-    struct renderer_texture *tex = basic_dict_get(context->textureMap, context->textures, name);
+    struct renderer_texture *tex = basic_dict_get(context->textureMap, context->textures, (char *)name);
 
     return tex ? tex->id : RENDERER_NULL_ID;
 }
@@ -1084,10 +1086,10 @@ renderer_id
 renderer_instantiate_model(struct renderer *context, const char *meshName, const char *programName)
 {
     struct opengl_program_info *program;
-    assert(program = basic_dict_get(context->programMap, context->programs, programName));
+    assert((program = basic_dict_get(context->programMap, context->programs, (char *)programName)));
 
     struct renderer_mesh *mesh;
-    assert(mesh = basic_dict_get(context->meshMap, context->meshes, meshName));
+    assert((mesh = basic_dict_get(context->meshMap, context->meshes,(char *)meshName)));
 
     const renderer_id materialIndex = (renderer_id)context->materialCount;
     if (context->materialCount > 0)
@@ -1106,7 +1108,7 @@ renderer_instantiate_model(struct renderer *context, const char *meshName, const
     material->program = (renderer_id)(program - context->programs);
     material->propertyCount = program->uniformCount;
     material->properties = memory_alloc(context->memoryContext, sizeof(struct renderer_material_property)*program->uniformCount);
-    material->propertyDict = DICTIONARY(context->memoryContext, NULL);
+    material->propertyDict = DICTIONARY(context->memoryContext, NULL, NULL);
     for (i32 property = 0; property < program->uniformCount; ++property)
     {
         const size_t typeSize = opengl_helper_get_type_size(program->uniforms[property].type);
@@ -1155,7 +1157,7 @@ renderer_instantiate_model(struct renderer *context, const char *meshName, const
         bufferPtr->size += uniformSize;
 
         basic_dict_set(material->propertyDict, context->memoryContext, material->properties, 
-            program->uniforms[property].name, strlen(program->uniforms[property].name) + 1, &material->properties[property]);
+            (char *)program->uniforms[property].name, strlen(program->uniforms[property].name) + 1, &material->properties[property]);
     }
     
     const renderer_id modelIndex = context->modelCount;
@@ -1183,7 +1185,7 @@ renderer_model_set_mesh(struct renderer *context, renderer_id model, const char 
 {
     assert(model > RENDERER_NULL_ID && model < context->modelCount);
 
-    const struct renderer_mesh *mesh = basic_dict_get(context->meshMap, context->meshes, meshName);
+    const struct renderer_mesh *mesh = basic_dict_get(context->meshMap, context->meshes, (char *)meshName);
 
     if (mesh)
     {
@@ -1206,7 +1208,7 @@ renderer_material_update_property(struct renderer *context, renderer_id material
 
     struct renderer_material *materialPtr = &context->materials[material];
 
-    struct renderer_material_property *propertyPtr = basic_dict_get(materialPtr->propertyDict, materialPtr->properties, name);
+    struct renderer_material_property *propertyPtr = basic_dict_get(materialPtr->propertyDict, materialPtr->properties,(char *)name);
     if (!propertyPtr)
     {
         fprintf(stderr, "renderer_material_update_property: Could not find property '%s' on material.\n", name);
@@ -1240,7 +1242,7 @@ renderer_material_set_texture(struct renderer *context, renderer_id material, co
 
     struct renderer_material *materialPtr = &context->materials[material];
 
-    struct renderer_texture *texPtr = basic_dict_get(context->textureMap, context->textures, textureName);
+    struct renderer_texture *texPtr = basic_dict_get(context->textureMap, context->textures,(char *)textureName);
     if (!texPtr)
     {
         fprintf(stderr, "renderer_material_set_texture error: Cannot set material's texture to \"%s\". Texture not found.\n", textureName);
@@ -1256,7 +1258,7 @@ renderer_material_set_texture(struct renderer *context, renderer_id material, co
 void
 renderer_init_layer(struct renderer *context, const char *name, i32 layer)
 {
-    if (!basic_dict_get(context->layerDict, context->layers, name))
+    if (!basic_dict_get(context->layerDict, context->layers,(char *)name))
     {
         u32 layerIndex = context->layerCount;
 
@@ -1276,7 +1278,7 @@ renderer_init_layer(struct renderer *context, const char *name, i32 layer)
         context->layers[layerIndex].name = memory_alloc(context->memoryContext, nameSize);
         sprintf((char *)context->layers[layerIndex].name, "%s", name);
 
-        basic_dict_set(context->layerDict, context->memoryContext, context->layers, context->layers[layerIndex].name, 
+        basic_dict_set(context->layerDict, context->memoryContext, context->layers, (char *)context->layers[layerIndex].name, 
             nameSize, &context->layers[layerIndex]);
 
         utils_sort(context->memoryContext, context->layers, sizeof(struct renderer_layer), 
@@ -1293,7 +1295,7 @@ renderer_queue_model(struct renderer *context, renderer_id model, const char *la
 {
     assert(model >= RENDERER_NULL_ID && model < context->modelCount);
 
-    struct renderer_layer *layerPtr = basic_dict_get(context->layerDict, context->layers, layer);
+    struct renderer_layer *layerPtr = basic_dict_get(context->layerDict, context->layers, (char *)layer);
 
     if (layerPtr)
     {
@@ -1477,7 +1479,7 @@ renderer_material_set_program(struct renderer *context, renderer_id material, co
 {
     assert(material > RENDERER_NULL_ID && material < context->materialCount);
     
-    struct opengl_program_info *programInfo = basic_dict_get(context->programMap, context->programs, program);
+    struct opengl_program_info *programInfo = basic_dict_get(context->programMap, context->programs, (char *)program);
     struct renderer_material *materialPtr = &context->materials[material];
 
     materialPtr->program = (renderer_id)(programInfo - context->programs);
@@ -1531,6 +1533,6 @@ renderer_material_set_program(struct renderer *context, renderer_id material, co
         bufferPtr->size += uniformSize;
 
         basic_dict_set(materialPtr->propertyDict, context->memoryContext, materialPtr->properties, 
-            programInfo->uniforms[property].name, strlen(programInfo->uniforms[property].name) + 1, &materialPtr->properties[property]);
+            (char *)programInfo->uniforms[property].name, strlen(programInfo->uniforms[property].name) + 1, &materialPtr->properties[property]);
     }
 }

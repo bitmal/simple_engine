@@ -6,25 +6,26 @@
 #include <assert.h>
 
 static u64 
-__default_hash_func(const struct basic_dict *dict, const void *key)
+_default_hash_func(struct basic_dict *dict, void *key)
 {
     return utils_str_hash_func(key);
 }
 
 struct basic_dict *
-basic_dict_create(struct memory *mem, basic_dict_hash_func hashFunc, i32 initBuckets)
+basic_dict_create(struct memory *memory, basic_dict_hash_func hashFunc, i32 initBuckets, void *userPtr)
 {
-    struct basic_dict *dict = memory_alloc(mem, sizeof(struct basic_dict));
+    struct basic_dict *dict = memory_alloc(memory, sizeof(struct basic_dict));
     dict->buckets = initBuckets;
-    dict->__table = memory_alloc(mem, sizeof(struct basic_dict_pair *)*initBuckets);
+    dict->__table = memory_alloc(memory, sizeof(struct basic_dict_pair *)*initBuckets);
     memset(dict->__table, 0, sizeof(struct basic_dict_pair *)*initBuckets);
-    dict->__hashFunc = hashFunc ? hashFunc : __default_hash_func;
+    dict->__hashFunc = hashFunc ? hashFunc : &_default_hash_func;
+    dict->userPtr = userPtr;
 
     return dict;
 }
 
 void *
-basic_dict_get(const struct basic_dict *dict, void *database, const void *key)
+basic_dict_get(struct basic_dict *dict, void *database, void *key)
 {
     const u64 hash = dict->__hashFunc(dict, key);
     struct basic_dict_pair *pair = dict->__table[hash%dict->buckets];
@@ -50,7 +51,7 @@ basic_dict_get(const struct basic_dict *dict, void *database, const void *key)
 }
 
 b32
-basic_dict_set(struct basic_dict *dict, struct memory *mem, void *database, const void *key, size_t keySize, void *data)
+basic_dict_set(struct basic_dict *dict, struct memory *mem, void *database, void *key, size_t keySize, void *data)
 {
     const u64 hash = dict->__hashFunc(dict, key);
     const basic_dict_id index = hash%dict->buckets;
@@ -131,4 +132,13 @@ void
 basic_dict_clear(struct basic_dict *dict)
 {
     memset(dict->__table, 0, sizeof(struct basic_dict_pair *)*dict->buckets);
+}
+
+b32
+basic_dict_get_is_found(struct basic_dict *dict, void *key)
+{
+    const u64 hash = dict->__hashFunc(dict, key);
+
+
+    return B32_FALSE;
 }

@@ -145,7 +145,7 @@ __opengl_sort_attrib_info_replace_func(struct memory *mem, void *lhs, size_t lhs
     struct opengl_attrib_info *rhsInfo = (struct opengl_attrib_info *)rhs;
 
     basic_dict_set((struct basic_dict *)context->programInfo->attribDict, mem, (struct opengl_attrib_info *)context->programInfo->attribs, 
-        lhsInfo->name, strlen(lhsInfo->name) + 1, (struct opengl_attrib_info *)&context->programInfo->attribs[lhsIndex]);
+        (char *)lhsInfo->name, strlen(lhsInfo->name) + 1, (struct opengl_attrib_info *)&context->programInfo->attribs[lhsIndex]);
     const opengl_id attribId = lhsInfo->attrib;
     memcpy(lhsInfo, rhsInfo, sizeof(struct opengl_attrib_info));
     UTILS_MUTABLE_CAST(opengl_id, lhsInfo->attrib) = attribId;
@@ -624,7 +624,7 @@ opengl_load_program(struct opengl *context, const char *programName)
     memset(program.attribs, 0, sizeof(struct opengl_attrib)*attribCount);
     program.attribCount = attribCount;
     
-    struct basic_dict *attribDict = DICTIONARY(context->memoryContext, NULL);
+    struct basic_dict *attribDict = DICTIONARY(context->memoryContext, NULL, NULL);
 
     i32 attribSetOffset = 0;
     for (i32 i = 0; i < attribCount; ++i)
@@ -667,7 +667,7 @@ opengl_load_program(struct opengl *context, const char *programName)
             } break;
         }
 
-        basic_dict_set(attribDict, context->memoryContext, attribInfo, attribInfo[i].name, nameLength + 1, &attribInfo[i]);
+        basic_dict_set(attribDict, context->memoryContext, attribInfo, (char *)attribInfo[i].name, nameLength + 1, &attribInfo[i]);
     }
 
     info.attribs = attribInfo;
@@ -690,7 +690,7 @@ opengl_load_program(struct opengl *context, const char *programName)
     memset(uniforms, 0, sizeof(struct opengl_uniform)*uniformCount);
     struct opengl_uniform_info *uniformInfo = memory_alloc(context->memoryContext, sizeof(struct opengl_uniform_info)*uniformCount);
     memset(uniformInfo, 0, sizeof(struct opengl_uniform_info)*uniformCount);
-    struct basic_dict *uniformDict = DICTIONARY(context->memoryContext, NULL);
+    struct basic_dict *uniformDict = DICTIONARY(context->memoryContext, NULL, NULL);
 
     GLuint *uniformIndices = memory_alloc(context->memoryContext, sizeof(GLuint)*uniformCount);
     for (u32 i = 0; i < uniformCount; ++i)

@@ -14,7 +14,6 @@ uniform float u_Transparency;
 out fragData
 {
     smooth vec4 boxColor;
-    smooth vec2 texCoord;
     flat float transparency;
     flat float boxWidth;
     flat float boxHeight;
@@ -23,12 +22,13 @@ out fragData
 void main(void)
 {
     boxColor = a_Color;
-    texCoord = a_TexCoord;
     transparency = u_Transparency;
     boxWidth = u_BoxWidth;
     boxHeight = u_BoxHeight;
+
+    vec3 position = a_Position.xyz;
     
-    gl_Position = u_Proj*u_ModelView*a_Position;
+    gl_Position = u_Proj*u_ModelView*vec4(position.xyz, a_Position.w);
 }
 
 @frag

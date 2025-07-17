@@ -69,7 +69,7 @@ config_init(struct memory *mem)
     context->_arenaSize = 0;
     context->_varCount = 0;
     context->_mem = mem;
-    context->_varMap = DICTIONARY(mem, NULL);
+    context->_varMap = DICTIONARY(mem, NULL, NULL);
 
     return context;
 }
@@ -349,6 +349,8 @@ config_set_var(struct config *context, const char *name, enum config_var_type ty
 {
     assert(arrLength > 0);
 
+    i32 arrLengthClamped = (arrLength > 0) ? arrLength : 1;
+
     for (const char *c = name; ; ++c)
     {
         if (c == name && !isalpha(*c))
@@ -375,7 +377,7 @@ config_set_var(struct config *context, const char *name, enum config_var_type ty
         }
     }
     
-    struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, name);
+    struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, (char *)name);
     
     i32 typeSize = _config_get_type_size(type);
 
@@ -383,10 +385,12 @@ config_set_var(struct config *context, const char *name, enum config_var_type ty
     {
         u32 diff = context->_arenaSize - context->_arenaOffset;
 
-        u32 size = sizeof(struct config_var_header) + typeSize*arrLength;
+        u32 size = sizeof(struct config_var_header) + typeSize*arrLengthClamped;
 
         if (diff < size)
         {
+            assert(size);
+
             if (context->_arenaSize > 0)
             {
                 context->_var = memory_realloc(context->_mem, context->_var, (context->_arenaSize += size));
@@ -401,40 +405,40 @@ config_set_var(struct config *context, const char *name, enum config_var_type ty
         u32 nameLength = strlen(name) + 1;
         varPtr->name = memory_alloc(context->_mem, nameLength);
         memcpy(UTILS_MUTABLE_CAST(char *, varPtr->name), name, nameLength);
-        varPtr->memoryCapacity = typeSize*arrLength + sizeof(struct config_var_header);
+        varPtr->memoryCapacity = typeSize*arrLengthClamped + sizeof(struct config_var_header);
         varPtr->memoryOffset = context->_arenaOffset;
-        varPtr->arrLength = arrLength;
+        varPtr->arrLength = arrLengthClamped;
 
         context->_arenaOffset += size;
         ++context->_varCount;
     }
     else
     {
-        if (varPtr->memoryCapacity < (typeSize*arrLength + sizeof(struct config_var_header)))
+        if (varPtr->memoryCapacity < (typeSize*arrLengthClamped + sizeof(struct config_var_header)))
         {
-            context->_var = memory_realloc(context->_mem, context->_var, (context->_arenaSize += typeSize*arrLength + sizeof(struct config_var_header)));
+            context->_var = memory_realloc(context->_mem, context->_var, (context->_arenaSize += typeSize*arrLengthClamped + sizeof(struct config_var_header)));
 
             memcpy((u8 *)context->_var + context->_arenaOffset, varPtr, sizeof(struct config_var_header));
 
             varPtr = (struct config_var_header *)((u8 *)context->_var + context->_arenaOffset);
             varPtr->memoryOffset = context->_arenaOffset;
-            varPtr->memoryCapacity = sizeof(struct config_var_header) + typeSize*arrLength;
+            varPtr->memoryCapacity = sizeof(struct config_var_header) + typeSize*arrLengthClamped;
 
             context->_arenaOffset = context->_arenaSize;
             context->_arenaOffset = context->_arenaSize;
         }
 
-        varPtr->arrLength = arrLength;
+        varPtr->arrLength = arrLengthClamped;
     }
 
     varPtr->type = type;
 
     if (valueArr)
     {
-        memcpy((u8 *)context->_var + varPtr->memoryOffset + sizeof(struct config_var_header), valueArr, typeSize*arrLength);
+        memcpy((u8 *)context->_var + varPtr->memoryOffset + sizeof(struct config_var_header), valueArr, typeSize*arrLengthClamped);
     }
 
-    basic_dict_set(context->_varMap, context->_mem, context->_var, name, strlen(name) + 1, varPtr);
+    basic_dict_set(context->_varMap, context->_mem, context->_var, (char *)name, strlen(name) + 1, varPtr);
 
     return B32_TRUE;
 }
@@ -442,13 +446,13 @@ config_set_var(struct config *context, const char *name, enum config_var_type ty
 const struct config_var_header *
 config_get_var_header(struct config *context, const char *name)
 {
-    return basic_dict_get(context->_varMap, context->_var, name);
+    return basic_dict_get(context->_varMap, context->_var, (char *)name);
 }
 
 const void *
 config_get_var(struct config *context, const char *name, i32 arrIndex)
 {
-    struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, name);
+    struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, (char *)name);
 
     if (varPtr)
     {

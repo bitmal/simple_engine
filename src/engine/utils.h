@@ -22,6 +22,12 @@ void
 utils_sort(struct memory *mem, void *data, size_t stride, size_t length, utils_sort_compare_func compareFunc, 
            utils_sort_replace_func replaceFunc, void *userPtr);
 
+void
+utils_set_elapsed_time_ptr(const u32 *ptr);
+
+b32
+utils_get_elapsed_ms(u32 *outputPtr);
+
 // use with caution...
 #define UTILS_MUTABLE_CAST(type, var) (*(type *)&(var))
 

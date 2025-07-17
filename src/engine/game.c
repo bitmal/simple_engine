@@ -45,8 +45,8 @@ _init_player_0(struct game *g)
     game_id transfId = game_create_component(g, GAME_TRANSFORM);
     game_attach_component(g, g->player0->entityId, transfId);
     struct game_transform *transf = game_get_component(g, g->player0->entityId, GAME_TRANSFORM);
-    transf->position.x = *(real32 *)config_get_var(g->app->config, "GAME_grid_width", 0)/2.f;
-    transf->position.y = *(real32 *)config_get_var(g->app->config, "GAME_grid_height", 0)/2.f;
+    transf->position.x = 0.f;//*(real32 *)config_get_var(g->app->config, "GAME_grid_width", 0)/2.f;
+    transf->position.y = *(real32 *)config_get_var(g->app->config, "GAME_grid_height", 0) - 5.f;
     transf->rotation = 0.f;
 
     game_id renderId = game_create_component(g, GAME_RENDER_COMPONENT);
@@ -68,7 +68,7 @@ _init_player_0(struct game *g)
     struct physics_rigidbody *rbPtr = physics_get_rigidbody(g->app->physics, physicsComp->rigidbody);
     //rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_TRUE;
     //*((real32 *)rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].data) = 15.f;
-    rbPtr->isGravity = B32_FALSE;
+    rbPtr->isGravity = B32_TRUE;
     rbPtr->position[0] = transf->position.x;
     rbPtr->position[1] = transf->position.y;
     rbPtr->position[2] = 1.f;
@@ -98,7 +98,7 @@ game_init(struct context *app)
     g->timerCount = 10;
     g->timers = memory_alloc(app->memoryContext, sizeof(struct game_timer)*g->timerCount);
     
-    g->layerDict = DICTIONARY(app->memoryContext, NULL);
+    g->layerDict = DICTIONARY(app->memoryContext, NULL, NULL);
 
     game_init_layer(g, "default", 0);
     game_init_layer(g, "ui", 1);
@@ -169,7 +169,7 @@ game_init(struct context *app)
     renderer_load_texture(g->app->renderContext, "test1", "test1", B32_FALSE);
 
     g->gameInterface = interface_init(g->app->memoryContext);
-    g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL);
+    g->interfaceElementRenderMap = DICTIONARY(g->app->memoryContext, NULL, NULL);
 
     _init_player_0(g);
 
@@ -180,7 +180,7 @@ game_init(struct context *app)
 
     struct game_transform *wallTransf = game_get_component(g, wallId, GAME_TRANSFORM);
     wallTransf->position.x = 0.f;
-    wallTransf->position.y = 0.f;
+    wallTransf->position.y = 25.f;
 
     game_id wallRenderId = game_create_component(g, GAME_RENDER_COMPONENT);
     game_attach_component(g, wallId, wallRenderId);
@@ -209,11 +209,13 @@ game_init(struct context *app)
     collider->bounds.bottom = 0.f;
     collider->bounds.top = 10.f;
     collider->bounds.left = 0.f;
-    collider->bounds.right = 25.f;
+    collider->bounds.right = 10.f;
 
     wallPhysicsRb->position[0] = wallTransf->position.x;
     wallPhysicsRb->position[1] = wallTransf->position.y;
-    wallPhysicsRb->position[2] = 10.f;
+    wallPhysicsRb->position[2] = 0.f;
+    
+    //wallPhysicsRb->isKinematic = B32_TRUE;
 
     return g;
 }
@@ -342,48 +344,51 @@ game_cycle(struct game *g, real32 dt)
 
             //if (entity->id == g->player0->entityId)
             {
-                const real32 gameGridWidth = *((real32 *)config_get_var(g->app->config, "GAME_grid_width", 0));
-                const real32 gameGridHeight = *((real32 *)config_get_var(g->app->config, "GAME_grid_height", 0));
-
                 struct physics_rigidbody *rbPtr = physicsComp ? physics_get_rigidbody(g->app->physics, physicsComp->rigidbody) : NULL;
 
-                const real32 offsetPositionBufferSize = 5.f;
-
-                if (transform->position.x >= (gameGridWidth + offsetPositionBufferSize))
+                if (rbPtr)
                 {
-                    transform->position.x = -offsetPositionBufferSize;
+                    const real32 gameGridWidth = *((real32 *)config_get_var(g->app->config, "GAME_grid_width", 0));
+                    const real32 gameGridHeight = *((real32 *)config_get_var(g->app->config, "GAME_grid_height", 0));
 
-                    if (rbPtr)
+                    const real32 offsetPositionBufferSize = 15.f;
+
+                    if (transform->position.x >= (gameGridWidth + offsetPositionBufferSize))
                     {
-                        rbPtr->position[0] = transform->position.x;
+                        transform->position.x = -offsetPositionBufferSize;
+
+                        if (rbPtr)
+                        {
+                            rbPtr->position[0] = transform->position.x;
+                        }
                     }
-                }
-                else if (transform->position.x <= -offsetPositionBufferSize)
-                {
-                    transform->position.x = gameGridWidth + offsetPositionBufferSize - 0.1f;
-
-                    if (rbPtr)
+                    else if (transform->position.x <= -offsetPositionBufferSize)
                     {
-                        rbPtr->position[0] = transform->position.x;
+                        transform->position.x = gameGridWidth + offsetPositionBufferSize;
+
+                        if (rbPtr)
+                        {
+                            rbPtr->position[0] = transform->position.x;
+                        }
                     }
-                }
-                
-                if (transform->position.y >= (gameGridHeight + offsetPositionBufferSize))
-                {
-                    transform->position.y = -offsetPositionBufferSize;
-
-                    if (rbPtr)
+                    
+                    if (transform->position.y >= (gameGridHeight + offsetPositionBufferSize))
                     {
-                        rbPtr->position[1] = transform->position.y;
+                        transform->position.y = -offsetPositionBufferSize;
+
+                        if (rbPtr)
+                        {
+                            rbPtr->position[1] = transform->position.y;
+                        }
                     }
-                }
-                else if (transform->position.y <= -offsetPositionBufferSize)
-                {
-                    transform->position.y = gameGridHeight + offsetPositionBufferSize;
-
-                    if (rbPtr)
+                    else if (transform->position.y <= -offsetPositionBufferSize)
                     {
-                        rbPtr->position[1] = transform->position.y;
+                        transform->position.y = gameGridHeight + offsetPositionBufferSize;
+
+                        if (rbPtr)
+                        {
+                            rbPtr->position[1] = transform->position.y;
+                        }
                     }
                 }
             }
@@ -407,7 +412,7 @@ game_render(struct game *g)
     for (i32 entityIndex = 0; entityIndex < g->entityCount; ++entityIndex)
     {
         struct game_entity *entity = &g->entities[entityIndex];
-        struct game_layer *layerPtr = basic_dict_get(g->layerDict, g->layers, entity->layer);
+        struct game_layer *layerPtr = basic_dict_get(g->layerDict, g->layers, (char *)entity->layer);
 
         if (entity->isActive)
         {
@@ -453,7 +458,7 @@ game_render(struct game *g)
          elementPtr != NULL; elementPtr = elementPtr->next)
     {
         renderer_id render = *(renderer_id *)basic_dict_get(g->interfaceElementRenderMap, 
-            g->interfaceElementRenders, elementPtr->name);
+            g->interfaceElementRenders, (char *)elementPtr->name);
 
         if (elementPtr->isDirty)
         {
@@ -571,7 +576,7 @@ game_create_entity(struct game *g, const char *layer)
     g->entities[entityIndex].physicsComponent = GAME_NULL_ID;
     g->entities[entityIndex].isActive = B32_TRUE;
 
-    if (basic_dict_get(g->layerDict, g->layers, layer))
+    if (basic_dict_get(g->layerDict, g->layers, (char *)layer))
     {
         g->entities[entityIndex].layer = memory_alloc(g->app->memoryContext, strlen(layer) + 1);
         sprintf((char *)g->entities[entityIndex].layer, "%s", layer);
@@ -786,7 +791,7 @@ game_instantiate_interface_element(struct game *g, const char *name,
 {
     assert(g);
 
-    if (!basic_dict_get(g->interfaceElementRenderMap, g->interfaceElementRenders, name))
+    if (!basic_dict_get(g->interfaceElementRenderMap, g->interfaceElementRenders,(char *)name))
     {
         i32 renderIndex = g->gameInterface->_elementCount;
 
@@ -811,7 +816,7 @@ game_instantiate_interface_element(struct game *g, const char *name,
 
         renderer_material_set_texture(g->app->renderContext, renderer_model_get_material(g->app->renderContext, g->interfaceElementRenders[renderIndex]), "test1");
         basic_dict_set(g->interfaceElementRenderMap, g->app->memoryContext, g->interfaceElementRenders, 
-            name, strlen(name) + 1, &g->interfaceElementRenders[renderIndex]);
+           (char *)name, strlen(name) + 1, &g->interfaceElementRenders[renderIndex]);
 
         interface_target_element(g->gameInterface, name);
 
@@ -841,7 +846,7 @@ game_start_timer(struct game *g, real32 seconds, game_timer_callback callback, v
 void
 game_init_layer(struct game *g, const char *name, u32 layer)
 {
-    if (!basic_dict_get(g->layerDict, g->layers, name))
+    if (!basic_dict_get(g->layerDict, g->layers, (char *)name))
     {
         const u32 index = g->layerCount;
 
@@ -863,7 +868,7 @@ game_init_layer(struct game *g, const char *name, u32 layer)
         g->layers[index].name = memory_alloc(g->app->memoryContext, nameSize);
         sprintf((char *)g->layers[index].name, "%s", name);
 
-        basic_dict_set(g->layerDict, g->app->memoryContext, g->layers, g->layers[index].name, nameSize, &g->layers[index]);
+        basic_dict_set(g->layerDict, g->app->memoryContext, g->layers, (char *)g->layers[index].name, nameSize, &g->layers[index]);
     }
     else
     {

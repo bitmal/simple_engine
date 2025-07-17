@@ -12,19 +12,28 @@
 #include <stdint.h>
 #include <assert.h>
 
-static u64
-_physics_collision_hash_func(const struct basic_dict *dict, const void *key)
+static i64 g_COLLISION_ID_COUNTER = 0;
+static i64 g_FORCE_ALLOCATION_ID_COUNTER = 0;
+static i64 g_FORCE_ID_ALLOCATION_ID_COUNTER = 0;
+
+u64
+_physics_collision_hash_func(struct basic_dict *dict, void *key)
 {
-    u64 hash = *(u64 *)key;
+    assert(dict);
+    assert(key);
 
-    if (((u32 *)&hash)[0] > ((u32 *)&hash)[1])
-    {
-        u32 temp = ((u32 *)&hash)[0];
-        ((u32 *)&hash)[0] = ((u32 *)&hash)[1];
-        ((u32 *)&hash)[1] = temp;
-    }
+    const i64 *keyPtr = key;
 
-    return hash;
+    physics_id lhsId = *((physics_id *)keyPtr);
+    physics_id rhsId = *((physics_id *)keyPtr + 1);
+
+    assert(lhsId != rhsId);
+
+    u64 resultHash;
+    ((physics_id *)&resultHash)[0] = (lhsId > rhsId) ? lhsId : rhsId;
+    ((physics_id *)&resultHash)[1] = (lhsId > rhsId) ? rhsId : lhsId;
+
+    return resultHash;
 }
 
 static u64
@@ -44,10 +53,7 @@ _physics_rigidbody_collider_is_overlap(struct physics *context, struct physics_r
     struct physics_collider *lhsColl = &context->colliders[lhs->collider];
     struct physics_collider *rhsColl = &context->colliders[rhs->collider];
 
-    printf("(colliderLhs: [%d] :: rbLhs [%d]), colliderRhs: [%d] :: rbRhs [%d])\n", lhsColl->id, lhs->id, rhsColl->id, rhs->id);
-    assert(B32_FALSE);
-
-    return (
+    b32 result = (
         ((lhs->position[0]+lhsColl->bounds.left <= rhs->position[0]+rhsColl->bounds.right &&
          lhs->position[1]+lhsColl->bounds.top >= rhs->position[1]+rhsColl->bounds.bottom) &&
         (lhs->position[0]+lhsColl->bounds.left >= rhs->position[0]+rhsColl->bounds.left &&
@@ -72,6 +78,8 @@ _physics_rigidbody_collider_is_overlap(struct physics *context, struct physics_r
          lhs->position[1]+lhsColl->bounds.top > rhs->position[1]+rhsColl->bounds.top &&
          lhs->position[0]+lhsColl->bounds.right > rhs->position[0]+rhsColl->bounds.right &&
          lhs->position[1]+lhsColl->bounds.bottom < rhs->position[1]+rhsColl->bounds.bottom));
+
+         return result;
 }
 
 static physics_id
@@ -107,6 +115,8 @@ _physics_rigidbody_alloc_force(struct physics *context, physics_id rigidbodyId)
     forcePtr->id = (physics_id)forceIndex;
     forcePtr->allocationTimestamp = context->timeSinceStart;
 
+    forcePtr->allocationId = g_FORCE_ALLOCATION_ID_COUNTER++;
+    
     return forcePtr->id;
 }
 
@@ -205,6 +215,7 @@ _physics_rigidbody_alloc_force_id(struct physics *context, physics_id rigidbodyI
         assert(forceIdPtr->id != PHYSICS_NULL_ID);
         
         forceIdPtr->isActive = B32_TRUE;
+        forceIdPtr->allocationId = g_FORCE_ID_ALLOCATION_ID_COUNTER++;
     }
 
     if (rbPtr->activeForceIdCount > 0)
@@ -264,11 +275,10 @@ physics_init(struct memory *mem)
     memset(p, 0, sizeof(struct physics));
 
     p->memoryContext = mem;
-    //p->collisions = memory_alloc(mem, sizeof(struct physics_collision)*
-    //    (p->collisionCapacity = PHYSICS_COLLISION_ARENA_BASE_SIZE));
-    // TODO: dictionaries need to be able to self rezize buckets;
-    // active collisions are currently capped because of this
-    p->collisionMap = DICTIONARY(p->memoryContext, _physics_collision_hash_func);
+    p->collisionArenaCapacity = PHYSICS_COLLISION_ARENA_BASE_LENGTH;
+    p->collisionArena = (p->collisionArenaCapacity > 0) ? (memory_alloc(mem, sizeof(struct physics_collision)*
+        p->collisionArenaCapacity)) : NULL;
+    p->collisionDict = basic_dict_create(mem, _physics_collision_hash_func, 113, NULL);
     p->airDensity = PHYSICS_DEFAULT_AIR_DENSITY;
     p->gravity[0] = PHYSICS_DEFAULT_GRAVITY_X;
     p->gravity[1] = PHYSICS_DEFAULT_GRAVITY_Y;
@@ -322,7 +332,7 @@ physics_create_rigidbody(struct physics *context)
     colliderPtr->bounds.top = 1.f;
     colliderPtr->bounds.left = 0.f;
     colliderPtr->bounds.bottom = 0.f;
-    colliderPtr->isTrigger = B32_TRUE;
+    //colliderPtr->isTrigger = B32_TRUE;
     
     physics_id rbId = context->rigidbodyCount++;
     if (context->rigidbodyCount > 1)
@@ -337,31 +347,14 @@ physics_create_rigidbody(struct physics *context)
     }
 
     struct physics_rigidbody *rbPtr = &context->rigidbodies[rbId];
+    memset(rbPtr, '\0', sizeof(struct physics_rigidbody));
+
     rbPtr->id = rbId;
     rbPtr->mass = PHYSICS_DEFAULT_MASS;
     rbPtr->isGravity = B32_FALSE;
-    rbPtr->position[0] = 0.f;
-    rbPtr->position[1] = 0.f;
-    rbPtr->position[2] = 0.f;
-    rbPtr->velocity[0] = 0.f;
-    rbPtr->velocity[1] = 0.f;
-    rbPtr->velocity[2] = 0.f;
-    rbPtr->rotation[0] = 0.f;
-    rbPtr->rotation[1] = 0.f;
-    rbPtr->rotation[2] = 0.f;
-    rbPtr->rotationVelocity[0] = 0.f;
-    rbPtr->rotationVelocity[1] = 0.f;
-    rbPtr->rotationVelocity[2] = 0.f;
     rbPtr->material = materialId;
     rbPtr->collider = colliderId;
-    rbPtr->forceArr = NULL;
-    rbPtr->forceCapacity = 0;
-    rbPtr->forceIdArr = NULL;
-    rbPtr->forceIdCapacity = 0;
-    rbPtr->activeForceIdCount = 0;
-    rbPtr->freeForceIdCount = 0;
-    rbPtr->activeForceIds = NULL;
-    rbPtr->freeForceIds = NULL;
+    rbPtr->isKinematic = B32_FALSE;
     
     rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].type = PHYSICS_RB_CONSTRAINT_MAX_SPEED;
     rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_FALSE;
@@ -495,7 +488,6 @@ physics_update(struct physics *context, real32 timestep)
         real32 accumulatedAccelerationMagnitude = 0.f;
 
         struct physics_rigidbody *rbPtr = &context->rigidbodies[rbIndex];
-        //struct physics_force_id *forceIdPtr = rbPtr->activeForceIds;
 
         if (rbPtr->activeForceIdCount > 0) 
         {
@@ -508,39 +500,40 @@ physics_update(struct physics *context, real32 timestep)
                 
                 struct physics_force *forcePtr = &rbPtr->forceArr[(i32)forceIdPtr->id];
 
-                real32 force[] = {
-                    forcePtr->direction[0]*forcePtr->magnitude,
-                    forcePtr->direction[1]*forcePtr->magnitude,
-                    forcePtr->direction[2]*forcePtr->magnitude
-                };
+                if (!rbPtr->isKinematic)
+                {
+                    real32 force[] = {
+                        forcePtr->direction[0]*forcePtr->magnitude,
+                        forcePtr->direction[1]*forcePtr->magnitude,
+                        forcePtr->direction[2]*forcePtr->magnitude
+                    };
 
-                assert(rbPtr->mass > 0.f);
+                    assert(rbPtr->mass > 0.f);
 
-                real32 acceleration[] = {force[0]/rbPtr->mass,
-                    force[1]/rbPtr->mass,
-                    force[2]/rbPtr->mass};
+                    real32 acceleration[] = {force[0]/rbPtr->mass,
+                        force[1]/rbPtr->mass,
+                        force[2]/rbPtr->mass};
 
-                real32 magnitude = sqrtf(force[0]*force[0] +
-                        force[1]*force[1] +
-                        force[2]*force[2]);
-                
-                accumulatedAccelerationMagnitude += (forcePtr->duration > 0.f) ? (magnitude*timestep) : magnitude;
+                    real32 magnitude = sqrtf(force[0]*force[0] +
+                            force[1]*force[1] +
+                            force[2]*force[2]);
+                    
+                    accumulatedAccelerationMagnitude += (forcePtr->duration > 0.f) ? (magnitude*timestep) : magnitude;
 
-                accelerationDirection[0] += acceleration[0]/magnitude;
-                accelerationDirection[1] += acceleration[1]/magnitude;
-                accelerationDirection[2] += acceleration[2]/magnitude;
+                    accelerationDirection[0] += acceleration[0]/magnitude;
+                    accelerationDirection[1] += acceleration[1]/magnitude;
+                    accelerationDirection[2] += acceleration[2]/magnitude;
 
-                real32 magnitude1 = sqrtf(accelerationDirection[0]*accelerationDirection[0] +
-                    accelerationDirection[1]*accelerationDirection[1] +
-                    accelerationDirection[2]*accelerationDirection[2]);
+                    real32 magnitude1 = sqrtf(accelerationDirection[0]*accelerationDirection[0] +
+                        accelerationDirection[1]*accelerationDirection[1] +
+                        accelerationDirection[2]*accelerationDirection[2]);
 
-                accelerationDirection[0] /= magnitude1;
-                accelerationDirection[1] /= magnitude1;
-                accelerationDirection[2] /= magnitude1;
+                    accelerationDirection[0] /= magnitude1;
+                    accelerationDirection[1] /= magnitude1;
+                    accelerationDirection[2] /= magnitude1;
+                }
 
                 real32 deltaTime = (forcePtr->currentTimestamp + timestep) - forcePtr->startTimestamp;
-                
-                //real32 normalizedTime = (forcePtr->currentTimestamp - forcePtr->startTimestamp)/(forcePtr->duration > 0.f ? forcePtr->duration : 0.01f);
                 
                 if ((deltaTime + forcePtr->currentTimestamp - forcePtr->startTimestamp) >= forcePtr->duration)
                 {
@@ -569,55 +562,58 @@ physics_update(struct physics *context, real32 timestep)
         //    rbPtr->velocity[2]*rbPtr->velocity[2]);
 
         // apply drag
-        real32 dragForce[3];
-        physics_helpers_calculate_drag(dragForce, materialPtr->dragCoefficient, context->airDensity, rbPtr->velocity, 
-            (colliderPtr->bounds.right - colliderPtr->bounds.left)*(colliderPtr->bounds.top - colliderPtr->bounds.bottom));
-
-        real32 dragAcceleration[] = {dragForce[0]/rbPtr->mass, dragForce[1]/rbPtr->mass, dragForce[2]/rbPtr->mass};
-        //real32 dragAccelerationMagnitude = sqrtf(dragAcceleration[0]*dragAcceleration[0] + dragAcceleration[1]*dragAcceleration[1] +
-        //    dragAcceleration[2]*dragAcceleration[2]);
-        
-        rbPtr->velocity[0] += dragAcceleration[0]*timestep;
-        rbPtr->velocity[1] += dragAcceleration[1]*timestep;
-        rbPtr->velocity[2] += dragAcceleration[2]*timestep;
-
-        // apply friction
-        // TODO:
-
-        rbPtr->rotation[0] += rbPtr->rotationVelocity[0]*timestep;
-        rbPtr->rotation[1] += rbPtr->rotationVelocity[1]*timestep;
-        rbPtr->rotation[2] += rbPtr->rotationVelocity[2]*timestep;
-
-        const real64 phi = M_PI*2.0;
-
-        if (rbPtr->rotation[0] > phi)
+        if (!rbPtr->isKinematic)
         {
-            rbPtr->rotation[0] = 0.f;
-        }
-        else if (rbPtr->rotation[0] < 0.)
-        {
-            rbPtr->rotation[0] = phi;
-        }
-        if (rbPtr->rotation[1] > phi)
-        {
-            rbPtr->rotation[1] = 0.f;
-        }
-        else if (rbPtr->rotation[1] < 0.)
-        {
-            rbPtr->rotation[1] = phi;
-        }
-        if (rbPtr->rotation[2] > phi)
-        {
-            rbPtr->rotation[2] = 0.f;
-        }
-        else if (rbPtr->rotation[2] < 0.)
-        {
-            rbPtr->rotation[2] = phi;
-        }
+            real32 dragForce[3];
+            physics_helpers_calculate_drag(dragForce, materialPtr->dragCoefficient, context->airDensity, rbPtr->velocity, 
+                (colliderPtr->bounds.right - colliderPtr->bounds.left)*(colliderPtr->bounds.top - colliderPtr->bounds.bottom));
 
-        rbPtr->position[0] += rbPtr->velocity[0]*timestep;
-        rbPtr->position[1] += rbPtr->velocity[1]*timestep;
-        rbPtr->position[2] += rbPtr->velocity[2]*timestep;
+            real32 dragAcceleration[] = {dragForce[0]/rbPtr->mass, dragForce[1]/rbPtr->mass, dragForce[2]/rbPtr->mass};
+            //real32 dragAccelerationMagnitude = sqrtf(dragAcceleration[0]*dragAcceleration[0] + dragAcceleration[1]*dragAcceleration[1] +
+            //    dragAcceleration[2]*dragAcceleration[2]);
+            
+            rbPtr->velocity[0] += dragAcceleration[0]*timestep;
+            rbPtr->velocity[1] += dragAcceleration[1]*timestep;
+            rbPtr->velocity[2] += dragAcceleration[2]*timestep;
+
+            // apply friction
+            // TODO:
+
+            rbPtr->rotation[0] += rbPtr->rotationVelocity[0]*timestep;
+            rbPtr->rotation[1] += rbPtr->rotationVelocity[1]*timestep;
+            rbPtr->rotation[2] += rbPtr->rotationVelocity[2]*timestep;
+
+            const real64 phi = M_PI*2.0;
+
+            if (rbPtr->rotation[0] > phi)
+            {
+                rbPtr->rotation[0] = 0.f;
+            }
+            else if (rbPtr->rotation[0] < 0.)
+            {
+                rbPtr->rotation[0] = phi;
+            }
+            if (rbPtr->rotation[1] > phi)
+            {
+                rbPtr->rotation[1] = 0.f;
+            }
+            else if (rbPtr->rotation[1] < 0.)
+            {
+                rbPtr->rotation[1] = phi;
+            }
+            if (rbPtr->rotation[2] > phi)
+            {
+                rbPtr->rotation[2] = 0.f;
+            }
+            else if (rbPtr->rotation[2] < 0.)
+            {
+                rbPtr->rotation[2] = phi;
+            }
+
+            rbPtr->position[0] += rbPtr->velocity[0]*timestep;
+            rbPtr->position[1] += rbPtr->velocity[1]*timestep;
+            rbPtr->position[2] += rbPtr->velocity[2]*timestep;
+        }
 
         for (i32 rbRhsIndex = 0; rbRhsIndex < context->rigidbodyCount; ++rbRhsIndex)
         {
@@ -628,58 +624,80 @@ physics_update(struct physics *context, real32 timestep)
 
             struct physics_rigidbody *rbRhsPtr = &context->rigidbodies[rbRhsIndex];
 
-            if (_physics_rigidbody_collider_is_overlap(context, rbPtr, rbRhsPtr))
-            {
-                i32 collisionIndex = context->collisionCount;
+            physics_id collisionKey[] = {rbPtr->id, rbRhsPtr->id};
 
-                if (context->collisionCount == 0)
+            struct basic_dict_pair *collisionPair = basic_dict_get(context->collisionDict, context->collisionArena, collisionKey);
+
+            if (!_physics_rigidbody_collider_is_overlap(context, rbPtr, rbRhsPtr))
+            {
+                if (collisionPair)
                 {
-                    context->collisions = memory_alloc(context->memoryContext, sizeof(struct physics_collision)*
-                        (++context->collisionCount));
+                    (&context->collisionArena[context->collisionArenaFreeAllocationIndex++])->isActive = B32_FALSE;
                 }
-                else if (context->collisionCount >= context->collisionCapacity)
+            }
+            else if (!collisionPair)
+            {
+                if (!rbPtr->isKinematic)
                 {
-                    context->collisions = memory_realloc(context->memoryContext, context->collisions, 
-                        sizeof(struct physics_collision)*(++context->collisionCount));
+                    real32 rbLhsCollisionMagnitude = sqrtf(rbPtr->velocity[0]*rbPtr->velocity[0]*rbRhsPtr->mass +
+                         rbPtr->velocity[1]*rbPtr->velocity[1]*rbRhsPtr->mass +
+                         rbPtr->velocity[2]*rbPtr->velocity[2]*rbRhsPtr->mass);
+                     
+                    real32 collisionNormal[] = {rbPtr->velocity[0]/rbLhsCollisionMagnitude,
+                    rbPtr->velocity[1]/rbLhsCollisionMagnitude,
+                    rbPtr->velocity[2]/rbLhsCollisionMagnitude};
+
+                    real32 rbLhsCollisionDirection[] = {-collisionNormal[0], -collisionNormal[1], -collisionNormal[2]};
+
+                    rbPtr->velocity[0] += (rbLhsCollisionDirection[0]*rbLhsCollisionMagnitude)*rbRhsPtr->mass*2.f + rbRhsPtr->velocity[0]*rbRhsPtr->mass;
+                    rbPtr->velocity[1] += (rbLhsCollisionDirection[1]*rbLhsCollisionMagnitude)*rbRhsPtr->mass*2.f + rbRhsPtr->velocity[1]*rbRhsPtr->mass;
+                    rbPtr->velocity[2] += (rbLhsCollisionDirection[2]*rbLhsCollisionMagnitude)*rbRhsPtr->mass*2.f + rbRhsPtr->velocity[2]*rbRhsPtr->mass;
+                    
+                    rbRhsPtr->velocity[0] += (collisionNormal[0]*rbLhsCollisionMagnitude)*rbPtr->mass - rbPtr->velocity[0]*rbPtr->mass;
+                    rbRhsPtr->velocity[1] += (collisionNormal[0]*rbLhsCollisionMagnitude)*rbPtr->mass - rbPtr->velocity[1]*rbPtr->mass;
+                    rbRhsPtr->velocity[2] += (collisionNormal[0]*rbLhsCollisionMagnitude)*rbPtr->mass - rbPtr->velocity[2]*rbPtr->mass;
+                }
+
+                struct physics_collision *collisionPtr;
+
+                if (context->collisionArena)
+                {
+                    if (context->collisionArenaFreeAllocationIndex != context->collisionArenaCapacity)
+                    {
+                        collisionPtr = &context->collisionArena[context->collisionArenaFreeAllocationIndex++];
+                    }
+                    else 
+                    {
+                        if (!context->collisionArena[0].isActive)
+                        {
+                            context->collisionArenaFreeAllocationIndex = -1;
+                        }
+                        else 
+                        {
+                            context->collisionArena = memory_realloc(context->memoryContext, context->collisionArena, 
+                                sizeof(context->collisionArena[0])*(context->collisionArenaCapacity *= 
+                                    PHYSICS_COLLISION_ARENA_LENGTH_REALLOC_MULTIPLIER));
+                            
+                            assert(context->collisionArena);
+                        }
+                        
+                        collisionPtr = &context->collisionArena[++context->collisionArenaFreeAllocationIndex];
+                    }
                 }
                 else 
                 {
-                    ++context->collisionCount;
+                    assert (context->collisionArenaCapacity < 1);
+                    
+                    context->collisionArena = collisionPtr = memory_alloc(context->memoryContext, sizeof(struct physics_collision)*
+                        (++context->collisionArenaCapacity));
                 }
 
-                //u64 hashKey = (((u64)rbPtr->id) << (sizeof(u32)*8)) | ((u64)rbRhsPtr->id);
-                struct physics_collision *collisionPtr = &context->collisions[collisionIndex];
-
-                collisionPtr->rbLhs = rbPtr->id;
-                collisionPtr->rbRhs = rbRhsPtr->id;
-
-                real32 rbLhsCollisionMagnitude = sqrtf(rbPtr->velocity[0]*rbPtr->velocity[0]*rbRhsPtr->mass +
-                    rbPtr->velocity[1]*rbPtr->velocity[1]*rbRhsPtr->mass +
-                    rbPtr->velocity[2]*rbPtr->velocity[2]*rbRhsPtr->mass);
-
-                collisionPtr->normal[0] = rbPtr->velocity[0]/rbLhsCollisionMagnitude;
-                collisionPtr->normal[1] = rbPtr->velocity[1]/rbLhsCollisionMagnitude;
-                collisionPtr->normal[2] = rbPtr->velocity[2]/rbLhsCollisionMagnitude;
-
-                //basic_dict_set(context->collisionMap, context->memoryContext, context->collisions, 
-                //    &hashKey, sizeof(hashKey), collisionPtr);
+                collisionPtr->wideId = g_COLLISION_ID_COUNTER++;
+                collisionPtr->rbLhsId = rbPtr->id;
+                collisionPtr->rbRhsId = rbRhsPtr->id;
+                collisionPtr->isActive = B32_TRUE;
             }
         }
-    }
-    
-    for (i32 collisionIndex = 0; collisionIndex < context->collisionCount; ++collisionIndex)
-    {
-        struct physics_collision *collisionPtr = &context->collisions[collisionIndex];
-        struct physics_rigidbody *rbLhsPtr = &context->rigidbodies[collisionPtr->rbLhs];
-        struct physics_rigidbody *rbRhsPtr = &context->rigidbodies[collisionPtr->rbRhs];
-
-        real32 rbLhsCollisionDirection[] = {-collisionPtr->normal[0], -collisionPtr->normal[1], -collisionPtr->normal[2]};
-
-        real32 rbLhsMomentumMagnitude = sqrtf(rbLhsPtr->velocity[0]*rbLhsPtr->velocity[0]*rbLhsPtr->mass +
-           rbLhsPtr->velocity[1]*rbLhsPtr->velocity[1]*rbLhsPtr->mass +
-           rbLhsPtr->velocity[2]*rbLhsPtr->velocity[2]*rbLhsPtr->mass);
-
-        physics_rigidbody_add_force(context, collisionPtr->rbLhs, rbLhsCollisionDirection, rbLhsMomentumMagnitude, 0.f);
     }
     
     for (struct physics_log_message_id *messageIdPtr = context->log->activeMessageIdQueue;

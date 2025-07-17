@@ -16,7 +16,7 @@ interface_init(struct memory *mem)
     memset(context, 0, sizeof(struct interface));
 
     context->_memoryContext = mem;
-    context->_elementMap = DICTIONARY(mem, NULL);
+    context->_elementMap = DICTIONARY(mem, NULL, NULL);
 
     return context;
 }
@@ -28,7 +28,7 @@ interface_create_element(struct interface *context, const char *name,
 {
     assert(context);
 
-    if (!basic_dict_get(context->_elementMap, context->_elements, name))
+    if (!basic_dict_get(context->_elementMap, context->_elements, (char *)name))
     {
         i32 index = context->_elementCount;
         if (context->_elementCount > 0)
@@ -74,7 +74,7 @@ interface_create_element(struct interface *context, const char *name,
         }
 
         basic_dict_set(context->_elementMap, context->_memoryContext, 
-            context->_elements, name, strlen(name) + 1, elementPtr);
+            context->_elements, (char *)name, strlen(name) + 1, elementPtr);
 
         return B32_TRUE;
     }
@@ -85,7 +85,7 @@ interface_create_element(struct interface *context, const char *name,
 void
 interface_toggle_element(struct interface *context, const char *name, b32 b)
 {
-    struct interface_element *elementPtr = basic_dict_get(context->_elementMap, context->_elements, name);
+    struct interface_element *elementPtr = basic_dict_get(context->_elementMap, context->_elements,(char *)name);
     if (!elementPtr)
     {
         return;
@@ -131,7 +131,7 @@ interface_toggle_element(struct interface *context, const char *name, b32 b)
 void
 interface_target_element(struct interface *context, const char *name)
 {
-    struct interface_element *elementPtr = basic_dict_get(context->_elementMap, context->_elements, name);
+    struct interface_element *elementPtr = basic_dict_get(context->_elementMap, context->_elements, (char *)name);
     if (!elementPtr)
     {
         return;

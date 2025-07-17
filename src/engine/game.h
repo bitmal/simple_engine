@@ -9,6 +9,7 @@
 
 struct context;
 struct interface;
+struct interface_element_pattern;
 struct game;
 
 typedef i32 game_id;

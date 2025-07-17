@@ -14,10 +14,10 @@ input_init(struct memory *mem, void *dataPtr)
     inputContext->dataPtr = dataPtr;
     inputContext->keys = NULL;
     inputContext->keyCount = 0;
-    inputContext->keyDict = DICTIONARY(mem, NULL);
+    inputContext->keyDict = DICTIONARY(mem, NULL, NULL);
     inputContext->keybinds = NULL;
     inputContext->keybindCount = 0;
-    inputContext->keybindDict = DICTIONARY(mem, NULL);
+    inputContext->keybindDict = DICTIONARY(mem, NULL, NULL);
 
     return inputContext;
 }
@@ -42,7 +42,7 @@ input_add_keys(struct input *inputContext, struct memory *mem, const char *keys[
         inputContext->keys[key].key = memory_alloc(mem, keySize);
         sprintf((char *)inputContext->keys[key].key, "%s", keys[key]);
 
-        basic_dict_set(inputContext->keyDict, mem, inputContext->keys, keys[key], keySize, &inputContext->keys[key]);
+        basic_dict_set(inputContext->keyDict, mem, inputContext->keys, (char *)keys[key], keySize, &inputContext->keys[key]);
     }
 }
 
@@ -65,13 +65,13 @@ input_bind_key(struct input *inputContext, struct memory *mem, const char *key, 
 
     sprintf(UTILS_MUTABLE_CAST(char *, inputContext->keybinds[index].key), "%s", key);
 
-    basic_dict_set(inputContext->keybindDict, mem, inputContext->keybinds, key, strlen(key) + 1, &cb);
+    basic_dict_set(inputContext->keybindDict, mem, inputContext->keybinds, (char *)key, strlen(key) + 1, &cb);
 }
 
 b32
 input_set_key_down(struct input *inputContext, const char *key, b32 isKeyDown)
 {
-    struct input_key *keyPtr = basic_dict_get(inputContext->keyDict, inputContext->keys, key);
+    struct input_key *keyPtr = basic_dict_get(inputContext->keyDict, inputContext->keys, (char *)key);
 
     if (keyPtr)
     {
@@ -86,7 +86,7 @@ input_set_key_down(struct input *inputContext, const char *key, b32 isKeyDown)
 b32
 input_get_key_down(struct input *inputContext, const char *key)
 {
-    struct input_key *keyPtr = basic_dict_get(inputContext->keyDict, inputContext->keys, key);
+    struct input_key *keyPtr = basic_dict_get(inputContext->keyDict, inputContext->keys, (char *)key);
 
     if (keyPtr)
     {

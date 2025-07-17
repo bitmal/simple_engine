@@ -8,7 +8,9 @@
 typedef i32 basic_dict_id;
 typedef u64 basic_dict_rel_ptr;
 
-typedef u64 (*basic_dict_hash_func)(const struct basic_dict *dict, const void *key);
+struct basic_dict;
+typedef u64 (*basic_dict_hash_func)(struct basic_dict *dict, void *key);
+typedef b32 (*basic_dict_data_is_found_equal_func)(struct basic_dict *dict, void *key);
 
 struct memory;
 
@@ -30,19 +32,23 @@ struct basic_dict
     i32 buckets;
     struct basic_dict_pair **__table;
     basic_dict_hash_func __hashFunc;
+    void *userPtr;
 };
 
 struct basic_dict *
-basic_dict_create(struct memory *memory, basic_dict_hash_func hashFunc, i32 initBuckets);
-#define DICTIONARY(memoryContext, hashFunc) basic_dict_create(memoryContext, hashFunc, BASIC_DICT_DEFAULT_BUCKET_COUNT)
+basic_dict_create(struct memory *memory, basic_dict_hash_func hashFunc, i32 initBuckets, void *userPtr);
+#define DICTIONARY(memoryContext, hashFunc, userPtr) basic_dict_create(memoryContext, hashFunc, BASIC_DICT_DEFAULT_BUCKET_COUNT, userPtr)
 
 void *
-basic_dict_get(const struct basic_dict *dict, void *database, const void *key);
+basic_dict_get(struct basic_dict *dict, void *database, void *key);
 
 b32
-basic_dict_set(struct basic_dict *dict, struct memory *mem, void *database, const void *key, size_t keySize, void *data);
+basic_dict_set(struct basic_dict *dict, struct memory *mem, void *database, void *key, size_t keySize, void *data);
 
 void
 basic_dict_clear(struct basic_dict *dict);
+
+b32
+basic_dict_get_is_found(struct basic_dict *dict, void *key);
 
 #endif

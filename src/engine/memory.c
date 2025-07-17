@@ -1,5 +1,9 @@
 #include "memory.h"
 
+#include "SDL3/SDL.h"
+#include "utils.h"
+
+#include <SDL3/SDL_timer.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +13,10 @@
 #if defined(_WIN32) || defined(__WIN32) || defined(WIN32)
     #include <malloc.h>
 #endif
+
+static i64 g_MEMORY_ALLOCATOR_ID_COUNTER = 0;
+static i64 g_MEMORY_EVENT_ID_COUNTER = 0;
+static i32 g_MEMORY_ID_COUNTER = 0;
 
 static void
 _memory_event_push(struct memory *mem, void *alloc, enum memory_event_type type)
@@ -54,16 +62,39 @@ _memory_event_push(struct memory *mem, void *alloc, enum memory_event_type type)
         }
     }
 
+    mem->_events[eventIndex].eventId = g_MEMORY_EVENT_ID_COUNTER++;
+
+    if (!utils_get_elapsed_ms(&mem->_events[eventIndex].elapsedMS))
+    {
+        mem->_events[eventIndex].elapsedMS = 0;
+    }
+
     mem->_events[eventIndex].type = type;
     mem->_events[eventIndex].size = *((u64 *)alloc - 1) + sizeof(u64);
     mem->_events[eventIndex].byteOffset = (u8 *)alloc - mem->_memory - sizeof(u64);
-    
+
+    char fullFilepathBuffer[MEMORY_MAX_NAME_LENGTH + sizeof("_memory.log") + 1];
+    fullFilepathBuffer[0] = '\0';
+    strcat(fullFilepathBuffer, mem->name);
+    strcat(fullFilepathBuffer, "_memory.log");
+
+    FILE *logFile = fopen(fullFilepathBuffer, "a+");
+
+    if (logFile)
+    {
+        fprintf(logFile, "[EventID(%ld) :: %.2f]: Event-type = '%d', Alloc-Id = (%ld)\n", mem->_events[eventIndex].eventId, 
+            (real32)mem->_events[eventIndex].elapsedMS/1000.f, (i32)mem->_events[eventIndex].type,
+            ((struct memory_allocator *)((u8 *)alloc - sizeof(struct memory_allocator)))->wideId);
+            
+        fclose(logFile);
+    }
+
     ++mem->_eventCount;
 #endif
 }
 
 static void
-_memory_init(struct memory *mem, u64 size)
+_memory_init(struct memory *mem, u64 size, const char *name)
 {
     assert(size > MEMORY_MIN_ALLOC_SIZE);
 
@@ -80,22 +111,38 @@ _memory_init(struct memory *mem, u64 size)
     *(u64 *)&mem->_internal = privateKey;
 #endif
 
+    mem->id = g_MEMORY_ID_COUNTER++;
+    strcpy(mem->name, name);
     *((u64 *)&mem->size) = size;
     mem->_freeList = (struct memory_allocator *)((u64 *)mem->_memory + 1);
+    mem->_freeList->wideId = g_MEMORY_ALLOCATOR_ID_COUNTER++;
     mem->_tailFree = mem->_freeList;
     mem->_freeList->_next = NULL;
-    *(u64 *)mem->_memory = mem->size - sizeof(u64);
-    mem->reserved = sizeof(u64);
+    *(u64 *)mem->_memory = mem->size - sizeof(u64) - sizeof(struct memory_allocator);
+    mem->reserved = sizeof(u64) + sizeof(struct memory_allocator);
+    
+    char fullFilepathBuffer[MEMORY_MAX_NAME_LENGTH + sizeof("_memory.log") + 1];
+    fullFilepathBuffer[0] = '\0';
+    strcat(fullFilepathBuffer, mem->name);
+    strcat(fullFilepathBuffer, "_memory.log");
+
+    // discard previous log
+    FILE *logFile = fopen(fullFilepathBuffer, "w");
+
+    if (logFile)
+    {
+        fclose(logFile);
+    }
 
     _memory_event_push(mem, (void *)mem->_freeList, MEMORY_EVENT_FREE);
 }
 
 void
-memory_init(struct memory *mem, u64 size)
+memory_init(struct memory *mem, u64 size, const char *name)
 {
     assert(mem);
 
-    _memory_init(mem, size);
+    _memory_init(mem, size, name);
 }
 
 void *
@@ -107,10 +154,14 @@ memory_alloc(struct memory *mem, u64 size)
 
     struct memory_allocator *block;
     for (block = mem->_freeList;
-         block != NULL; 
+         block; 
          block = block->_next)
     {
+        block->wideId = g_MEMORY_ALLOCATOR_ID_COUNTER++;
         u64 *blockSize = (u64 *)block - 1;
+
+        assert((p64)blockSize >= (p64)mem->_memory);
+        assert((p64)blockSize < ((p64)mem->_memory + (mem->size - sizeof(u64))));
 
         if (clampedSize <= (*blockSize))
         {
@@ -121,6 +172,7 @@ memory_alloc(struct memory *mem, u64 size)
                 *blockSize = clampedSize;
 
                 struct memory_allocator *splitAlloc = (struct memory_allocator *)((u8 *)block + clampedSize + sizeof(u64));
+                splitAlloc->wideId = g_MEMORY_ALLOCATOR_ID_COUNTER++;
                 splitAlloc->_next = NULL;
 
                 *((u64 *)splitAlloc - 1) = diff - sizeof(u64);
@@ -218,6 +270,7 @@ memory_realloc(struct memory *mem, void *alloc, u64 size)
             *((u64 *)lhs - 1) = size;
             _memory_event_push(mem, lhs, MEMORY_EVENT_ALLOC);
             struct memory_allocator *rhs = (struct memory_allocator *)((u8 *)lhs + size + sizeof(u64));
+            rhs->wideId = g_MEMORY_ALLOCATOR_ID_COUNTER++;
             *((u64 *)rhs - 1) = diff - sizeof(u64);
             _memory_event_push(mem, rhs, MEMORY_EVENT_ALLOC);
             rhs->_next = NULL;

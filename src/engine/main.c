@@ -1,3 +1,6 @@
+#include "utils.h"
+#define MEMORY_DEBUG
+
 #include "engine.h"
 
 #include <GL/glew.h>
@@ -57,7 +60,7 @@ main(int argc, char **argv)
     }
     #endif
 
-    MEMORY_INIT(config);
+    MEMORY_INIT(config, "config");
 
     struct context app;
     
@@ -68,9 +71,9 @@ main(int argc, char **argv)
 
 	app.statsContext = statistics_init(&app);
 
-    MEMORY_INIT(game);
-    MEMORY_INIT(physics);
-    MEMORY_INIT(graphics);
+    MEMORY_INIT(game, "game");
+    MEMORY_INIT(physics, "physics");
+    MEMORY_INIT(graphics, "graphics");
     
     ImGuiContext *imguiContext = igCreateContext(NULL);
     
@@ -111,7 +114,10 @@ main(int argc, char **argv)
     app.inputContext->dataPtr = gameContext;
 
     u32 previousTicks = SDL_GetTicks();
-    i32 elapsedTicks = 0;
+    u32 elapsedTicks = 0;
+    u32 elapsedMS = 0;
+
+    utils_set_elapsed_time_ptr(&elapsedMS);
 
     while (app.isRunning)
     {
@@ -245,6 +251,7 @@ main(int argc, char **argv)
             SDL_GL_SwapWindow(window);
 
             elapsedTicks -= MS_PER_FRAME;
+            elapsedMS += MS_PER_FRAME;
             app.msSinceStart += MS_PER_FRAME;
         }
     }

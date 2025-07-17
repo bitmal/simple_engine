@@ -1,6 +1,10 @@
 #include "utils.h"
 #include "memory.h"
 
+#include <assert.h>
+
+static const u32 *g_ELAPSED_TIME_PTR = NULL;
+
 u64 
 utils_str_hash_func(const char *k)
 {
@@ -94,4 +98,25 @@ utils_sort(struct memory *mem, void *data, size_t stride, size_t length, utils_s
     }
 
     memory_free(mem, elementCopy);
+}
+
+void
+utils_set_elapsed_time_ptr(const u32 *ptr)
+{
+    g_ELAPSED_TIME_PTR = ptr;
+}
+
+b32
+utils_get_elapsed_ms(u32 *outputPtr)
+{
+    assert(outputPtr);
+
+    if (g_ELAPSED_TIME_PTR)
+    {
+        *outputPtr = *g_ELAPSED_TIME_PTR;
+
+        return B32_TRUE;
+    }
+
+    return B32_FALSE;
 }
