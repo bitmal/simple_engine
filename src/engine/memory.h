@@ -11,7 +11,13 @@
 typedef i64 memory_wide_id;
 typedef i32 memory_id;
 
-struct memory_smart_ptr;
+enum memory_user_region_section_status_t
+{
+    MEMORY_USER_REGION_SECTION_STATUS_UNLOCKED,
+    MEMORY_USER_REGION_SECTION_STATUS_PROTECTED,
+    MEMORY_USER_REGION_SECTION_STATUS_LOCKED,
+    MEMORY_USER_REGION_SECTION_STATUS_TYPE_COUNT
+};
 
 struct memory_allocator
 {
@@ -120,11 +126,14 @@ struct memory
 void
 memory_init(struct memory *mem, u64 size, u64 labelRegionSize, const char *name);
 
-void *
-memory_alloc(struct memory *mem, u64 size, const char *label);
+memory_id
+memory_define_user_region_section(struct memory *memory, u64 byteSize);
 
-void *
-memory_realloc(struct memory *mem, void *alloc, u64 size);
+memory_wide_id
+memory_alloc(struct memory *mem, memory_id region, u64 size, const char *label);
+
+void
+memory_realloc(struct memory *mem, memory_wide_id smartPtrId, u64 size);
 
 u64
 memory_sizeof(struct memory *mem, void *alloc);

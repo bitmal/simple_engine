@@ -1,6 +1,5 @@
 #include "memory.h"
 
-#include "SDL3/SDL.h"
 #include "utils.h"
 
 #include <SDL3/SDL_timer.h>
@@ -12,17 +11,31 @@
 #include <assert.h>
 #if defined(_WIN32) || defined(__WIN32) || defined(WIN32)
     #include <malloc.h>
+#elif defined(linux)
+    #include <malloc.h>
 #endif
 
-static i64 g_MEMORY_ALLOCATOR_ID_COUNTER = 0;
+static i64 g_MEMORY_ALLOCATION_ID_COUNTER = 0;
 static i64 g_MEMORY_EVENT_ID_COUNTER = 0;
 static i32 g_MEMORY_ID_COUNTER = 0;
+
+#define MEMORY_USER_REGION_MEMORY_IDENTIFIER (0xDEAD)
+
+struct memory_user_region_section_header
+{
+    u16 identifier;
+    enum memory_user_region_section_status_t status;
+    u64 byteSize;
+    u64 allocCount;
+};
 
 struct memory_safe_ptr
 {
     memory_wide_id ptrId;
+    struct memory_user_region_section_header *sectionPtr;
     p64 allocatorByteOffset;
     u64 refCount;
+    b32 isActive;
 };
 
 static void
