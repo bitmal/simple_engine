@@ -18,17 +18,15 @@ static i64 g_MEMORY_ALLOCATOR_ID_COUNTER = 0;
 static i64 g_MEMORY_EVENT_ID_COUNTER = 0;
 static i32 g_MEMORY_ID_COUNTER = 0;
 
-struct memory_safe_ptr
-{
-    memory_wide_id ptrId;
-    p64 allocatorByteOffset;
-    u64 refCount;
-};
+#define MEMORY_DEBUG
 
 static void
-_memory_event_push(struct memory *mem, enum memory_event_type type, void *eventData)
+_memory_event_push(struct memory *mem, void *alloc, enum memory_event_type type)
 {
 #ifdef MEMORY_DEBUG
+    assert(alloc);
+
+    // TODO: events should only be available in debug
     i32 eventIndex;
     u32 freeEvents = mem->_eventCapacity - mem->_eventCount;
     if (freeEvents == 0)
@@ -73,17 +71,7 @@ _memory_event_push(struct memory *mem, enum memory_event_type type, void *eventD
 
     mem->_events[eventIndex].eventId = g_MEMORY_EVENT_ID_COUNTER++;
     mem->_events[eventIndex].type = type;
-
-    switch (type)
-    {
-        case MEMORY_EVENT_FREE:
-        case MEMORY_EVENT_ALLOC:
-        {
-            mem->_events[eventIndex].as_alloc. = *(u64 *)((u8 *)eventData - sizeof(u64) - sizeof(struct memory_allocator));
-        } break;
-
-        default: break;
-    }
+    mem->_events[eventIndex].size = *((u64 *)alloc - 1) + sizeof(u64);
     mem->_events[eventIndex].byteOffset = (u8 *)alloc - mem->_memory - sizeof(u64);
 
     char fullFilepathBuffer[MEMORY_MAX_NAME_LENGTH + sizeof("_memory.log") + 1];
@@ -107,7 +95,7 @@ _memory_event_push(struct memory *mem, enum memory_event_type type, void *eventD
 }
 
 static void
-_memory_init(struct memory *mem, u64 size, u64 labelRegionSize, const char *name)
+_memory_init(struct memory *mem, u64 size, const char *name)
 {
     assert(size > MEMORY_MIN_ALLOC_SIZE);
 
@@ -125,6 +113,7 @@ _memory_init(struct memory *mem, u64 size, u64 labelRegionSize, const char *name
 #endif
 
     mem->id = g_MEMORY_ID_COUNTER++;
+    strcpy(mem->name, name);
     mem->_freeList = (struct memory_allocator *)((u64 *)mem->_memory + 1);
     mem->_freeList->wideId = g_MEMORY_ALLOCATOR_ID_COUNTER++;
     mem->_tailFree = mem->_freeList;
@@ -145,11 +134,11 @@ _memory_init(struct memory *mem, u64 size, u64 labelRegionSize, const char *name
         fclose(logFile);
     }
 
-    _memory_event_push(mem, MEMORY_EVENT_FREE, (struct memory_allocator *)mem->_freeList + 1);
+    _memory_event_push(mem, (void *)mem->_freeList, MEMORY_EVENT_FREE);
 }
 
 void
-memory_init(struct memory *mem, u64 size, u64 labelRegionSize, const char *name)
+memory_init(struct memory *mem, u64 size, const char *name)
 {
     assert(mem);
 
@@ -213,7 +202,7 @@ memory_alloc(struct memory *mem, u64 size)
 
                     if (!prev)
                     {
-                        mem->_freeList = splitAlloc;
+                        mem->_freeList = splitAlloc ? splitAlloc : splitAlloc;
                     }
                     else
                     {
@@ -241,6 +230,7 @@ memory_alloc(struct memory *mem, u64 size)
                 mem->reserved += *((u64 *)block - 1);
             }
 
+            _memory_event_push(mem, (u8 *)block + sizeof(struct memory_allocator), MEMORY_EVENT_ALLOC);
 
             break;
         }
@@ -251,7 +241,6 @@ memory_alloc(struct memory *mem, u64 size)
     if (block)
     {
         block->wideId = g_MEMORY_ALLOCATOR_ID_COUNTER++;
-        _memory_event_push(mem, (u8 *)block + sizeof(struct memory_allocator), MEMORY_EVENT_ALLOC);
     }
 
     return block;
