@@ -3,28 +3,30 @@
 
 #include "types.h"
 
-#define MEMORY_MIN_ALLOC_SIZE (sizeof(struct memory_allocator *))
-#define MEMORY_MIN_BLOCK_SIZE (MEMORY_MIN_ALLOC_SIZE + sizeof(u64))
-#define MEMORY_MAX_NAME_LENGTH 255
-#define MEMORY_LABEL_REGION_DEFAULT_PROPORTION_TO_SIZE (0.25f)
+#include <stdint.h>
 
-typedef i64 memory_wide_id;
-typedef i32 memory_id;
+typedef i64 memory_id;
+#define MEMORY_ID_NULL ((memory_id)-1)
 
-enum memory_user_region_section_status_t
+typedef i32 memory_int_id;
+#define MEMORY_INT_ID_NULL ((memory_int_id)-1)
+
+typedef i16 memory_short_id;
+#define MEMORY_SHORT_ID_NULL ((memory_short_id)-1)
+
+typedef i8 memory_byte_id;
+#define MEMORY_BYTE_ID_NULL ((memory_byte_id)-1)
+
+typedef u32 memory_error_code;
+
+enum memory_page_status_t
 {
-    MEMORY_USER_REGION_SECTION_STATUS_UNLOCKED,
-    MEMORY_USER_REGION_SECTION_STATUS_PROTECTED,
-    MEMORY_USER_REGION_SECTION_STATUS_LOCKED,
-    MEMORY_USER_REGION_SECTION_STATUS_TYPE_COUNT
-};
-
-struct memory_allocator
-{
-    memory_wide_id wideId;
-    char *allocLabel;
-    u64 allocSize;
-    struct memory_allocator *_next;
+    MEMORY_PAGE_STATUS_UNKNOWN,
+    MEMORY_PAGE_STATUS_FREED,
+    MEMORY_PAGE_STATUS_UNLOCKED,
+    MEMORY_PAGE_STATUS_LOCKED,
+    MEMORY_PAGE_STATUS_PROTECTED,
+    MEMORY_PAGE_STATUS_TYPE_COUNT
 };
 
 enum memory_event_type
@@ -35,16 +37,9 @@ enum memory_event_type
     MEMORY_EVENT_TYPE_COUNT
 };
 
-struct alloc_info
-{
-    memory_wide_id allocId;
-    char *allocLabel;
-    u64 allocSize;
-};
-
 struct memory_event
 {
-    memory_wide_id eventId;
+    memory_id eventId;
     enum memory_event_type type;
     u32 elapsedMS;
 
@@ -52,99 +47,97 @@ struct memory_event
     {
         struct
         {
+            memory_id userSectionId;
+            memory_id allocId;
             u64 allocSize;
             u64 allocByteOffset;
         } as_alloc;
         
         struct
         {
+            memory_id userSectionId;
+            memory_id allocId;
             u64 allocSize;
             u64 allocByteOffset;
         } as_free;
     };
 };
 
-struct memory
-{
-#ifdef MEMORY_DEBUG
-    const u64 _internal;
-#endif
-    memory_id id;
-#ifdef MEMORY_DEBUG
-    char name[MEMORY_MAX_NAME_LENGTH + 1];
-#endif
-    u64 bytesCapacity;
-    u64 smartPtrRegionBytesCapacity;
-#ifdef MEMORY_DEBUG
-    u64 labelRegionBytesCapacity;
-#endif
-    u64 allocatedUserRegionBytes;
-    struct memory_allocator *freeList;
-    struct memory_allocator *tailFree;
-    u32 eventQueueCount;
-    u32 eventQueueCapacity;
-    u8 userRegionBytes[];
-};
+#define MEMORY_MAX_USER_REGION_SECTIONS (INT8_MAX)
+#define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
+
+struct memory_context;
 
 #define MEMORY_TYPE_NAME(name)name##_memory##_t
 #define MEMORY_TYPE_ALIAS(name)name##_memory
 #define MEMORY_PTR(name)((struct memory *)&MEMORY_TYPE_ALIAS(g_##name))
 #ifdef MEMORY_DEBUG
     #define _MEMORY_DEFINE_HEAD(name) \
-        typedef struct MEMORY_TYPE_NAME(name) \
+        struct MEMORY_TYPE_NAME(name) \
         { \
             const u64 _internal;
 #else
-    #define _MEMORY_DEFINE_HEAD(name) \
+    #define _MEMORY_DEFINE_HEAD(typeName) \
         typedef struct MEMORY_TYPE_NAME(name) \
         {
 #endif
-#define MEMORY_DEFINE(name, size) \
-    _MEMORY_DEFINE_HEAD(name) \
+#define MEMORY_BEGIN_DECLARATION(typeName) \
+    _MEMORY_DEFINE_HEAD(typeName) \
         memory_id id; \
-        char name[MEMORY_MAX_NAME_LENGTH + 1]; \
+        char label[MEMORY_MAX_NAME_LENGTH + 1]; \
         u64 bytesCapacity; \
-        u64 smartPtrRegionBytesCapacity; \
         u64 labelRegionBytesCapacity; \
-        u64 allocatedUserRegionBytes; \
+        u64 smartPtrRegionBytesCapacity; \
+        u64 userRegionBytesCapacity; \
         struct memory_allocator *freeList; \
         struct memory_allocator *tailFree; \
-        u32 eventQueueCount; \
         u32 eventQueueCapacity; \
-        u8 userRegionBytes[size]; \
-    } MEMORY_TYPE_ALIAS(name); \
+        u32 eventQueueReadIndex; \
+        u32 eventQueueWriteIndex; \
+        u64 userSectionByteOffsets[MEMORY_MAX_USER_REGION_SECTIONS];
+#define MEMORY_END_DECLARATION(name, heapCapacity) \
+        u8 heap[heapCapacity]; \
+    }; \
     static MEMORY_TYPE_ALIAS(name) g_##name##_memory
-#define MEMORY_INIT(label, nameStr) \
-    memory_init(MEMORY_PTR(label), sizeof(g_##label##_memory._memory), \
-    (u64)(real64)sizeof(g_##label_##_memory._memory)*MEMORY_LABEL_REGION_DEFAULT_PROPORTION_TO_SIZE), nameStr);
-#define MEMORY_CLEAR(memoryPtr, patternPtr, patternSizePtr) \
-    assert((patternPtr) ? ((patternSizePtr) && (*(u64 *)(patternSizePtr) > 0)) : B32_TRUE); \
-    memory_set_offset(memoryPtr, (u64)0, B32_TRUE, (patternSizePtr) ? (*(u64 *)(patternSizePtr)) : (u64)0x0, patternPtr)
-#define MEMORY_ALLOC_DEFAULT_LABEL(memory, size) \
-    memory_alloc(memory, size, "DEFAULT")
+#define MEMORY_BASIC_DECLARATION(typeName, heapCapacity) \
+    MEMORY_BEGIN_DECLARATION(name) \
+    MEMORY_END_DECLARATION(name, heapCapacity)
 
-void
-memory_init(struct memory *mem, u64 size, u64 labelRegionSize, const char *name);
+memory_error_code
+memory_create_debug_context(u8 *correspondingHeaps[3], i32 heapOffsets[3], u64 labelRegionCapacity, u64 smartPtrRegionCapacity, 
+    u64 userRegionCapacity, memory_short_id *outputMemoryDebugContextId);
 
-memory_id
-memory_define_user_region_section(struct memory *memory, u64 byteSize);
+memory_error_code
+memory_create_context(u8 *heap, u64 heapOffset, u64 heapCapacity, memory_short_id *outputMemoryContextId);
 
-memory_wide_id
-memory_alloc(struct memory *mem, memory_id region, u64 size, const char *label);
+memory_error_code
+memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_byte_id *outputPageId);
 
-void
-memory_realloc(struct memory *mem, memory_wide_id smartPtrId, u64 size);
+memory_error_code
+memory_dealloc_page(memory_short_id memoryContextId, memory_byte_id pageId);
+
+memory_error_code
+memory_realloc_page(memory_short_id memoryContextId, memory_byte_id pageId);
+
+enum memory_page_status_t
+memory_page_get_status(memory_short_id memoryContextId, memory_byte_id pageId);
+
+memory_error_code
+memory_page_unlock(memory_short_id memoryContextId, memory_byte_id pageId);
+
+memory_error_code
+memory_page_lock(memory_short_id memoryContextId, memory_byte_id pageId);
+
+memory_error_code
+memory_alloc(memory_short_id memoryContextId, memory_byte_id pageId, memory_id *outputAllocId);
+
+memory_error_code
+memory_dealloc(memory_short_id memoryContextId, memory_byte_id pageId, memory_id allocId);
 
 u64
-memory_sizeof(struct memory *mem, void *alloc);
+memory_sizeof(memory_short_id memoryContextId, memory_byte_id pageId, memory_id allocId);
 
-void
-memory_clean(struct memory *mem);
-
-void
-memory_free(struct memory *mem, void *alloc);
-
-const struct memory_event *
-memory_event_pop(struct memory *mem);
+memory_error_code
+memory_clean(memory_short_id memoryContextId);
 
 #endif
