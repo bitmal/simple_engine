@@ -547,3 +547,11 @@ memory_create_context(u8 *heap, p64 heapOffset, u64 heapCapacity, memory_short_i
 
     return MEMORY_OK;
 }
+
+memory_error_code
+memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_byte_id *outputPageId)
+{
+    // TODO:
+    
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
+}
