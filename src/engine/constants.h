@@ -2,7 +2,8 @@
 #define __CONSTANTS_H
 
 #define FRAMES_PER_SEC 30
-#define MS_PER_FRAME (1000.f/(real32)(FRAMES_PER_SEC))
+#define NS_PER_FRAME (1000./((real64)FRAMES_PER_SEC))
+#define MS_PER_FRAME (1000.f/((real32)FRAMES_PER_SEC))
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
 

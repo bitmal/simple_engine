@@ -1,4 +1,5 @@
 #include "utils.h"
+#include <SDL3/SDL_oldnames.h>
 #define MEMORY_DEBUG
 
 #include "engine.h"
@@ -113,8 +114,10 @@ main(int argc, char **argv)
     struct game *gameContext = game_init(&app);
     app.inputContext->dataPtr = gameContext;
 
-    u32 previousTicks = SDL_GetTicks();
-    u32 elapsedTicks = 0;
+    u64 previousTicksWide = SDL_GetTicks64();
+    u32 previousTicks = SDL_GetTicks64();
+    u64 elapsedTicksWide = 0;
+    u64 elapsedNS = 0;
     u32 elapsedMS = 0;
 
     utils_set_elapsed_time_ptr(&elapsedMS);
@@ -237,6 +240,7 @@ main(int argc, char **argv)
             }
         }
 
+        u64 currentTicksWide = SDL_GetTicks64();
         u32 currentTicks = SDL_GetTicks();
         elapsedTicks += currentTicks - previousTicks;
         previousTicks = currentTicks;

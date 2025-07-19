@@ -5,19 +5,23 @@
 
 #include <stdint.h>
 
-typedef i64 memory_id;
-#define MEMORY_ID_NULL ((memory_id)-1)
+typedef u64 memory_id;
+#define MEMORY_ID_NULL ((memory_id)0)
+#define MEMORY_ID_MAX ((memory_id)UINT64_MAX)
 
-typedef i32 memory_int_id;
-#define MEMORY_INT_ID_NULL ((memory_int_id)-1)
+typedef u32 memory_int_id;
+#define MEMORY_INT_ID_NULL ((memory_int_id)0)
+#define MEMORY_INT_ID_MAX ((memory_id)UINT32_MAX)
 
-typedef i16 memory_short_id;
-#define MEMORY_SHORT_ID_NULL ((memory_short_id)-1)
+typedef u16 memory_short_id;
+#define MEMORY_SHORT_ID_NULL ((memory_short_id)0)
+#define MEMORY_SHORT_ID_MAX ((memory_id)UINT16_MAX)
 
-typedef i8 memory_byte_id;
-#define MEMORY_BYTE_ID_NULL ((memory_byte_id)-1)
+typedef u8 memory_byte_id;
+#define MEMORY_BYTE_ID_NULL ((memory_byte_id)0)
+#define MEMORY_BYTE_ID_MAX ((memory_id)UINT8_MAX)
 
-typedef u32 memory_error_code;
+typedef u8 memory_error_code;
 
 enum memory_page_status_t
 {
@@ -37,33 +41,7 @@ enum memory_event_type
     MEMORY_EVENT_TYPE_COUNT
 };
 
-struct memory_event
-{
-    memory_id eventId;
-    enum memory_event_type type;
-    u32 elapsedMS;
-
-    union
-    {
-        struct
-        {
-            memory_id userSectionId;
-            memory_id allocId;
-            u64 allocSize;
-            u64 allocByteOffset;
-        } as_alloc;
-        
-        struct
-        {
-            memory_id userSectionId;
-            memory_id allocId;
-            u64 allocSize;
-            u64 allocByteOffset;
-        } as_free;
-    };
-};
-
-#define MEMORY_MAX_USER_REGION_SECTIONS (INT8_MAX)
+#define MEMORY_MAX_USER_REGION_PAGES (INT8_MAX)
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
 
 struct memory_context;
@@ -103,12 +81,16 @@ struct memory_context;
     MEMORY_BEGIN_DECLARATION(name) \
     MEMORY_END_DECLARATION(name, heapCapacity)
 
+#define MEMORY_ERROR_NULL_ID ((memory_error_code)0)
+#define MEMORY_OK ((memory_error_code)1)
+#define MEMORY_ERROR_INDEX_OUT_OF_RANGE ((memory_error_code)2)
+
 memory_error_code
-memory_create_debug_context(u8 *correspondingHeaps[3], i32 heapOffsets[3], u64 labelRegionCapacity, u64 smartPtrRegionCapacity, 
+memory_create_debug_context(u8 *correspondingHeaps[3], p64 heapOffsets[3], u64 labelRegionCapacity, u64 smartPtrRegionCapacity, 
     u64 userRegionCapacity, memory_short_id *outputMemoryDebugContextId);
 
 memory_error_code
-memory_create_context(u8 *heap, u64 heapOffset, u64 heapCapacity, memory_short_id *outputMemoryContextId);
+memory_create_context(u8 *heap, p64 heapOffset, u64 heapCapacity, memory_short_id *outputMemoryContextId);
 
 memory_error_code
 memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_byte_id *outputPageId);

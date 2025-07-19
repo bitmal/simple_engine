@@ -1,11 +1,12 @@
 #include "utils.h"
-#include "memory.h"
 
+#include <stdlib.h>
 #include <assert.h>
 
-static const u32 *g_ELAPSED_TIME_PTR = NULL;
+static const u64 *g_ELAPSED_TIME_PTR = NULL;
+static const u32 *g_ELAPSED_TIME_INT_PTR = NULL;
 
-u64 
+utils_hash 
 utils_str_hash_func(const char *k)
 {
     // https://cp-algorithms.com/string/string-hashing.html
@@ -23,100 +24,60 @@ utils_str_hash_func(const char *k)
         pPow = (pPow*p)%m;
     }
     
-    return hash;
+    return (utils_hash)hash;
 }
 
 void
-utils_sort(struct memory *mem, void *data, size_t stride, size_t length, utils_sort_compare_func compareFunc, 
-           utils_sort_replace_func replaceFunc, void *userPtr)
-{
-    void *elementCopy = memory_alloc(mem, stride);
-
-    u8 *begin = data;
-    const u8 *end = (u8 *)data + length*stride;
-
-    for (u8 *iter = begin + stride; iter != end; iter += stride)
-    {
-        u8 *location;
-        u8 *element = iter;
-        memcpy(elementCopy, element, stride);
-        const size_t elementIndex = (iter - begin)/stride;
-
-        size_t minIndex = 0;
-        u8 *minElement = begin;
-        size_t range = length;
-
-        while(B32_TRUE)
-        {
-            const size_t halfIndex = minIndex + (range/2 - 1);
-            const size_t maxIndex = minIndex + (range - 1);
-            void *halfElement = begin + (halfIndex*stride);
-            void *maxElement = begin + (maxIndex*stride);
-
-            if (compareFunc(mem, minElement, minIndex, element, elementIndex, userPtr) >= 0)
-            {
-                location = minElement;
-                break;
-            }
-            else if (compareFunc(mem, halfElement, halfIndex, element, elementIndex, userPtr) == 0)
-            {
-                location = halfElement;
-                break;
-            }
-            else if (compareFunc(mem, maxElement, maxIndex, element, elementIndex, userPtr) >= 0)
-            {
-                location = maxElement;
-                break;
-            }
-            else
-            {
-                if (compareFunc(mem, halfElement, halfIndex, element, elementIndex, userPtr) < 0)
-                {
-                    range = halfIndex - minIndex;
-
-                    minElement += stride;
-
-                    ++minIndex;
-                }
-                else
-                {
-                    range = maxIndex - halfIndex;
-                    minElement = (u8 *)halfElement + stride;
-                }
-            }
-        }
-
-        u8 *j = (u8 *)element - stride;
-        size_t jdex = elementIndex - 1;
-
-        for (; j >= location; j -= stride, --jdex)
-        {
-            replaceFunc(mem, j + stride, jdex + 1, j, jdex, stride, userPtr);
-        }
-
-        replaceFunc(mem, j + stride, jdex + 1, elementCopy, elementIndex, stride, userPtr);
-    }
-
-    memory_free(mem, elementCopy);
-}
-
-void
-utils_set_elapsed_time_ptr(const u32 *ptr)
+utils_set_elapsed_time_ptr(u64 *ptr)
 {
     g_ELAPSED_TIME_PTR = ptr;
 }
 
-b32
-utils_get_elapsed_ms(u32 *outputPtr)
+void
+utils_set_elapsed_time_int_ptr(u32 *ptr)
 {
-    assert(outputPtr);
+    g_ELAPSED_TIME_INT_PTR = ptr;
+}
 
-    if (g_ELAPSED_TIME_PTR)
+u64
+utils_get_elapsed_ns()
+{
+    return g_ELAPSED_TIME_PTR ? (*g_ELAPSED_TIME_PTR) : 0;
+}
+
+u32
+utils_get_elapsed_ms()
+{
+    return g_ELAPSED_TIME_INT_PTR ? (*g_ELAPSED_TIME_INT_PTR) : 0;
+}
+
+u64
+utils_generate_random_u64(u16 *seedPtr)
+{
+    if (seedPtr)
     {
-        *outputPtr = *g_ELAPSED_TIME_PTR;
-
-        return B32_TRUE;
+        seed48(seedPtr);
     }
 
-    return B32_FALSE;
+    return lrand48();
+}
+
+real64
+utils_generate_random_positive_normalized_real64(i64 *seedPtr)
+{
+    if (seedPtr)
+    {
+        srand48(*seedPtr);
+    }
+
+    return drand48();
+}
+
+i32
+utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr)
+{
+    // TODO:
+    assert(B32_FALSE);
+
+    return 0;
 }
