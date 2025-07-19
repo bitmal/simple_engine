@@ -6,9 +6,14 @@
 static const u64 *g_ELAPSED_TIME_PTR = NULL;
 static const u32 *g_ELAPSED_TIME_INT_PTR = NULL;
 
-utils_hash 
-utils_str_hash_func(const char *k)
+b32 
+utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult)
 {
+    if (!outResult || !k)
+    {
+        return B32_FALSE;
+    }
+
     // https://cp-algorithms.com/string/string-hashing.html
     // # 'Polynomial Rolling Hash Function'
     // # scroll to 'Calculation of the Hash of a String'
@@ -23,8 +28,25 @@ utils_str_hash_func(const char *k)
         hash = (hash + (*c - 'a' + 1)*pPow)%m;
         pPow = (pPow*p)%m;
     }
-    
-    return (utils_hash)hash;
+
+    outResult->hash = hash;
+    outResult->stringByteSize = strlen(k) + 1;
+
+    return B32_TRUE;
+}
+
+b32 
+utils_generate_string_from_hash(utils_hash hash, u64 outStrByteSize, char *outStr)
+{
+    // TODO:
+    assert(B32_FALSE);
+
+    if (!outStr)
+    {
+        return B32_FALSE;
+    }
+
+    return B32_TRUE;
 }
 
 void
@@ -76,8 +98,9 @@ utils_generate_random_positive_normalized_real64(i64 *seedPtr)
 i32
 utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr)
 {
-    // TODO:
     assert(B32_FALSE);
+    
+    // TODO:
 
     return 0;
 }

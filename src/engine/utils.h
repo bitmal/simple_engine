@@ -17,11 +17,20 @@ typedef i32 (*utils_sort_compare_func)(void *database, void *lhs, void *rhs, u32
 typedef void (*utils_sort_replace_func)(void *database, void *lhsPtr, void *rhsPtr, u32 elementSize, 
     void *userPtr);
 
+struct utils_string_hash
+{
+    u64 stringByteSize;
+    u64 hash;
+};
+
 typedef u64 utils_hash_u64;
 typedef utils_hash_u64 utils_hash;
 
-utils_hash 
-utils_str_hash_func(const char *k);
+b32 
+utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult);
+
+b32 
+utils_generate_string_from_hash(utils_hash hash, u64 outStrByteSize, char *outStr);
 
 void
 utils_set_elapsed_time_ptr(u64 *ptr);
@@ -42,6 +51,12 @@ real64
 utils_generate_random_positive_normalized_real64(i64 *seedPtr);
 
 #define UTILS_GENERATE_RANDOM_POSITIVE_REAL64(seedPtr) (utils_generate_random_normalized_real64(seedPtr)*DBL_MAX)
+
+u64
+utils_generate_random_u64_from_string(const char *str);
+
+real64
+utils_generate_random_positive_normalized_real64_from_string(const char *str);
 
 i32
 utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr);
