@@ -94,6 +94,20 @@ struct memory_event
     };
 };
 
+static i64 g_MEMORY_GLOBAL_SEED;
+
+void
+memory_set_global_seed(i64 seed)
+{
+    g_MEMORY_GLOBAL_SEED = seed;
+}
+
+i64
+memory_get_global_seed()
+{
+    return g_MEMORY_GLOBAL_SEED;
+}
+
 static memory_error_code
 _memory_generate_unique_byte_id(i64 *seedPtr, memory_byte_id *outResult)
 {
@@ -391,11 +405,9 @@ memory_create_debug_context(u8 *heap, const char *label, p64 heapByteOffset, p64
     }
 #endif
 
-    i64 seed = 0; // TODO: generate a seed
-
     memory_error_code idGenResultCode;
 
-    if ((idGenResultCode = _memory_generate_unique_short_id(&seed, outputMemoryDebugContextId)) != MEMORY_OK)
+    if ((idGenResultCode = _memory_generate_unique_short_id(&g_MEMORY_GLOBAL_SEED, outputMemoryDebugContextId)) != MEMORY_OK)
     {
         switch (idGenResultCode)
         {
@@ -474,9 +486,66 @@ memory_create_debug_context(u8 *heap, const char *label, p64 heapByteOffset, p64
 memory_error_code
 memory_create_context(u8 *heap, p64 heapOffset, u64 heapCapacity, memory_short_id *outputMemoryContextId)
 {
-    assert(0);
+    if (!heap)
+    {
+        fprintf(stderr, "memory_create_context(%d): Provided heap cannot be NULL.\n", __LINE__);
+        
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
     
-    // TODO:
+    if (!outputMemoryContextId)
+    {
+        fprintf(stderr, "memory_create_context(%d): Output parameter is NULL.\n", __LINE__);
+        
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+    
+    memory_error_code idGenResultCode;
+
+    if ((idGenResultCode = _memory_generate_unique_short_id(&g_MEMORY_GLOBAL_SEED, outputMemoryContextId)) != MEMORY_OK)
+    {
+        switch (idGenResultCode)
+        {
+            case MEMORY_ERROR_RANDOM_NOT_SEEDED:
+            {
+                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Did not provide a seed.\n", __LINE__);
+                
+                return MEMORY_ERROR_RANDOM_NOT_SEEDED;
+            } break;
+
+            default:
+            {
+                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Unknown.\n", __LINE__);
+
+                return MEMORY_ERROR_UNKNOWN;
+            } break;
+        }
+    }
+    
+    struct memory_context *contextPtr;
+    
+    memory_error_code contextAllocResultCode;
+
+    if ((contextAllocResultCode = _memory_alloc_context(&contextPtr, B32_FALSE)) != MEMORY_OK)
+    {
+        switch (contextAllocResultCode)
+        {
+            case MEMORY_ERROR_NULL_ID:
+            {
+                fprintf(stderr, "memory_create_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
+                     __LINE__);
+
+                return MEMORY_ERROR_FAILED_ALLOCATION;
+            } break;
+
+            default:
+            {
+                fprintf(stderr, "memory_create_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
+                     __LINE__);
+                return MEMORY_ERROR_UNKNOWN;
+            } break;
+        }
+    }
 
     return MEMORY_OK;
 }

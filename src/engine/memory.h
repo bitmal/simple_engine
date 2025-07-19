@@ -67,6 +67,12 @@ memory_realloc_raw_heap(u8 **outResult, u64 byteSize);
 memory_error_code
 memory_free_raw_heap(u8 **heap);
 
+void
+memory_set_global_seed(i64 seed);
+
+i64
+memory_get_global_seed();
+
 memory_error_code
 memory_create_debug_context(u8 *heap, const char *label, p64 heapByteOffset, p64 labelRegionByteOffset, u64 labelRegionByteCapacity, 
     p64 safePtrRegionByteOffset, u64 safePtrRegionByteCapacity, p64 userRegionByteOffset, u64 userRegionByteCapacity, memory_short_id *outputMemoryDebugContextId);
