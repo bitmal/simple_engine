@@ -33,10 +33,10 @@ b32
 utils_generate_string_from_hash(utils_hash hash, u64 outStrByteSize, char *outStr);
 
 void
-utils_set_elapsed_time_ptr(u64 *ptr);
+utils_set_elapsed_time_ns_ptr(u64 *ptr);
 
 void
-utils_set_elapsed_time_int_ptr(u32 *ptr);
+utils_set_elapsed_time_ms_ptr(u32 *ptr);
 
 u64
 utils_get_elapsed_ns();

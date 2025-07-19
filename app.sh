@@ -19,22 +19,22 @@ else
             if [ "$2" == "--verbose" ]
             then
                 gcc -std=c11 -g -Wall -pedantic -o simple_engine -L/home/derek/.src/simple_engine/lib/cimgui \
-                Wl,--enable-new-dtags,-rpath,/home/derek/.src/simple_engine/lib/cimgui ../src/engine/main.c \
-                lm -lGL -lSDL3 -lGLEW -lcimgui -ldl >& build.log
+                    Wl,--enable-new-dtags,-rpath,/home/derek/.src/simple_engine/lib/cimgui ../src/engine/main.c \
+                    lm -lGL -lSDL3 -lGLEW -lcimgui -ldl >& build.log
             else
                 if [ "$2" == "--warning" ]
                 then
                     gcc -std=c11 -g -pedantic -o simple_engine -L/home/derek/.src/simple_engine/lib/cimgui \
-                    Wl,--enable-new-dtags,-rpath,/home/derek/.src/simple_engine/lib/cimgui ../src/engine/main.c \
-                    lm -lGL -lSDL3 -lGLEW -lcimgui -ldl >& build.log
+                        Wl,--enable-new-dtags,-rpath,/home/derek/.src/simple_engine/lib/cimgui ../src/engine/main.c \
+                        lm -lGL -lSDL3 -lGLEW -lcimgui -ldl >& build.log
                 else
                     gcc -std=c11 -g -o simple_engine -L/home/derek/.src/simple_engine/lib/cimgui \
-                    Wl,--enable-new-dtags,-rpath,/home/derek/.src/simple_engine/lib/cimgui ../src/engine/main.c \
-                    lm -lGL -lSDL3 -lGLEW -lcimgui -ldl >& build.log
+                        Wl,--enable-new-dtags,-rpath,/home/derek/.src/simple_engine/lib/cimgui ../src/engine/main.c \
+                        lm -lGL -lSDL3 -lGLEW -lcimgui -ldl >& build.log
                 fi
             fi
 
-            cat build.log 2> exec echo
+            exec cat build.log
 
             popd
         else
