@@ -3,7 +3,9 @@
 #include "utils.h"
 
 #include <stdint.h>
+#include <math.h>
 #include <time.h>
+#include <assert.h>
 
 #if defined(_WIN32) || defined(__WIN32) || defined(WIN32)
     #include <malloc.h>
@@ -86,44 +88,124 @@ struct memory_event
     };
 };
 
-static memory_byte_id
-_memory_generate_unique_byte_id()
+static memory_error_code
+_memory_generate_unique_byte_id(i64 *seedPtr, memory_byte_id *outResult)
 {
-    // TODO: generate using a seeded hash
-    static i8 counter = -1;
+    assert(outResult);
+    
+    static b32 isSeeded = B32_FALSE;
 
-    return ++counter;
+    if (seedPtr)
+    {
+        isSeeded = B32_TRUE;
+    }
+    
+    memory_error_code errorResult;
+
+    if (isSeeded)
+    {
+        *outResult = (memory_byte_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64(seedPtr)*UINT8_MAX));
+        errorResult = MEMORY_OK;
+    }
+    else
+    {
+        *outResult = MEMORY_BYTE_ID_NULL;
+        errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+    }
+
+   return errorResult;
 }
 
-static memory_short_id
-_memory_generate_unique_short_id()
+static memory_error_code
+_memory_generate_unique_short_id(i64 *seedPtr, memory_short_id *outResult)
 {
-    // TODO: generate using a seeded hash
-    static i16 counter = -1;
+    assert(outResult);
+    
+    static b32 isSeeded = B32_FALSE;
 
-    return ++counter;
+    if (seedPtr)
+    {
+        isSeeded = B32_TRUE;
+    }
+    
+    memory_error_code errorResult;
+
+    if (isSeeded)
+    {
+        *outResult = (memory_short_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64(seedPtr)*UINT16_MAX));
+        errorResult = MEMORY_OK;
+    }
+    else
+    {
+        *outResult = MEMORY_SHORT_ID_NULL;
+        errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+    }
+
+   return errorResult;
 }
 
-static memory_int_id
-_memory_generate_unique_int_id()
+static memory_error_code
+_memory_generate_unique_int_id(i64 *seedPtr, memory_int_id *outResult)
 {
-    u64 randNum = utils_generate_random_u64();
+    assert(outResult);
+    
+    static b32 isSeeded = B32_FALSE;
 
-    return ((real64)randNum/UINT64_MAX)*INT32_MAX;
+    if (seedPtr)
+    {
+        isSeeded = B32_TRUE;
+    }
+    
+    memory_error_code errorResult;
+
+    if (isSeeded)
+    {
+        *outResult = (memory_int_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64(seedPtr)*UINT32_MAX));
+        errorResult = MEMORY_OK;
+    }
+    else
+    {
+        *outResult = MEMORY_INT_ID_NULL;
+        errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+    }
+
+   return errorResult;
 }
 
-static memory_id
-_memory_generate_unique_id()
+static memory_error_code
+_memory_generate_unique_id(u16 *seedPtr, memory_id *outResult)
 {
-    u64 randNum = utils_generate_random_u64();
+    assert(outResult);
+    
+    static b32 isSeeded = B32_FALSE;
 
-    return (u64)(((real64)randNum/UINT64_MAX)*UINT64_MAX)%UINT64_MAX;
+    if (seedPtr)
+    {
+        isSeeded = B32_TRUE;
+    }
+    
+    memory_error_code errorResult;
+
+    if (isSeeded)
+    {
+        *outResult = (memory_id)(utils_generate_random_u64(seedPtr));
+        errorResult = MEMORY_OK;
+    }
+    else
+    {
+        *outResult = MEMORY_INT_ID_NULL;
+        errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+    }
+
+   return errorResult;
 }
 
 memory_error_code
 memory_create_debug_context(u8 *correspondingHeaps[3], p64 heapOffsets[3], u64 labelRegionCapacity, u64 smartPtrRegionCapacity, 
     u64 userRegionCapacity, memory_short_id *outputMemoryDebugContextId)
 {
+    assert(0);
+
     if (!outputMemoryDebugContextId)
     {
         return MEMORY_ERROR_NULL_ID;
@@ -137,5 +219,9 @@ memory_create_debug_context(u8 *correspondingHeaps[3], p64 heapOffsets[3], u64 l
 memory_error_code
 memory_create_context(u8 *heap, p64 heapOffset, u64 heapCapacity, memory_short_id *outputMemoryContextId)
 {
+    assert(0);
+    
+    // TODO:
+
     return MEMORY_OK;
 }

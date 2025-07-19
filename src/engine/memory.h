@@ -84,6 +84,7 @@ struct memory_context;
 #define MEMORY_ERROR_NULL_ID ((memory_error_code)0)
 #define MEMORY_OK ((memory_error_code)1)
 #define MEMORY_ERROR_INDEX_OUT_OF_RANGE ((memory_error_code)2)
+#define MEMORY_ERROR_RANDOM_NOT_SEEDED ((memory_error_code)2)
 
 memory_error_code
 memory_create_debug_context(u8 *correspondingHeaps[3], p64 heapOffsets[3], u64 labelRegionCapacity, u64 smartPtrRegionCapacity, 

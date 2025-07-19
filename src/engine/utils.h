@@ -44,13 +44,14 @@ utils_get_elapsed_ns();
 u32
 utils_get_elapsed_ms();
 
+// seedPtr intended length: 3 elements (48 bytes)
 u64
 utils_generate_random_u64(u16 *seedPtr);
 
 real64
 utils_generate_random_positive_normalized_real64(i64 *seedPtr);
 
-#define UTILS_GENERATE_RANDOM_POSITIVE_REAL64(seedPtr) (utils_generate_random_normalized_real64(seedPtr)*DBL_MAX)
+#define UTILS_GENERATE_RANDOM_POSITIVE_REAL64(seedPtr) (utils_generate_random_positive_normalized_real64(seedPtr)*DBL_MAX)
 
 u64
 utils_generate_random_u64_from_string(const char *str);

@@ -38,7 +38,7 @@ utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResu
 b32 
 utils_generate_string_from_hash(utils_hash hash, u64 outStrByteSize, char *outStr)
 {
-    // TODO:
+    // TODO: reverse the hash into a string
     assert(B32_FALSE);
 
     if (!outStr)
@@ -99,7 +99,7 @@ i32
 utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr)
 {
     assert(B32_FALSE);
-    
+
     // TODO:
 
     return 0;
