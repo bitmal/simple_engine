@@ -392,11 +392,9 @@ memory_create_debug_context(u8 *heap, const char *label, p64 heapByteOffset, p64
         p64 maxSafePtrRegionIndex = safePtrRegionByteOffset + safePtrRegionByteCapacity - 1;
         p64 maxUserRegionIndex = userRegionByteOffset + userRegionByteCapacity - 1;
         
-        if ((labelRegionByteOffset >= safePtrRegionByteOffset) || (labelRegionByteOffset >= userRegionByteOffset) ||
-            (labelRegionByteOffset <= maxSafePtrRegionIndex) || (labelRegionByteOffset <= maxUserRegionIndex) ||
-            (maxLabelRegionIndex >= safePtrRegionByteOffset) || (maxLabelRegionIndex <= maxSafePtrRegionIndex) ||
-            (safePtrRegionByteOffset >= userRegionByteOffset) || (safePtrRegionByteOffset <= maxUserRegionIndex) ||
-            (maxSafePtrRegionIndex <= maxUserRegionIndex))
+        if ((((labelRegionByteOffset >= safePtrRegionByteOffset) && (labelRegionByteOffset <= maxSafePtrRegionIndex)) ||
+            ((labelRegionByteOffset >= userRegionByteOffset) && (labelRegionByteOffset <= maxUserRegionIndex))) ||
+            ((safePtrRegionByteOffset >= userRegionByteOffset) && (safePtrRegionByteOffset <= maxUserRegionIndex)))
         {
             fprintf(stderr, "memory_create_debug_context(%d): Heap regions out of byte index range.\n", __LINE__);
             
