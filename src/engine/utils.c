@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <stdlib.h>
+#include <math.h>
 #include <assert.h>
 
 static const u64 *g_ELAPSED_TIME_PTR = NULL;
@@ -81,7 +82,7 @@ utils_generate_random_u64(u16 *seedPtr)
         seed48(seedPtr);
     }
 
-    return lrand48();
+    return (u64)lrand48();
 }
 
 real64
@@ -93,6 +94,17 @@ utils_generate_random_positive_normalized_real64(i64 *seedPtr)
     }
 
     return drand48();
+}
+
+i64
+utils_generate_random_sign64(u16 *seedPtr)
+{
+    if (seedPtr)
+    {
+        seed48(seedPtr);
+    }
+
+    return (i64)(round((real64)lrand48()/INT64_MAX));
 }
 
 i32

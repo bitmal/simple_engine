@@ -59,6 +59,9 @@ utils_generate_random_u64_from_string(const char *str);
 real64
 utils_generate_random_positive_normalized_real64_from_string(const char *str);
 
+i64
+utils_generate_random_sign64(u16 *seedPtr);
+
 i32
 utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr);
 
