@@ -42,7 +42,6 @@ struct memory_user_region_page_allocator
     u64 byteSize;
 };
 
-#define MEMORY_DEBUG
 struct memory_context
 {
     memory_id id;
@@ -50,16 +49,23 @@ struct memory_context
     struct memory_allocator *freeList;
     struct memory_allocator *tailFree;
     u64 userRegionPageByteOffsets[MEMORY_MAX_USER_REGION_PAGES];
-    u8 *heaps;
-#if defined(MEMORY_DEBUG)
+    u8 *heap;
+};
+
+struct memory_debug_context
+{
+    struct memory_context _;
+
     char label[MEMORY_MAX_NAME_LENGTH + 1];
-    u64 labelRegionBytesCapacity;
-    u64 smartPtrRegionBytesCapacity;
-    u64 userRegionBytesCapacity;
-    u32 eventQueueCapacity;
+    p64 labelRegionByteOffset;
+    u64 labelRegionByteCapacity;
+    p64 safePtrRegionByteOffset;
+    u64 safePtrRegionByteCapacity;
+    p64 userRegionByteOffset;
+    u64 userRegionByteCapacity;
     u32 eventQueueReadIndex;
     u32 eventQueueWriteIndex;
-#endif
+    u32 eventQueueCapacity;
 };
 
 struct memory_event
@@ -200,18 +206,267 @@ _memory_generate_unique_id(u16 *seedPtr, memory_id *outResult)
    return errorResult;
 }
 
-memory_error_code
-memory_create_debug_context(u8 *correspondingHeaps[3], p64 heapOffsets[3], u64 labelRegionCapacity, u64 smartPtrRegionCapacity, 
-    u64 userRegionCapacity, memory_short_id *outputMemoryDebugContextId)
+static memory_error_code
+_memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
 {
-    assert(0);
-
-    if (!outputMemoryDebugContextId)
+    if (!outMemoryContext)
     {
-        return MEMORY_ERROR_NULL_ID;
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+    
+    static struct memory_context *memoryContextArr = NULL;
+    static u16 memoryContextCount = 0;
+    
+    static struct memory_debug_context *memoryDebugContextArr = NULL;
+    static u16 memoryDebugContextCount = 0;
+
+    u16 totalMemoryContexts = memoryContextCount + memoryDebugContextCount;
+
+    struct memory_context *memoryContextPtr;
+
+    if (isDebug)
+    {
+        u16 index = memoryDebugContextCount;
+        {
+            memory_error_code allocationResultCode;
+
+            if (memoryDebugContextCount > 0)
+            {
+                allocationResultCode = memory_realloc_raw_heap((u8 **)&memoryDebugContextArr, sizeof(struct memory_debug_context)*(++memoryDebugContextCount));
+            }
+            else 
+            {
+                allocationResultCode = memory_alloc_raw_heap((u8 **)&memoryDebugContextArr, sizeof(struct memory_debug_context)*(++memoryDebugContextCount));
+            }
+
+            if (allocationResultCode != MEMORY_OK)
+            {
+                return allocationResultCode;
+            }
+        }
+
+        memoryContextPtr = (struct memory_context *)&memoryDebugContextArr[index];
+    }
+    else 
+    {
+        u16 index = memoryContextCount;
+        {
+            memory_error_code allocationResultCode;
+
+            if (memoryContextCount > 0)
+            {
+                allocationResultCode = memory_realloc_raw_heap((u8 **)&memoryContextArr, sizeof(struct memory_context)*(++memoryContextCount));
+            }
+            else 
+            {
+                allocationResultCode = memory_alloc_raw_heap((u8 **)&memoryContextArr, sizeof(struct memory_context)*(++memoryContextCount));
+            }
+
+            if (allocationResultCode != MEMORY_OK)
+            {
+                return allocationResultCode;
+            }
+        }        
+
+        memoryContextPtr = (struct memory_context *)&memoryContextArr[index];
     }
 
-    *outputMemoryDebugContextId = _memory_generate_unique_short_id(); // TODO: seed ???
+    *outMemoryContext = memoryContextPtr;
+
+    if (isDebug)
+    {
+        ++memoryDebugContextCount;
+    }
+    else
+    {
+        ++memoryContextCount;
+    }
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+memory_alloc_raw_heap(u8 **outResult, u64 byteSize)
+{
+    if (!outResult)
+    {
+        fprintf(stderr, "memory_alloc_raw_heap(%d): Out parameter cannot be NULL.\n", __LINE__);
+
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+
+    if (byteSize < 1)
+    {
+        fprintf(stderr, "memory_alloc_raw_heap(%d): ByteSize < 1. Failure to allocate.\n", __LINE__);
+        
+        return MEMORY_ERROR_ZERO_PARAMETER;
+    }
+
+    *outResult = malloc(byteSize);
+
+    if (!outResult)
+    {
+        fprintf(stderr, "memory_alloc_raw_heap(%d): Failure to allocate raw heap.\n", __LINE__);
+
+        return MEMORY_ERROR_FAILED_ALLOCATION;
+    }
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+memory_realloc_raw_heap(u8 **outResult, u64 byteSize)
+{
+    if (!outResult)
+    {
+        fprintf(stderr, "memory_realloc_raw_heap(%d): Out parameter cannot be NULL.\n", __LINE__);
+        
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+    
+    if (byteSize < 1)
+    {
+        fprintf(stderr, "memory_realloc_raw_heap(%d): ByteSize < 1. Failure to reallocate.\n", __LINE__);
+        
+        return MEMORY_ERROR_ZERO_PARAMETER;
+    }
+
+    *outResult = realloc(*outResult, byteSize);
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+memory_free_raw_heap(u8 **heap)
+{
+    if (!heap)
+    {
+        fprintf(stderr, "memory_free_raw_heap(%d): Failure to free raw heap. Parameter cannot be NULL.\n", __LINE__);
+
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+
+    free(*heap);
+
+    *heap = NULL;
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+memory_create_debug_context(u8 *heap, const char *label, p64 heapByteOffset, p64 labelRegionByteOffset, u64 labelRegionByteCapacity, 
+    p64 safePtrRegionByteOffset, u64 safePtrRegionByteCapacity, p64 userRegionByteOffset, u64 userRegionByteCapacity, memory_short_id *outputMemoryDebugContextId)
+{
+    if (!heap)
+    {
+        fprintf(stderr, "memory_create_debug_context(%d): Provided heap cannot be NULL.\n", __LINE__);
+        
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+    
+    if (!outputMemoryDebugContextId)
+    {
+        fprintf(stderr, "memory_create_debug_context(%d): Output parameter is NULL.\n", __LINE__);
+        
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+
+#ifdef MEMORY_DEBUG
+    // check byte offset bounds
+    {
+        p64 maxLabelRegionIndex = labelRegionByteOffset + labelRegionByteCapacity - 1;
+        p64 maxSafePtrRegionIndex = safePtrRegionByteOffset + safePtrRegionByteCapacity - 1;
+        p64 maxUserRegionIndex = userRegionByteOffset + userRegionByteCapacity - 1;
+        
+        if ((labelRegionByteOffset >= safePtrRegionByteOffset) || (labelRegionByteOffset >= userRegionByteOffset) ||
+            (labelRegionByteOffset <= maxSafePtrRegionIndex) || (labelRegionByteOffset <= maxUserRegionIndex) ||
+            (maxLabelRegionIndex >= safePtrRegionByteOffset) || (maxLabelRegionIndex <= maxSafePtrRegionIndex) ||
+            (safePtrRegionByteOffset >= userRegionByteOffset) || (safePtrRegionByteOffset <= maxUserRegionIndex) ||
+            (maxSafePtrRegionIndex <= maxUserRegionIndex))
+        {
+            fprintf(stderr, "memory_create_debug_context(%d): Heap regions out of byte index range.\n", __LINE__);
+            
+            return MEMORY_ERROR_INDEX_OUT_OF_RANGE;
+        }
+    }
+#endif
+
+    i64 seed = 0; // TODO: generate a seed
+
+    memory_error_code idGenResultCode;
+
+    if ((idGenResultCode = _memory_generate_unique_short_id(&seed, outputMemoryDebugContextId)) != MEMORY_OK)
+    {
+        switch (idGenResultCode)
+        {
+            case MEMORY_ERROR_RANDOM_NOT_SEEDED:
+            {
+                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Did not provide a seed.\n", __LINE__);
+                
+                return MEMORY_ERROR_RANDOM_NOT_SEEDED;
+            } break;
+
+            default:
+            {
+                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Unknown.\n", __LINE__);
+
+                return MEMORY_ERROR_UNKNOWN;
+            } break;
+        }
+    }
+
+    struct memory_debug_context *debugContextPtr;
+
+    memory_error_code contextAllocResultCode;
+
+    if ((contextAllocResultCode = _memory_alloc_context((struct memory_context **)&debugContextPtr, B32_TRUE)) != MEMORY_OK)
+    {
+        switch (contextAllocResultCode)
+        {
+            case MEMORY_ERROR_NULL_ID:
+            {
+                fprintf(stderr, "memory_create_debug_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
+                     __LINE__);
+
+                return MEMORY_ERROR_FAILED_ALLOCATION;
+            } break;
+
+            default:
+            {
+                fprintf(stderr, "memory_create_debug_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
+                     __LINE__);
+                return MEMORY_ERROR_UNKNOWN;
+            } break;
+        }
+    }
+
+    debugContextPtr->_.id = *outputMemoryDebugContextId;
+    debugContextPtr->_.freeList = NULL;
+    debugContextPtr->_.tailFree = NULL;
+    debugContextPtr->_.bytesCapacity = labelRegionByteCapacity + userRegionByteCapacity + safePtrRegionByteCapacity;
+    debugContextPtr->_.heap = heap + heapByteOffset;
+
+    debugContextPtr->eventQueueCapacity = 0;
+    debugContextPtr->eventQueueReadIndex = 0;
+    debugContextPtr->eventQueueWriteIndex = 0;
+
+    if (label)
+    {
+        strncpy(debugContextPtr->label, label, MEMORY_MAX_NAME_LENGTH);
+    }
+    else 
+    {
+        debugContextPtr->label[0] = '\0';
+    }
+
+    debugContextPtr->labelRegionByteOffset = labelRegionByteOffset;
+    debugContextPtr->labelRegionByteCapacity = labelRegionByteCapacity;
+    
+    debugContextPtr->safePtrRegionByteOffset = safePtrRegionByteOffset;
+    debugContextPtr->safePtrRegionByteCapacity = safePtrRegionByteCapacity;
+    
+    debugContextPtr->userRegionByteOffset = userRegionByteOffset;
+    debugContextPtr->userRegionByteCapacity = userRegionByteCapacity;
 
     return MEMORY_OK;
 }

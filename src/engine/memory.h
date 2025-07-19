@@ -41,54 +41,35 @@ enum memory_event_type
     MEMORY_EVENT_TYPE_COUNT
 };
 
-#define MEMORY_MAX_USER_REGION_PAGES (INT8_MAX)
+#define MEMORY_MAX_USER_REGION_PAGES (MEMORY_SHORT_ID_MAX)
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
 
 struct memory_context;
 
-#define MEMORY_TYPE_NAME(name)name##_memory##_t
-#define MEMORY_TYPE_ALIAS(name)name##_memory
-#define MEMORY_PTR(name)((struct memory *)&MEMORY_TYPE_ALIAS(g_##name))
-#ifdef MEMORY_DEBUG
-    #define _MEMORY_DEFINE_HEAD(name) \
-        struct MEMORY_TYPE_NAME(name) \
-        { \
-            const u64 _internal;
-#else
-    #define _MEMORY_DEFINE_HEAD(typeName) \
-        typedef struct MEMORY_TYPE_NAME(name) \
-        {
-#endif
-#define MEMORY_BEGIN_DECLARATION(typeName) \
-    _MEMORY_DEFINE_HEAD(typeName) \
-        memory_id id; \
-        char label[MEMORY_MAX_NAME_LENGTH + 1]; \
-        u64 bytesCapacity; \
-        u64 labelRegionBytesCapacity; \
-        u64 smartPtrRegionBytesCapacity; \
-        u64 userRegionBytesCapacity; \
-        struct memory_allocator *freeList; \
-        struct memory_allocator *tailFree; \
-        u32 eventQueueCapacity; \
-        u32 eventQueueReadIndex; \
-        u32 eventQueueWriteIndex; \
-        u64 userSectionByteOffsets[MEMORY_MAX_USER_REGION_SECTIONS];
-#define MEMORY_END_DECLARATION(name, heapCapacity) \
-        u8 heap[heapCapacity]; \
-    }; \
-    static MEMORY_TYPE_ALIAS(name) g_##name##_memory
-#define MEMORY_BASIC_DECLARATION(typeName, heapCapacity) \
-    MEMORY_BEGIN_DECLARATION(name) \
-    MEMORY_END_DECLARATION(name, heapCapacity)
-
 #define MEMORY_ERROR_NULL_ID ((memory_error_code)0)
 #define MEMORY_OK ((memory_error_code)1)
-#define MEMORY_ERROR_INDEX_OUT_OF_RANGE ((memory_error_code)2)
-#define MEMORY_ERROR_RANDOM_NOT_SEEDED ((memory_error_code)2)
+#define MEMORY_ERROR_UNKNOWN ((memory_error_code)2)
+#define MEMORY_ERROR_INDEX_OUT_OF_RANGE ((memory_error_code)3)
+#define MEMORY_ERROR_RANDOM_NOT_SEEDED ((memory_error_code)4)
+#define MEMORY_ERROR_SIZE_TOO_SMALL ((memory_error_code)5)
+#define MEMORY_ERROR_NOT_IMPLEMENTED ((memory_error_code)6)
+#define MEMORY_ERROR_TOO_MANY_OBJECTS ((memory_error_code)7)
+#define MEMORY_ERROR_NULL_PARAMETER ((memory_error_code)8)
+#define MEMORY_ERROR_FAILED_ALLOCATION ((memory_error_code)9)
+#define MEMORY_ERROR_ZERO_PARAMETER ((memory_error_code)10)
 
 memory_error_code
-memory_create_debug_context(u8 *correspondingHeaps[3], p64 heapOffsets[3], u64 labelRegionCapacity, u64 smartPtrRegionCapacity, 
-    u64 userRegionCapacity, memory_short_id *outputMemoryDebugContextId);
+memory_alloc_raw_heap(u8 **outResult, u64 byteSize);
+
+memory_error_code
+memory_realloc_raw_heap(u8 **outResult, u64 byteSize);
+
+memory_error_code
+memory_free_raw_heap(u8 **heap);
+
+memory_error_code
+memory_create_debug_context(u8 *heap, const char *label, p64 heapByteOffset, p64 labelRegionByteOffset, u64 labelRegionByteCapacity, 
+    p64 safePtrRegionByteOffset, u64 safePtrRegionByteCapacity, p64 userRegionByteOffset, u64 userRegionByteCapacity, memory_short_id *outputMemoryDebugContextId);
 
 memory_error_code
 memory_create_context(u8 *heap, p64 heapOffset, u64 heapCapacity, memory_short_id *outputMemoryContextId);
