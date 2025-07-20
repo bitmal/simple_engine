@@ -42,6 +42,16 @@ MEMORY_DEFINE(graphics, GRAPHICS_MEMORY_SIZE);
 int 
 main(int argc, char **argv)
 {
+    {
+        u16 seedU16[3];
+
+        ((u32 *)&seedU16)[0] = 0;
+        seedU16[2] = 0;
+
+        utils_set_random_seed_u64(seedU16);
+        utils_set_random_seed_real64(0);
+    }
+
     #if 0
     void *cimguiPlugin = dlopen("libcimgui.so", RTLD_NOW);
     if (!cimguiPlugin)

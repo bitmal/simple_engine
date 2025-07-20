@@ -21,8 +21,11 @@ typedef i32 b32;
 #define B32_FALSE (b32)0
 #define B32_TRUE (b32)1
 
+typedef uint8_t p8;
+typedef uint16_t p16;
 typedef uint32_t p32;
 typedef uint64_t p64;
+typedef void * ptr;
 
 #define STATIC_ASSERT(condition, msg) \
     typedef u8 static_assertion_##msg[(condition) ? 1 : 0]

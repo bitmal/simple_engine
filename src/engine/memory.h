@@ -42,9 +42,16 @@ enum memory_event_type
 };
 
 #define MEMORY_MAX_USER_REGION_PAGES (MEMORY_SHORT_ID_MAX)
+#define MEMORY_MAX_RAW_ALLOCS (UINT16_MAX - 1)
+#define MEMORY_MAX_ALLOCS (UINT16_MAX - 1)
+#define MEMORY_RAW_ALLOC_KEY_REALLOC_MULTIPLIER 5
+#define MEMORY_ALLOC_DEFAULT_POINTER_COUNT
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
+#define MEMORY_HEAP_MIN_CAPACITY (UINT16_MAX - 1 + sizeof(u16)) // u16 is the heap header; and '0' is NULL alloc id
 
 struct memory_context;
+struct memory_raw_alloc_key;
+struct memory_alloc_key;
 
 #define MEMORY_ERROR_NULL_ID ((memory_error_code)0)
 #define MEMORY_OK ((memory_error_code)1)
@@ -57,28 +64,28 @@ struct memory_context;
 #define MEMORY_ERROR_NULL_PARAMETER ((memory_error_code)8)
 #define MEMORY_ERROR_FAILED_ALLOCATION ((memory_error_code)9)
 #define MEMORY_ERROR_ZERO_PARAMETER ((memory_error_code)10)
+#define MEMORY_ERROR_GLOBAL_RAW_ALLOC_ARRAY_FAILED_ALLOC ((memory_error_code)11)
+#define MEMORY_ERROR_GLOBAL_RAW_ALLOC_ARRAY_FAILED_REALLOC ((memory_error_code)12)
+#define MEMORY_ERROR_GLOBAL_RAW_ALLOC_DICT_FAILED_ALLOC ((memory_error_code)13)
+#define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_SMALL ((memory_error_code)14)
+#define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE ((memory_error_code)15)
 
 memory_error_code
-memory_alloc_raw_heap(u8 **outResult, u64 byteSize);
+memory_alloc_raw_heap(const struct memory_raw_alloc_key *outRawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
-memory_realloc_raw_heap(u8 **outResult, u64 byteSize);
+memory_realloc_raw_heap(const struct memory_raw_alloc_key *rawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
-memory_free_raw_heap(u8 **heap);
-
-void
-memory_set_global_seed(i64 seed);
-
-i64
-memory_get_global_seed();
+memory_free_raw_heap(const struct memory_raw_alloc_key **outRawAllocKeyPtr);
 
 memory_error_code
-memory_create_debug_context(u8 *heap, const char *label, p64 heapByteOffset, p64 labelRegionByteOffset, u64 labelRegionByteCapacity, 
-    p64 safePtrRegionByteOffset, u64 safePtrRegionByteCapacity, p64 userRegionByteOffset, u64 userRegionByteCapacity, memory_short_id *outputMemoryDebugContextId);
+memory_create_debug_context(u8 *heap, u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 heapLabelRegionByteCapacity, 
+    const char *contextLabel, memory_short_id *outputMemoryDebugContextId);
 
 memory_error_code
-memory_create_context(u8 *heap, p64 heapOffset, u64 heapCapacity, memory_short_id *outputMemoryContextId);
+memory_create_context(u8 *heap, u64 heapByteSize, 
+    u64 heapUserRegionByteCapacity, u64 heapUserRegionByteSize, memory_short_id *outputMemoryContextId);
 
 memory_error_code
 memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_byte_id *outputPageId);
@@ -99,15 +106,27 @@ memory_error_code
 memory_page_lock(memory_short_id memoryContextId, memory_byte_id pageId);
 
 memory_error_code
-memory_alloc(memory_short_id memoryContextId, memory_byte_id pageId, memory_id *outputAllocId);
+memory_page_clean(memory_short_id memoryContextId, memory_byte_id pageId);
 
 memory_error_code
-memory_dealloc(memory_short_id memoryContextId, memory_byte_id pageId, memory_id allocId);
+memory_page_reorder_all(memory_short_id memoryContextId);
+
+memory_error_code
+memory_alloc(memory_short_id memoryContextId, const struct memory_alloc_key *outputAllocKeyPtr);
+
+memory_error_code
+memory_dealloc(memory_short_id memoryContextId, const struct memory_alloc_key *allocKeyPtr);
+
+memory_error_code
+memory_map_alloc(memory_short_id memoryContextId, const struct memory_alloc_key *allocKeyPtr, void **outAllocPtr);
+
+memory_error_code
+memory_unmap_alloc(memory_short_id memoryContextId, const struct memory_alloc_key *allocKeyPtr, void **outAllocPtr);
 
 u64
-memory_sizeof(memory_short_id memoryContextId, memory_byte_id pageId, memory_id allocId);
+memory_sizeof(memory_short_id memoryContextId, const struct memory_alloc_key *allocKeyPtr);
 
-memory_error_code
-memory_clean(memory_short_id memoryContextId);
+u64
+memory_raw_alloc_sizeof(memory_short_id memoryContextId, const struct memory_raw_alloc_key *rawAllocKeyPtr);
 
 #endif

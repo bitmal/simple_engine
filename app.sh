@@ -42,11 +42,13 @@ else
             then
                 echo "Selected User Option: 'run'"
                 echo "Now running the engine!"
-                exec ./build/simple_engine
+                ./build/simple_engine >& ./run_debug.log
             else
                 echo "Warning: User failed to provide a runtime option, but out of sheer courtesy, the engine shall run in 'release' mode!"
-                exec ./build/simple_engine
+                ./build/simple_engine >& ./run_debug.log
             fi
+
+            cat ./run_debug.log
         fi
     fi
 fi
