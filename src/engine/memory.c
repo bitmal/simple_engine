@@ -16,48 +16,81 @@
 
 #define MEMORY_USER_REGION_PAGE_IDENTIFIER (0xDEAD)
 
-struct memory_user_region_page_header
+struct memory_allocator
 {
     u16 identifier;
-    enum memory_page_status_t status;
+    u8 dataByteOffset;
+    u8 __padding;
+    u16 _padding[5];
     u64 byteSize;
-    u16 allocCount;
+    struct memory_allocator *prev;
+    struct memory_allocator *next;
 };
 
-struct memory_safe_ptr
+struct memory_raw_allocation_info
+{
+    u16 rawAllocIndex;
+    struct memory_raw_alloc_info *prev;
+    struct memory_raw_alloc_info *next;
+    b32 isActive;
+};
+
+struct memory_raw_allocation_key
+{
+    memory_short_id rawAllocId;
+    u16 rawAllocBranchIndex;
+};
+
+struct memory_allocation_info
+{
+    memory_int_id allocId;
+    memory_int_id pageId;
+    struct memory_allocator *allocatorPtr;
+    struct memory_allocation_info *prev;
+    struct memory_allocation_info *next;
+    b32 isActive;
+};
+
+struct memory_allocation_key
+{
+    memory_int_id allocId;
+    u32 allocInfoIndex;
+};
+
+// if ((id - 1) < 1); then return NULL Error : return index
+struct memory_allocation_safe_ptr
 {
     memory_int_id safePtrId;
-    memory_short_id pageId;
     p64 allocByteOffset;
     u64 refCount;
     b32 isActive;
 };
 
-struct memory_raw_alloc_key
-{
-    memory_short_id rawAllocId;
-    u16 rawAllocMapBranchIndex;
-    struct memory_raw_alloc_key *prev;
-    struct memory_raw_alloc_key *next;
-    b32 isActive;
-};
-
-struct memory_alloc_key
-{
-    memory_int_id allocId;
-    memory_int_id safePtrId;
-    struct memory_alloc_key *prev;
-    struct memory_alloc_key *next;
-    b32 isActive;
-};
-
-struct memory_user_region_page_allocator
+struct memory_page_header
 {
     u16 identifier;
-    u8 byteOffset;
-    u8 __padding;
-    u16 _padding[5];
-    u64 byteSize;
+    u64 heapByteSize;
+    u32 allocationActiveCount;
+    u32 allocationFreeCount;
+    u32 allocationCapacity;
+    struct memory_allocation_info *allocationArr;
+    struct memory_allocation_info *allocationActiveList;
+    struct memory_allocation_info *allocationFreeList;
+    u32 allocatorActiveCount;
+    u32 allocatorFreeCount;
+    struct memory_allocator *allocatorActiveList;
+    struct memory_allocator *allocatorFreeList;
+};
+
+// (pageId, allocationKey) -->
+// page info by page index (id - 1; if not NULL ID) -->
+//  page header (using pageHeaderByteOffset) -->
+//      using allocation key -->
+//      
+struct memory_page_info
+{
+    u64 pageHeaderByteOffset;
+    enum memory_page_status_t status;
 };
 
 struct memory_context
@@ -65,14 +98,15 @@ struct memory_context
     memory_id id;
     p64 safePtrRegionByteOffset;
     u64 safePtrRegionByteCapacity;
-    p64 userRegionByteOffset;
-    u64 userRegionByteCapacity;
-    struct memory_allocator *allocActiveList;
-    struct memory_allocator *allocFreeList;
-    struct memory_safe_ptr *safePtrActiveList;
-    struct memory_safe_ptr *safePtrFreeList;
-    u64 userRegionPageByteOffsets[MEMORY_MAX_USER_REGION_PAGES];
+    p64 pagesRegionByteOffset;
+    u64 pagesRegionByteCapacity;
+    struct memory_page_info *pagesRegionInfoArr;
+    u16 pagesRegionCount;
+    u16 pagesRegionCapacity;
+    u32 pagesRegionActiveAllocationCount;
+    u32 pagesRegionFreeAllocationCount;
     u8 *heap;
+    b32 isDebug;
 };
 
 struct memory_debug_context
@@ -118,8 +152,8 @@ static u16 g_MEMORY_RAW_ALLOC_COUNT;
 static u16 g_MEMORY_RAW_ALLOC_CAPACITY;
 static p64 **g_MEMORY_RAW_ALLOC_MAP;
 static u16 g_MEMORY_RAW_ALLOC_MAP_BUCKET_COUNT;
-static struct memory_raw_alloc_key *g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST;
-static struct memory_raw_alloc_key *g_MEMORY_RAW_ALLOC_KEY_FREE_LIST;
+static struct memory_raw_alloc_info *g_MEMORY_RAW_ALLOC_INFO_ACTIVE_LIST;
+static struct memory_raw_alloc_info *g_MEMORY_RAW_ALLOC_INFO_FREE_LIST;
 
 static memory_error_code
 _memory_generate_unique_byte_id(memory_byte_id *outResult)
@@ -130,7 +164,7 @@ _memory_generate_unique_byte_id(memory_byte_id *outResult)
 
     if ((utils_get_is_random_seed_real64_set()))
     {
-        *outResult = (memory_byte_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*UINT8_MAX));
+        *outResult = (memory_byte_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*(UINT8_MAX - 1))) + 1;
         errorResult = MEMORY_OK;
     }
     else
@@ -151,7 +185,7 @@ _memory_generate_unique_short_id(memory_short_id *outResult)
 
     if ((utils_get_is_random_seed_real64_set()))
     {
-        *outResult = (memory_short_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*UINT16_MAX));
+        *outResult = (memory_short_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*(UINT16_MAX - 1))) + 1;
         errorResult = MEMORY_OK;
     }
     else
@@ -172,7 +206,7 @@ _memory_generate_unique_int_id(memory_int_id *outResult)
 
     if ((utils_get_is_random_seed_real64_set()))
     {
-        *outResult = (memory_int_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*UINT32_MAX));
+        *outResult = (memory_int_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*(UINT32_MAX - 1))) + 1;
         errorResult = MEMORY_OK;
     }
     else
@@ -193,12 +227,15 @@ _memory_generate_unique_id(memory_id *outResult)
 
     if ((utils_get_is_random_seed_u64_set()))
     {
-        *outResult = (memory_id)(utils_generate_random_u64());
+        memory_id resultId = (memory_id)utils_generate_random_u64();
+
+        *outResult = (resultId > 0) ? resultId : 1;
+
         errorResult = MEMORY_OK;
     }
     else
     {
-        *outResult = MEMORY_INT_ID_NULL;
+        *outResult = MEMORY_ID_NULL;
         errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
     }
 
@@ -212,6 +249,7 @@ _memory_raw_alloc_ok()
 
     if (!isInit)
     {
+        g_MEMORY_RAW_ALLOC_MAP_BUCKET_COUNT =
         isInit = B32_TRUE;
     }
 
@@ -430,7 +468,7 @@ memory_free_raw_heap(u8 **heap)
 }
 
 memory_error_code
-memory_create_debug_context(u64 heapSafePtrRegionByteCapacity, u64 heapUserRegionByteCapacity, u64 heapLabelRegionByteCapacity, 
+memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
     const char *contextLabel, memory_short_id *outputMemoryDebugContextId)
 {
     if (!outputMemoryDebugContextId)
@@ -440,18 +478,17 @@ memory_create_debug_context(u64 heapSafePtrRegionByteCapacity, u64 heapUserRegio
         return MEMORY_ERROR_NULL_PARAMETER;
     }
 
-    u64
+    u64 totalBytesToAllocate = safePtrRegionByteCapacity + pagesRegionByteCapacity + labelRegionByteCapacity;
 
 #ifndef MEMORY_DEBUG
     // check byte offset bounds
     {
-        if ()
     }
 #endif
 
     memory_error_code idGenResultCode;
 
-    if ((idGenResultCode = _memory_generate_unique_short_id(&g_MEMORY_GLOBAL_SEED, outputMemoryDebugContextId)) != MEMORY_OK)
+    if ((idGenResultCode = _memory_generate_unique_short_id(outputMemoryDebugContextId)) != MEMORY_OK)
     {
         switch (idGenResultCode)
         {
@@ -491,16 +528,23 @@ memory_create_debug_context(u64 heapSafePtrRegionByteCapacity, u64 heapUserRegio
             {
                 fprintf(stderr, "memory_create_debug_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
                      __LINE__);
+
                 return MEMORY_ERROR_UNKNOWN;
             } break;
         }
     }
 
     debugContextPtr->_.id = *outputMemoryDebugContextId;
-    debugContextPtr->_.freeList = NULL;
-    debugContextPtr->_.tailFree = NULL;
-    debugContextPtr->_.bytesCapacity = labelRegionByteCapacity + userRegionByteCapacity + safePtrRegionByteCapacity;
-    debugContextPtr->_.heap = heap + heapByteOffset;
+    debugContextPtr->_.pagesRegionActiveAllocationCount = 0;
+    debugContextPtr->_.pagesRegionFreeAllocationCount = 0;
+    debugContextPtr->_.pagesRegionCount = 0;
+    debugContextPtr->_.pagesRegionByteCapacity = pagesRegionByteCapacity;
+    debugContextPtr->_.pagesRegionByteOffset = (p64)(safePtrRegionByteCapacity + labelRegionByteCapacity);
+    debugContextPtr->_.pagesRegionInfoArr = NULL;
+    debugContextPtr->_.safePtrRegionByteCapacity = safePtrRegionByteCapacity;
+    debugContextPtr->_.safePtrRegionByteOffset = 0;
+    debugContextPtr->_.heap = malloc(totalBytesToAllocate);
+    debugContextPtr->_.pagesRegionCapacity = 0;
 
     debugContextPtr->eventQueueCapacity = 0;
     debugContextPtr->eventQueueReadIndex = 0;
@@ -515,14 +559,11 @@ memory_create_debug_context(u64 heapSafePtrRegionByteCapacity, u64 heapUserRegio
         debugContextPtr->label[0] = '\0';
     }
 
-    debugContextPtr->labelRegionByteOffset = labelRegionByteOffset;
+    debugContextPtr->eventQueueCapacity = 0;
+    debugContextPtr->eventQueueReadIndex = 0;
+    debugContextPtr->eventQueueWriteIndex = 0;
     debugContextPtr->labelRegionByteCapacity = labelRegionByteCapacity;
-    
-    debugContextPtr->safePtrRegionByteOffset = safePtrRegionByteOffset;
-    debugContextPtr->safePtrRegionByteCapacity = safePtrRegionByteCapacity;
-    
-    debugContextPtr->userRegionByteOffset = userRegionByteOffset;
-    debugContextPtr->userRegionByteCapacity = userRegionByteCapacity;
+    debugContextPtr->labelRegionByteOffset = safePtrRegionByteCapacity;
 
     return MEMORY_OK;
 }

@@ -42,14 +42,13 @@ enum memory_event_type
 };
 
 #define MEMORY_MAX_USER_REGION_PAGES (MEMORY_SHORT_ID_MAX)
-#define MEMORY_MAX_RAW_ALLOCS (UINT16_MAX - 1)
-#define MEMORY_MAX_ALLOCS (UINT16_MAX - 1)
+#define MEMORY_MAX_RAW_ALLOCS (MEMORY_SHORT_ID_MAX - 1)
+#define MEMORY_MAX_ALLOCS (MEMORY_INT_ID_MAX - 1)
 #define MEMORY_RAW_ALLOC_KEY_REALLOC_MULTIPLIER 5
 #define MEMORY_ALLOC_DEFAULT_POINTER_COUNT
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
-#define MEMORY_HEAP_MIN_CAPACITY (UINT16_MAX - 1 + sizeof(u16)) // u16 is the heap header; and '0' is NULL alloc id
+#define MEMORY_RAW_ALLOC_MAP_INIT_BUCKET_COUNT 113
 
-struct memory_context;
 struct memory_raw_alloc_key;
 struct memory_alloc_key;
 
@@ -80,7 +79,7 @@ memory_error_code
 memory_free_raw_heap(const struct memory_raw_alloc_key **outRawAllocKeyPtr);
 
 memory_error_code
-memory_create_debug_context(u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 heapLabelRegionByteCapacity, 
+memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
     const char *contextLabel, memory_short_id *outputMemoryDebugContextId);
 
 memory_error_code
@@ -88,28 +87,28 @@ memory_create_context(u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 
     memory_short_id *outputMemoryContextId);
 
 memory_error_code
-memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_byte_id *outputPageId);
+memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, const struct memory_page_key *pageKeyPtr);
 
 memory_error_code
-memory_dealloc_page(memory_short_id memoryContextId, memory_byte_id pageId);
+memory_dealloc_page(memory_short_id memoryContextId, const struct memory_page_key *pageKeyPtr);
 
 memory_error_code
-memory_realloc_page(memory_short_id memoryContextId, memory_byte_id pageId);
+memory_realloc_page(memory_short_id memoryContextId, const struct memory_page_key *pageKeyPtr);
 
 enum memory_page_status_t
-memory_page_get_status(memory_short_id memoryContextId, memory_byte_id pageId);
+memory_page_get_status(memory_short_id memoryContextId, const struct memory_page_key *pageKeyPtr);
 
 memory_error_code
-memory_page_unlock(memory_short_id memoryContextId, memory_byte_id pageId);
+memory_page_unlock(memory_short_id memoryContextId, const struct memory_page_key *pageKeyPtr);
 
 memory_error_code
-memory_page_lock(memory_short_id memoryContextId, memory_byte_id pageId);
+memory_page_lock(memory_short_id memoryContextId, const struct memory_page_key *pageKeyPtr);
 
 memory_error_code
-memory_page_clean(memory_short_id memoryContextId, memory_byte_id pageId);
+memory_page_clean(memory_short_id memoryContextId, const struct memory_page_key *pageKeyPtr);
 
 memory_error_code
-memory_page_reorder_all(memory_short_id memoryContextId);
+memory_pages_reorder(memory_short_id memoryContextId);
 
 memory_error_code
 memory_alloc(memory_short_id memoryContextId, const struct memory_alloc_key *outputAllocKeyPtr);
@@ -122,6 +121,12 @@ memory_map_alloc(memory_short_id memoryContextId, const struct memory_alloc_key 
 
 memory_error_code
 memory_unmap_alloc(memory_short_id memoryContextId, const struct memory_alloc_key *allocKeyPtr, void **outAllocPtr);
+
+memory_error_code
+memory_get_active_alloc_count(memory_short_id memoryContextId);
+
+memory_error_code
+memory_get_free_alloc_count(memory_short_id memoryContextId);
 
 u64
 memory_sizeof(memory_short_id memoryContextId, const struct memory_alloc_key *allocKeyPtr);
