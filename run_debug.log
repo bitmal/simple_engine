@@ -1,1 +1,1 @@
-./app.sh: line 45: ./build/simple_engine: No such file or directory
+[2025-07-20 11:06:03] ./app.sh: line 47: ./build/simple_engine: No such file or directory

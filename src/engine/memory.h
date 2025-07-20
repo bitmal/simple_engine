@@ -80,12 +80,12 @@ memory_error_code
 memory_free_raw_heap(const struct memory_raw_alloc_key **outRawAllocKeyPtr);
 
 memory_error_code
-memory_create_debug_context(u8 *heap, u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 heapLabelRegionByteCapacity, 
+memory_create_debug_context(u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 heapLabelRegionByteCapacity, 
     const char *contextLabel, memory_short_id *outputMemoryDebugContextId);
 
 memory_error_code
-memory_create_context(u8 *heap, u64 heapByteSize, 
-    u64 heapUserRegionByteCapacity, u64 heapUserRegionByteSize, memory_short_id *outputMemoryContextId);
+memory_create_context(u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 heapUserRegionByteSize, 
+    memory_short_id *outputMemoryContextId);
 
 memory_error_code
 memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_byte_id *outputPageId);

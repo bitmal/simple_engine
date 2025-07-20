@@ -26,10 +26,28 @@ struct memory_user_region_page_header
 
 struct memory_safe_ptr
 {
-    memory_short_id allocId;
-    memory_id pageId;
+    memory_int_id safePtrId;
+    memory_short_id pageId;
     p64 allocByteOffset;
     u64 refCount;
+    b32 isActive;
+};
+
+struct memory_raw_alloc_key
+{
+    memory_short_id rawAllocId;
+    u16 rawAllocMapBranchIndex;
+    struct memory_raw_alloc_key *prev;
+    struct memory_raw_alloc_key *next;
+    b32 isActive;
+};
+
+struct memory_alloc_key
+{
+    memory_int_id allocId;
+    memory_int_id safePtrId;
+    struct memory_alloc_key *prev;
+    struct memory_alloc_key *next;
     b32 isActive;
 };
 
@@ -45,9 +63,14 @@ struct memory_user_region_page_allocator
 struct memory_context
 {
     memory_id id;
-    u64 bytesCapacity;
-    struct memory_allocator *freeList;
-    struct memory_allocator *tailFree;
+    p64 safePtrRegionByteOffset;
+    u64 safePtrRegionByteCapacity;
+    p64 userRegionByteOffset;
+    u64 userRegionByteCapacity;
+    struct memory_allocator *allocActiveList;
+    struct memory_allocator *allocFreeList;
+    struct memory_safe_ptr *safePtrActiveList;
+    struct memory_safe_ptr *safePtrFreeList;
     u64 userRegionPageByteOffsets[MEMORY_MAX_USER_REGION_PAGES];
     u8 *heap;
 };
@@ -59,10 +82,6 @@ struct memory_debug_context
     char label[MEMORY_MAX_NAME_LENGTH + 1];
     p64 labelRegionByteOffset;
     u64 labelRegionByteCapacity;
-    p64 safePtrRegionByteOffset;
-    u64 safePtrRegionByteCapacity;
-    p64 userRegionByteOffset;
-    u64 userRegionByteCapacity;
     u32 eventQueueReadIndex;
     u32 eventQueueWriteIndex;
     u32 eventQueueCapacity;
@@ -94,22 +113,13 @@ struct memory_event
     };
 };
 
-struct memory_raw_alloc_key
-{
-    memory_short_id rawAllocId;
-    p16 rawAllocMapByteOffset;
-};
-
-struct memory_alloc_key
-{
-    memory_short_id allocId;
-    p16 allocMapByteOffset;
-};
-
-void **g_MEMORY_RAW_ALLOC_ARR;
-u16 g_MEMORY_RAW_ALLOC_COUNT;
-u16 g_MEMORY_RAW_ALLOC_CAPACITY;
-struct memory_raw_alloc_key **g_MEMORY_RAW_ALLOC_MAP;
+static void **g_MEMORY_RAW_ALLOC_ARR;
+static u16 g_MEMORY_RAW_ALLOC_COUNT;
+static u16 g_MEMORY_RAW_ALLOC_CAPACITY;
+static p64 **g_MEMORY_RAW_ALLOC_MAP;
+static u16 g_MEMORY_RAW_ALLOC_MAP_BUCKET_COUNT;
+static struct memory_raw_alloc_key *g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST;
+static struct memory_raw_alloc_key *g_MEMORY_RAW_ALLOC_KEY_FREE_LIST;
 
 static memory_error_code
 _memory_generate_unique_byte_id(memory_byte_id *outResult)
@@ -299,48 +309,83 @@ memory_alloc_raw_heap(const struct memory_raw_alloc_key *outRawAllocKeyPtr, u64 
     {
         b32 isOutNull = (!outRawAllocKeyPtr);
         b32 isByteSizeLessThanOne = (byteSize < 1);
+        b32 isRawAllocsUnderMaxCount = (g_MEMORY_RAW_ALLOC_COUNT < MEMORY_MAX_RAW_ALLOCS);
         
-        if (isOutNull || isByteSizeLessThanOne)
+        if (isOutNull || isByteSizeLessThanOne || isRawAllocsUnderMaxCount)
         {
+            memory_error_code resultCode;
+
             if (isOutNull)
             {
                 fprintf(stderr, "memory_alloc_raw_heap(%d): 'outRawAllocId' parameter cannot be NULL.\n", __LINE__);
+
+                resultCode = MEMORY_ERROR_NULL_PARAMETER;
             }
             
             if (byteSize < 1)
             {
                 fprintf(stderr, "memory_alloc_raw_heap(%d): ByteSize < 1. Failure to allocate.\n", __LINE__);
+                
+                resultCode = MEMORY_ERROR_ZERO_PARAMETER;
             }
 
-            return MEMORY_ERROR_ZERO_PARAMETER;
+            if (!isRawAllocsUnderMaxCount)
+            {
+                fprintf(stderr, "memory_alloc_raw_heap(%d): Too many raw allocations. Cannot reserve memory.\n", __LINE__);
+
+                resultCode = MEMORY_ERROR_FAILED_ALLOCATION;
+            }
+
+            return resultCode;
         }
     }
 
+    // generate an ID
     {
-        memory_error_code genMemoryIdResultCode = _memory_generate_unique_short_id(&g_MEMORY_GLOBAL_SEED_REAL64, (memory_short_id *)&outRawAllocKeyPtr->rawAllocId);
+        memory_error_code genMemoryIdResultCode = _memory_generate_unique_short_id((memory_short_id *)&outRawAllocKeyPtr->rawAllocId);
 
         if (genMemoryIdResultCode != MEMORY_OK)
         {
-            switch (genMemoryIdResultCode)
-            {
-                case MEMORY_ERROR_RANDOM_NOT_SEEDED:
-                {
-                };
-
-                default:
-                {
-                    return MEMORY_ERROR_UNKNOWN;
-                } break;
-            }
+            return genMemoryIdResultCode;
         }
     }
 
-    if (g_MEMORY_RAW_ALLOC_CAPACITY > 0)
+    // allocate necessary memory
+    struct memory_raw_alloc_key *keyPtr;
+
+    if (!g_MEMORY_RAW_ALLOC_KEY_FREE_LIST)
     {
     }
     else 
     {
+        struct memory_raw_alloc_key *temp = g_MEMORY_RAW_ALLOC_KEY_FREE_LIST;
+
+        if (g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->next != g_MEMORY_RAW_ALLOC_KEY_FREE_LIST)
+        {
+            g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->prev->next = g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->next;
+            g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->next->prev = g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->prev;
+        }
+        else 
+        {
+            g_MEMORY_RAW_ALLOC_KEY_FREE_LIST = NULL;
+        }
+
+        keyPtr = temp;
     }
+
+    if (g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST)
+    {
+        g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST->prev->next = keyPtr;
+        g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST->next->prev = keyPtr;
+    }
+    else 
+    {
+        keyPtr->prev = keyPtr->next = keyPtr;
+    }
+
+    g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST = keyPtr;
+
+    // initialize
 
     return MEMORY_OK;
 }
@@ -385,38 +430,22 @@ memory_free_raw_heap(u8 **heap)
 }
 
 memory_error_code
-memory_create_debug_context(u8 *heap, const char *label, u16 safePtrCapacity, 
-    u64 labelRegionByteCapacity, u64 userRegionByteCapacity, memory_short_id *outputMemoryDebugContextId)
+memory_create_debug_context(u64 heapSafePtrRegionByteCapacity, u64 heapUserRegionByteCapacity, u64 heapLabelRegionByteCapacity, 
+    const char *contextLabel, memory_short_id *outputMemoryDebugContextId)
 {
-    if (!heap)
-    {
-        fprintf(stderr, "memory_create_debug_context(%d): Provided heap cannot be NULL.\n", __LINE__);
-        
-        return MEMORY_ERROR_NULL_PARAMETER;
-    }
-    
     if (!outputMemoryDebugContextId)
     {
-        fprintf(stderr, "memory_create_debug_context(%d): Output parameter is NULL.\n", __LINE__);
+        fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextId' parameter is NULL.\n", __LINE__);
         
         return MEMORY_ERROR_NULL_PARAMETER;
     }
 
-#ifdef MEMORY_DEBUG
+    u64
+
+#ifndef MEMORY_DEBUG
     // check byte offset bounds
     {
-        p64 maxLabelRegionIndex = labelRegionByteOffset + labelRegionByteCapacity - 1;
-        p64 maxSafePtrRegionIndex = safePtrRegionByteOffset + safePtrRegionByteCapacity - 1;
-        p64 maxUserRegionIndex = userRegionByteOffset + userRegionByteCapacity - 1;
-        
-        if ((((labelRegionByteOffset >= safePtrRegionByteOffset) && (labelRegionByteOffset <= maxSafePtrRegionIndex)) ||
-            ((labelRegionByteOffset >= userRegionByteOffset) && (labelRegionByteOffset <= maxUserRegionIndex))) ||
-            ((safePtrRegionByteOffset >= userRegionByteOffset) && (safePtrRegionByteOffset <= maxUserRegionIndex)))
-        {
-            fprintf(stderr, "memory_create_debug_context(%d): Heap regions out of byte index range.\n", __LINE__);
-            
-            return MEMORY_ERROR_INDEX_OUT_OF_RANGE;
-        }
+        if ()
     }
 #endif
 
@@ -499,7 +528,8 @@ memory_create_debug_context(u8 *heap, const char *label, u16 safePtrCapacity,
 }
 
 memory_error_code
-memory_create_context(u8 *heap, u16 safePtrCapacity, u64 userRegionByteCapacity, memory_short_id *outputMemoryContextId)
+memory_create_context(u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 heapUserRegionByteSize, 
+    memory_short_id *outputMemoryContextId)
 {
     if (!heap)
     {
