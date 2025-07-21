@@ -19,9 +19,6 @@
 struct memory_allocator
 {
     u16 identifier;
-    u8 dataByteOffset;
-    u8 __padding;
-    u16 _padding[5];
     u64 byteSize;
     struct memory_allocator *prev;
     struct memory_allocator *next;
@@ -245,11 +242,11 @@ _memory_generate_unique_id(memory_id *outResult)
 static memory_error_code
 _memory_raw_alloc_ok()
 {
+    // TODO:
     static b32 isInit = B32_FALSE;
 
     if (!isInit)
     {
-        g_MEMORY_RAW_ALLOC_MAP_BUCKET_COUNT =
         isInit = B32_TRUE;
     }
 
@@ -257,7 +254,7 @@ _memory_raw_alloc_ok()
 }
 
 static memory_error_code
-_memory_alloc_context(struct memory_context **outMemoryContext)
+_memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
 {
     if (!outMemoryContext)
     {
@@ -270,39 +267,41 @@ _memory_alloc_context(struct memory_context **outMemoryContext)
     static struct memory_debug_context *memoryDebugContextArr = NULL;
     static u16 memoryDebugContextCount = 0;
 
-    #ifdef MEMORY_DEBUG
-    if (memoryDebugContextCount > 0)
+    if (isDebug)
     {
-        struct memory_debug_context *reallocatedMemoryContextPtr = 
-            realloc(memoryDebugContextArr, sizeof(struct memory_debug_context)*(memoryDebugContextCount + 1));
-
-        if (reallocatedMemoryContextPtr)
+        if (memoryDebugContextCount > 0)
         {
-            memoryDebugContextArr = reallocatedMemoryContextPtr;
+            struct memory_debug_context *reallocatedMemoryContextPtr = 
+                realloc(memoryDebugContextArr, sizeof(struct memory_debug_context)*(memoryDebugContextCount + 1));
+
+            if (reallocatedMemoryContextPtr)
+            {
+                memoryDebugContextArr = reallocatedMemoryContextPtr;
+            }
+            else 
+            {
+                fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate debug context array. "
+                        "Cannot allocate new debug context.\n", __LINE__);
+
+                return MEMORY_ERROR_FAILED_ALLOCATION;
+            }
         }
         else 
         {
-            fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate debug context array. "
-                    "Cannot allocate new debug context.\n", __LINE__);
+            memoryDebugContextArr = malloc(sizeof(struct memory_debug_context));
+            
+            if (!memoryDebugContextArr) 
+            {
+                fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate debug context array. "
+                        "Cannot allocate new debug context.\n", __LINE__);
 
-            return MEMORY_ERROR_FAILED_ALLOCATION;
+                return MEMORY_ERROR_FAILED_ALLOCATION;
+            }
         }
+
+        *outMemoryContext = (struct memory_context *)&memoryDebugContextArr[memoryDebugContextCount++];
     }
     else 
-    {
-        memoryDebugContextArr = malloc(sizeof(struct memory_debug_context));
-        
-        if (!memoryDebugContextArr) 
-        {
-            fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate debug context array. "
-                    "Cannot allocate new debug context.\n", __LINE__);
-
-            return MEMORY_ERROR_FAILED_ALLOCATION;
-        }
-    }
-
-    *outMemoryContext = (struct memory_context *)&memoryDebugContextArr[memoryDebugContextCount++];
-    #else
     {
         if (memoryContextCount > 0)
         {
@@ -336,24 +335,23 @@ _memory_alloc_context(struct memory_context **outMemoryContext)
 
         *outMemoryContext = (struct memory_context *)&memoryContextArr[memoryContextCount++];
     }
-    #endif
     
     return MEMORY_OK;
 }
 
 memory_error_code
-memory_alloc_raw_heap(const struct memory_raw_alloc_key *outRawAllocKeyPtr, u64 byteSize)
+memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize)
 {
     {
         b32 isOutNull = (!outRawAllocKeyPtr);
         b32 isByteSizeLessThanOne = (byteSize < 1);
         b32 isRawAllocsUnderMaxCount = (g_MEMORY_RAW_ALLOC_COUNT < MEMORY_MAX_RAW_ALLOCS);
         
-        if (isOutNull || isByteSizeLessThanOne || isRawAllocsUnderMaxCount)
+        if (!isOutNull || isByteSizeLessThanOne || !isRawAllocsUnderMaxCount)
         {
             memory_error_code resultCode;
 
-            if (isOutNull)
+            if (!isOutNull)
             {
                 fprintf(stderr, "memory_alloc_raw_heap(%d): 'outRawAllocId' parameter cannot be NULL.\n", __LINE__);
 
@@ -389,82 +387,34 @@ memory_alloc_raw_heap(const struct memory_raw_alloc_key *outRawAllocKeyPtr, u64 
     }
 
     // allocate necessary memory
-    struct memory_raw_alloc_key *keyPtr;
-
-    if (!g_MEMORY_RAW_ALLOC_KEY_FREE_LIST)
-    {
-    }
-    else 
-    {
-        struct memory_raw_alloc_key *temp = g_MEMORY_RAW_ALLOC_KEY_FREE_LIST;
-
-        if (g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->next != g_MEMORY_RAW_ALLOC_KEY_FREE_LIST)
-        {
-            g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->prev->next = g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->next;
-            g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->next->prev = g_MEMORY_RAW_ALLOC_KEY_FREE_LIST->prev;
-        }
-        else 
-        {
-            g_MEMORY_RAW_ALLOC_KEY_FREE_LIST = NULL;
-        }
-
-        keyPtr = temp;
-    }
-
-    if (g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST)
-    {
-        g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST->prev->next = keyPtr;
-        g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST->next->prev = keyPtr;
-    }
-    else 
-    {
-        keyPtr->prev = keyPtr->next = keyPtr;
-    }
-
-    g_MEMORY_RAW_ALLOC_KEY_ACTIVE_LIST = keyPtr;
 
     // initialize
 
-    return MEMORY_OK;
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
 memory_error_code
-memory_realloc_raw_heap(const struct memory_raw_alloc_key *rawAllocKeyPtr, u64 byteSize)
+memory_realloc_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, u64 byteSize)
 {
-    if (!outResult)
-    {
-        fprintf(stderr, "memory_realloc_raw_heap(%d): Out parameter cannot be NULL.\n", __LINE__);
-        
-        return MEMORY_ERROR_NULL_PARAMETER;
-    }
-    
-    if (byteSize < 1)
-    {
-        fprintf(stderr, "memory_realloc_raw_heap(%d): ByteSize < 1. Failure to reallocate.\n", __LINE__);
-        
-        return MEMORY_ERROR_ZERO_PARAMETER;
-    }
-
-    *outResult = realloc(*outResult, byteSize);
-
-    return MEMORY_OK;
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
 memory_error_code
-memory_free_raw_heap(u8 **heap)
+memory_free_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr)
 {
-    if (!heap)
-    {
-        fprintf(stderr, "memory_free_raw_heap(%d): Failure to free raw heap. Parameter cannot be NULL.\n", __LINE__);
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
+}
 
-        return MEMORY_ERROR_NULL_PARAMETER;
-    }
+memory_error_code
+memory_map_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr)
+{
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
+}
 
-    free(*heap);
-
-    *heap = NULL;
-
-    return MEMORY_OK;
+memory_error_code
+memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr)
+{
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
 memory_error_code
@@ -569,47 +519,47 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
 }
 
 memory_error_code
-memory_create_context(u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 heapUserRegionByteSize, 
-    memory_short_id *outputMemoryContextId)
+memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, memory_short_id *outputMemoryContextId)
 {
-    if (!heap)
-    {
-        fprintf(stderr, "memory_create_context(%d): Provided heap cannot be NULL.\n", __LINE__);
-        
-        return MEMORY_ERROR_NULL_PARAMETER;
-    }
-    
     if (!outputMemoryContextId)
     {
-        fprintf(stderr, "memory_create_context(%d): Output parameter is NULL.\n", __LINE__);
+        fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextId' parameter is NULL.\n", __LINE__);
         
         return MEMORY_ERROR_NULL_PARAMETER;
     }
+
+    u64 totalBytesToAllocate = safePtrRegionByteCapacity + pagesRegionByteCapacity;
     
+#ifndef MEMORY_DEBUG
+    // check byte offset bounds
+    {
+    }
+#endif
+
     memory_error_code idGenResultCode;
 
-    if ((idGenResultCode = _memory_generate_unique_short_id(&g_MEMORY_GLOBAL_SEED, outputMemoryContextId)) != MEMORY_OK)
+    if ((idGenResultCode = _memory_generate_unique_short_id(outputMemoryContextId)) != MEMORY_OK)
     {
         switch (idGenResultCode)
         {
             case MEMORY_ERROR_RANDOM_NOT_SEEDED:
             {
-                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Did not provide a seed.\n", __LINE__);
+                fprintf(stderr, "memory_create_context(%d): Error generating random ID. Did not provide a seed.\n", __LINE__);
                 
                 return MEMORY_ERROR_RANDOM_NOT_SEEDED;
             } break;
 
             default:
             {
-                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Unknown.\n", __LINE__);
+                fprintf(stderr, "memory_create_context(%d): Error generating random ID. Unknown.\n", __LINE__);
 
                 return MEMORY_ERROR_UNKNOWN;
             } break;
         }
     }
-    
+
     struct memory_context *contextPtr;
-    
+
     memory_error_code contextAllocResultCode;
 
     if ((contextAllocResultCode = _memory_alloc_context(&contextPtr, B32_FALSE)) != MEMORY_OK)
@@ -628,18 +578,41 @@ memory_create_context(u64 heapByteCapacity, u64 heapUserRegionByteCapacity, u64 
             {
                 fprintf(stderr, "memory_create_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
                      __LINE__);
+
                 return MEMORY_ERROR_UNKNOWN;
             } break;
         }
     }
 
+    contextPtr->id = *outputMemoryContextId;
+    contextPtr->pagesRegionActiveAllocationCount = 0;
+    contextPtr->pagesRegionFreeAllocationCount = 0;
+    contextPtr->pagesRegionCount = 0;
+    contextPtr->pagesRegionByteCapacity = pagesRegionByteCapacity;
+    contextPtr->pagesRegionByteOffset = (p64)(safePtrRegionByteCapacity);
+    contextPtr->pagesRegionInfoArr = NULL;
+    contextPtr->safePtrRegionByteCapacity = safePtrRegionByteCapacity;
+    contextPtr->safePtrRegionByteOffset = 0;
+    contextPtr->heap = malloc(totalBytesToAllocate);
+    contextPtr->pagesRegionCapacity = 0;
+
     return MEMORY_OK;
 }
 
 memory_error_code
-memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_byte_id *outputPageId)
+memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_short_id *outPageIdPtr)
 {
-    // TODO:
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
+}
 
+memory_error_code
+memory_free_page(memory_short_id memoryContextId, memory_short_id pageId)
+{
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
+}
+
+memory_error_code
+memory_realloc_page(memory_short_id memoryContextId, memory_short_id pageId)
+{
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
