@@ -108,6 +108,7 @@ struct memory_context
     u16 pagesRegionFreeCount;
     u32 pagesRegionActiveAllocationCount;
     u32 pagesRegionFreeAllocationCount;
+    u64 reservedHeapBytes;
     u8 *heap;
     b32 isDebug;
 };
@@ -122,6 +123,12 @@ struct memory_debug_context
     u32 eventQueueReadIndex;
     u32 eventQueueWriteIndex;
     u32 eventQueueCapacity;
+};
+
+struct memory_context_key
+{
+    memory_short_id contextId;
+    b32 isDebug;
 };
 
 struct memory_event
@@ -159,11 +166,11 @@ static struct memory_raw_alloc_info *g_MEMORY_RAW_ALLOC_INFO_ACTIVE_LIST;
 static struct memory_raw_alloc_info *g_MEMORY_RAW_ALLOC_INFO_FREE_LIST;
 static struct memory_debug_context *g_DEBUG_CONTEXT_ARR;
 static struct memory_context *g_CONTEXT_ARR;
-u16 g_DEBUG_CONTEXT_CAPACITY;
-u16 g_DEBUG_CONTEXT_COUNT;
+static u16 g_DEBUG_CONTEXT_CAPACITY;
+static u16 g_DEBUG_CONTEXT_COUNT;
 static struct memory_debug_context *g_DEBUG_CONTEXT_ARR;
-u16 g_CONTEXT_CAPACITY;
-u16 g_CONTEXT_COUNT;
+static u16 g_CONTEXT_CAPACITY;
+static u16 g_CONTEXT_COUNT;
 
 static memory_error_code
 _memory_generate_unique_byte_id(memory_byte_id *outResult)
@@ -492,11 +499,11 @@ memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyP
 
 memory_error_code
 memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
-    const char *contextLabel, memory_short_id *outputMemoryDebugContextId)
+    const char *contextLabel, const struct memory_context_key *outputMemoryDebugContextKeyPtr)
 {
-    if (!outputMemoryDebugContextId)
+    if (!outputMemoryDebugContextKeyPtr)
     {
-        fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextId' parameter is NULL.\n", __LINE__);
+        fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextKeyPtr' parameter is NULL.\n", __LINE__);
         
         return MEMORY_ERROR_NULL_PARAMETER;
     }
@@ -509,55 +516,35 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
     }
 #endif
 
-    memory_error_code idGenResultCode;
-
-    if ((idGenResultCode = _memory_generate_unique_short_id(outputMemoryDebugContextId)) != MEMORY_OK)
-    {
-        switch (idGenResultCode)
-        {
-            case MEMORY_ERROR_RANDOM_NOT_SEEDED:
-            {
-                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Did not provide a seed.\n", __LINE__);
-                
-                return MEMORY_ERROR_RANDOM_NOT_SEEDED;
-            } break;
-
-            default:
-            {
-                fprintf(stderr, "memory_create_debug_context(%d): Error generating random ID. Unknown.\n", __LINE__);
-
-                return MEMORY_ERROR_UNKNOWN;
-            } break;
-        }
-    }
-
     struct memory_debug_context *debugContextPtr;
-
-    memory_error_code contextAllocResultCode;
-
-    if ((contextAllocResultCode = _memory_alloc_context((struct memory_context **)&debugContextPtr, B32_TRUE)) != MEMORY_OK)
+    memory_short_id contextId = g_DEBUG_CONTEXT_COUNT;
     {
-        switch (contextAllocResultCode)
+        memory_error_code contextAllocResultCode;
+
+        if ((contextAllocResultCode = _memory_alloc_context((struct memory_context **)&debugContextPtr, B32_TRUE)) != MEMORY_OK)
         {
-            case MEMORY_ERROR_NULL_ID:
+            switch (contextAllocResultCode)
             {
-                fprintf(stderr, "memory_create_debug_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
-                     __LINE__);
+                case MEMORY_ERROR_NULL_ID:
+                {
+                    fprintf(stderr, "memory_create_debug_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
+                         __LINE__);
 
-                return MEMORY_ERROR_FAILED_ALLOCATION;
-            } break;
+                    return MEMORY_ERROR_FAILED_ALLOCATION;
+                } break;
 
-            default:
-            {
-                fprintf(stderr, "memory_create_debug_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
-                     __LINE__);
+                default:
+                {
+                    fprintf(stderr, "memory_create_debug_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
+                         __LINE__);
 
-                return MEMORY_ERROR_UNKNOWN;
-            } break;
+                    return MEMORY_ERROR_UNKNOWN;
+                } break;
+            }
         }
     }
 
-    debugContextPtr->_.id = *outputMemoryDebugContextId;
+    debugContextPtr->_.id = contextId;
     debugContextPtr->_.pagesRegionActiveAllocationCount = 0;
     debugContextPtr->_.pagesRegionFreeAllocationCount = 0;
     debugContextPtr->_.pagesRegionByteCapacity = pagesRegionByteCapacity;
@@ -589,15 +576,19 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
     debugContextPtr->labelRegionByteCapacity = labelRegionByteCapacity;
     debugContextPtr->labelRegionByteOffset = safePtrRegionByteCapacity;
 
+    ((struct memory_context_key *)outputMemoryDebugContextKeyPtr)->contextId = contextId;
+    ((struct memory_context_key *)outputMemoryDebugContextKeyPtr)->isDebug = B32_TRUE;
+
     return MEMORY_OK;
 }
 
 memory_error_code
-memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, memory_short_id *outputMemoryContextId)
+memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, 
+    const struct memory_context_key *outputMemoryContextKeyPtr)
 {
-    if (!outputMemoryContextId)
+    if (!outputMemoryContextKeyPtr)
     {
-        fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextId' parameter is NULL.\n", __LINE__);
+        fprintf(stderr, "memory_create_context(%d): 'outputMemoryContextKeyPtr' parameter is NULL.\n", __LINE__);
         
         return MEMORY_ERROR_NULL_PARAMETER;
     }
@@ -610,55 +601,35 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     }
 #endif
 
-    memory_error_code idGenResultCode;
-
-    if ((idGenResultCode = _memory_generate_unique_short_id(outputMemoryContextId)) != MEMORY_OK)
-    {
-        switch (idGenResultCode)
-        {
-            case MEMORY_ERROR_RANDOM_NOT_SEEDED:
-            {
-                fprintf(stderr, "memory_create_context(%d): Error generating random ID. Did not provide a seed.\n", __LINE__);
-                
-                return MEMORY_ERROR_RANDOM_NOT_SEEDED;
-            } break;
-
-            default:
-            {
-                fprintf(stderr, "memory_create_context(%d): Error generating random ID. Unknown.\n", __LINE__);
-
-                return MEMORY_ERROR_UNKNOWN;
-            } break;
-        }
-    }
-
     struct memory_context *contextPtr;
-
-    memory_error_code contextAllocResultCode;
-
-    if ((contextAllocResultCode = _memory_alloc_context(&contextPtr, B32_FALSE)) != MEMORY_OK)
+    memory_short_id contextId = g_CONTEXT_COUNT;
     {
-        switch (contextAllocResultCode)
+        memory_error_code contextAllocResultCode;
+
+        if ((contextAllocResultCode = _memory_alloc_context(&contextPtr, B32_FALSE)) != MEMORY_OK)
         {
-            case MEMORY_ERROR_NULL_ID:
+            switch (contextAllocResultCode)
             {
-                fprintf(stderr, "memory_create_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
-                     __LINE__);
+                case MEMORY_ERROR_NULL_ID:
+                {
+                    fprintf(stderr, "memory_create_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
+                         __LINE__);
 
-                return MEMORY_ERROR_FAILED_ALLOCATION;
-            } break;
+                    return MEMORY_ERROR_FAILED_ALLOCATION;
+                } break;
 
-            default:
-            {
-                fprintf(stderr, "memory_create_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
-                     __LINE__);
+                default:
+                {
+                    fprintf(stderr, "memory_create_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
+                         __LINE__);
 
-                return MEMORY_ERROR_UNKNOWN;
-            } break;
+                    return MEMORY_ERROR_UNKNOWN;
+                } break;
+            }
         }
     }
 
-    contextPtr->id = *outputMemoryContextId;
+    contextPtr->id = contextId;
     contextPtr->pagesRegionActiveAllocationCount = 0;
     contextPtr->pagesRegionFreeAllocationCount = 0;
     contextPtr->pagesRegionByteCapacity = pagesRegionByteCapacity;
@@ -670,6 +641,9 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     contextPtr->pagesRegionInfoCapacity = 0;
     contextPtr->pagesRegionInfoCount = 0;
     contextPtr->isDebug = B32_FALSE;
+    
+    ((struct memory_context_key *)outputMemoryContextKeyPtr)->contextId = contextId;
+    ((struct memory_context_key *)outputMemoryContextKeyPtr)->isDebug = B32_FALSE;
 
     return MEMORY_OK;
 }

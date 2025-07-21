@@ -48,6 +48,24 @@ enum memory_event_type
 
 struct memory_raw_allocation_key;
 struct memory_allocation_key;
+struct memory_context_key;
+
+struct memory_context_diagnostic_info
+{
+    const char *label;
+    u64 heapReservedBytes;
+    u64 pagesRegionReservedBytes;
+    u16 pagesRegionActiveCount;
+    u32 allocationCount;
+    b32 isDebug;
+};
+
+struct memory_diagnostic_info
+{
+    u16 rawAllocationCount;
+    u16 contextCount;
+    u16 debugContextCount;
+};
 
 #define MEMORY_ERROR_NULL_ID ((memory_error_code)0)
 #define MEMORY_OK ((memory_error_code)1)
@@ -80,10 +98,11 @@ memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyP
 
 memory_error_code
 memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
-    const char *contextLabel, memory_short_id *outputMemoryDebugContextId);
+    const char *contextLabel, const struct memory_context_key *outputMemoryDebugContextKeyPtr);
 
 memory_error_code
-memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, memory_short_id *outputMemoryContextId);
+memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, 
+    const struct memory_context_key *outputMemoryContextKeyPtr);
 
 memory_error_code
 memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_short_id *outPageIdPtr);
@@ -126,6 +145,12 @@ memory_get_active_alloc_count(memory_short_id memoryContextId);
 
 memory_error_code
 memory_get_free_alloc_count(memory_short_id memoryContextId);
+
+memory_error_code
+memory_context_get_diagnostic_info(memory_short_id memoryContextId, const struct memory_context_diagnostic_info *outDiagInfoPtr);
+
+memory_error_code
+memory_get_diagnostic_info(const struct memory_diagnostic_info *outDiagInfoPtr);
 
 u64
 memory_sizeof(memory_short_id memoryContextId, const struct memory_allocation_key *allocKeyPtr);
