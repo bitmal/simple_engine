@@ -169,13 +169,23 @@ static memory_error_code
 _memory_generate_unique_byte_id(memory_byte_id *outResult)
 {
     assert(outResult);
-    
+
     memory_error_code errorResult;
 
-    if ((utils_get_is_random_seed_real64_set()))
+    if ((utils_get_is_random_seed_set()))
     {
-        *outResult = (memory_byte_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*(UINT8_MAX - 1))) + 1;
-        errorResult = MEMORY_OK;
+        real64 resultRandomNumber;
+
+        if (utils_generate_random_positive_normalized_real64(&resultRandomNumber))
+        {
+            *outResult = (memory_byte_id)(round(resultRandomNumber*(UINT8_MAX - 1))) + 1;
+            errorResult = MEMORY_OK;
+        }
+        else 
+        {
+            *outResult = MEMORY_BYTE_ID_NULL;
+            errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+        }
     }
     else
     {
@@ -190,13 +200,23 @@ static memory_error_code
 _memory_generate_unique_short_id(memory_short_id *outResult)
 {
     assert(outResult);
-    
+
     memory_error_code errorResult;
 
-    if ((utils_get_is_random_seed_real64_set()))
+    if ((utils_get_is_random_seed_set()))
     {
-        *outResult = (memory_short_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*(UINT16_MAX - 1))) + 1;
-        errorResult = MEMORY_OK;
+        real64 resultRandomNumber;
+        
+        if (utils_generate_random_positive_normalized_real64(&resultRandomNumber))
+        {
+            *outResult = (memory_short_id)(round(resultRandomNumber*(UINT16_MAX - 1))) + 1;
+            errorResult = MEMORY_OK;
+        }
+        else 
+        {
+            *outResult = MEMORY_SHORT_ID_NULL;
+            errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+        }
     }
     else
     {
@@ -214,10 +234,20 @@ _memory_generate_unique_int_id(memory_int_id *outResult)
     
     memory_error_code errorResult;
 
-    if ((utils_get_is_random_seed_real64_set()))
+    if ((utils_get_is_random_seed_set()))
     {
-        *outResult = (memory_int_id)(round(UTILS_GENERATE_RANDOM_POSITIVE_REAL64()*(UINT32_MAX - 1))) + 1;
-        errorResult = MEMORY_OK;
+        real64 resultRandomNumber;
+        
+        if (utils_generate_random_positive_normalized_real64(&resultRandomNumber))
+        {
+            *outResult = (memory_int_id)(round(resultRandomNumber*(UINT32_MAX - 1))) + 1;
+            errorResult = MEMORY_OK;
+        }
+        else 
+        {
+            *outResult = MEMORY_INT_ID_NULL;
+            errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+        }
     }
     else
     {
@@ -235,17 +265,24 @@ _memory_generate_unique_id(memory_id *outResult)
     
     memory_error_code errorResult;
 
-    if ((utils_get_is_random_seed_u64_set()))
+    if ((utils_get_is_random_seed_set()))
     {
-        memory_id resultId = (memory_id)utils_generate_random_u64();
-
-        *outResult = (resultId > 0) ? resultId : 1;
-
-        errorResult = MEMORY_OK;
+        u64 resultRandomNumber;
+        
+        if (utils_generate_random_u64(&resultRandomNumber))
+        {
+            *outResult = (resultRandomNumber < MEMORY_ID_MAX) ? (resultRandomNumber + 1) : resultRandomNumber;
+            errorResult = MEMORY_OK;
+        }
+        else 
+        {
+            *outResult = MEMORY_INT_ID_NULL;
+            errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
+        }
     }
     else
     {
-        *outResult = MEMORY_ID_NULL;
+        *outResult = MEMORY_INT_ID_NULL;
         errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
     }
 

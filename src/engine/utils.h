@@ -45,34 +45,28 @@ u32
 utils_get_elapsed_ms();
 
 b32
-utils_set_random_seed_u64(u16 seedPtr[3]);
+utils_set_random_seed(u32 seed);
 
 b32
-utils_get_is_random_seed_u64_set();
+utils_get_random_seed(u32 *outSeedPtr);
 
 b32
-utils_get_is_random_seed_real64_set();
+utils_get_is_random_seed_set();
 
 b32
-utils_set_random_seed_real64(i64 seed);
+utils_generate_random_u64(u64 *outRandomPtr);
 
-// seedPtr intended length: 3 elements (48 bytes)
-u64
-utils_generate_random_u64();
+b32
+utils_generate_random_positive_normalized_real64(real64 *outRandomPtr);
+
+b32
+utils_generate_random_u64_from_string(const char *str, u64 *outRandomPtr);
 
 real64
-utils_generate_random_positive_normalized_real64();
+utils_generate_random_positive_normalized_real64_from_string(const char *str, real64 *outRandomPtr);
 
-#define UTILS_GENERATE_RANDOM_POSITIVE_REAL64() (utils_generate_random_positive_normalized_real64()*DBL_MAX)
-
-u64
-utils_generate_random_u64_from_string(const char *str);
-
-real64
-utils_generate_random_positive_normalized_real64_from_string(const char *str);
-
-i64
-utils_generate_random_sign64();
+b32
+utils_generate_random_sign64(i64 *outSignPtr);
 
 i32
 utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr);

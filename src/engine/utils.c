@@ -6,10 +6,8 @@
 
 static const u64 *g_ELAPSED_TIME_PTR;
 static const u32 *g_ELAPSED_TIME_INT_PTR;
-static u16 g_RANDOM_SEED_U64[3];
-b32 g_IS_RANDOM_SEED_U64_SET;
-static i64 g_RANDOM_SEED_REAL64;
-b32 g_IS_RANDOM_SEED_REAL64_SET;
+static u32 g_RANDOM_SEED;
+static b32 g_IS_RANDOM_SEED_SET;
 
 b32 
 utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult)
@@ -79,25 +77,16 @@ utils_get_elapsed_ms()
 }
 
 b32
-utils_set_random_seed_u64(u16 seedPtr[3])
+utils_set_random_seed(u32 seed)
 {
-    assert(seedPtr);
-
-    if (!seedPtr)
+    if ((!g_IS_RANDOM_SEED_SET) ||
+        (seed != g_RANDOM_SEED))
     {
-        return B32_FALSE;
-    }
+        g_RANDOM_SEED = seed;
 
-    if (!g_IS_RANDOM_SEED_U64_SET ||
-        ((((u32 *)g_RANDOM_SEED_U64)[0] != ((u32 *)seedPtr)[0]) ||
-        g_RANDOM_SEED_U64[2] != seedPtr[2])) 
-    {
-        ((u32 *)g_RANDOM_SEED_U64)[0] = ((u32 *)seedPtr)[0];
-        g_RANDOM_SEED_U64[2] = seedPtr[2];
-        
-        seed48(g_RANDOM_SEED_U64);
+        srand(seed);
 
-        g_IS_RANDOM_SEED_U64_SET = B32_TRUE;
+        g_IS_RANDOM_SEED_SET = B32_TRUE;
 
         return B32_TRUE;
     }
@@ -106,15 +95,43 @@ utils_set_random_seed_u64(u16 seedPtr[3])
 }
 
 b32
-utils_set_random_seed_real64(i64 seed)
+utils_get_random_seed(u32 *outSeedPtr)
 {
-    if (!g_IS_RANDOM_SEED_REAL64_SET || (g_RANDOM_SEED_REAL64 != seed))
+    if (g_IS_RANDOM_SEED_SET && outSeedPtr)
     {
-        g_RANDOM_SEED_REAL64 = seed;
-        
-        srand48(g_RANDOM_SEED_REAL64);
-        
-        g_IS_RANDOM_SEED_REAL64_SET = B32_TRUE;
+        *outSeedPtr = g_RANDOM_SEED;
+
+        return B32_TRUE;
+    }
+
+    return B32_FALSE;
+}
+
+b32
+utils_get_is_random_seed_set()
+{
+    return g_IS_RANDOM_SEED_SET;
+}
+
+b32
+utils_generate_random_u64(u64 *outRandomPtr)
+{
+    if (g_IS_RANDOM_SEED_SET && outRandomPtr)
+    {
+        *outRandomPtr = ((real64)rand()/RAND_MAX)*UINT64_MAX;
+
+        return B32_TRUE;
+    }
+
+    return B32_FALSE;
+}
+
+b32
+utils_generate_random_positive_normalized_real64(real64 *outRandomPtr)
+{
+    if (g_IS_RANDOM_SEED_SET && outRandomPtr)
+    {
+        *outRandomPtr = (real64)rand()/RAND_MAX;
         
         return B32_TRUE;
     }
@@ -123,48 +140,34 @@ utils_set_random_seed_real64(i64 seed)
 }
 
 b32
-utils_get_is_random_seed_u64_set()
+utils_generate_random_u64_from_string(const char *str, u64 *outRandomPtr)
 {
-    return g_IS_RANDOM_SEED_U64_SET;
-}
-
-b32
-utils_get_is_random_seed_real64_set()
-{
-    return g_IS_RANDOM_SEED_REAL64_SET;
-}
-
-u64
-utils_generate_random_u64()
-{
-    if (g_IS_RANDOM_SEED_REAL64_SET)
-    {
-        return (u64)lrand48();
-    }
-
-    return 0;
+    assert(B32_FALSE);
+    
+    // TODO:
+    return B32_FALSE;
 }
 
 real64
-utils_generate_random_positive_normalized_real64()
+utils_generate_random_positive_normalized_real64_from_string(const char *str, real64 *outRandomPtr)
 {
-    if (g_RANDOM_SEED_REAL64)
-    {
-        return drand48();
-    }
-
-    return 0.;
+    assert(B32_FALSE);
+    
+    // TODO:
+    return B32_FALSE;
 }
 
-i64
-utils_generate_random_sign64()
+b32
+utils_generate_random_sign64(i64 *outSignPtr)
 {
-    if (g_IS_RANDOM_SEED_U64_SET)
+    if (g_IS_RANDOM_SEED_SET && outSignPtr)
     {
-        return (i64)(round((real64)lrand48()/INT64_MAX));
+        return (i64)(round((real64)rand()/RAND_MAX));
+
+        return B32_TRUE;
     }
 
-    return 0;
+    return B32_FALSE;
 }
 
 i32

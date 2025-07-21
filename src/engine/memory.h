@@ -131,6 +131,6 @@ u64
 memory_sizeof(memory_short_id memoryContextId, const struct memory_allocation_key *allocKeyPtr);
 
 u64
-memory_raw_alloc_sizeof(memory_short_id memoryContextId, const struct memory_raw_alloction_key *rawAllocKeyPtr);
+memory_raw_alloc_sizeof(memory_short_id memoryContextId, const struct memory_raw_allocation_key *rawAllocKeyPtr);
 
 #endif
