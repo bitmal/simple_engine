@@ -176,3 +176,31 @@ utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void
 
     return 0;
 }
+
+u64
+utils_generate_prime_above_u64(u64 value)
+{
+    u64 result;
+
+    for (result = value;; ++result)    
+    {
+        b32 isPrime = B32_TRUE;
+
+        for (u64 i = 2; i < result; ++i)
+        {
+            if ((result%i) == 0)
+            {
+                isPrime = B32_FALSE;
+                
+                break;
+            }
+        }
+            
+        if (isPrime)
+        {
+            break;
+        }
+    }
+
+    return result;
+}

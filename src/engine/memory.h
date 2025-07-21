@@ -41,13 +41,10 @@ enum memory_event_type
     MEMORY_EVENT_TYPE_COUNT
 };
 
-#define MEMORY_MAX_USER_REGION_PAGES (MEMORY_SHORT_ID_MAX)
+#define MEMORY_MAX_PAGES_REGION_PAGES (MEMORY_SHORT_ID_MAX)
 #define MEMORY_MAX_RAW_ALLOCS (MEMORY_SHORT_ID_MAX - 1)
 #define MEMORY_MAX_ALLOCS (MEMORY_INT_ID_MAX - 1)
-#define MEMORY_RAW_ALLOC_KEY_REALLOC_MULTIPLIER 5
-#define MEMORY_ALLOC_DEFAULT_POINTER_COUNT
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
-#define MEMORY_RAW_ALLOC_MAP_INIT_BUCKET_COUNT 113
 
 struct memory_raw_allocation_key;
 struct memory_allocation_key;
@@ -63,11 +60,8 @@ struct memory_allocation_key;
 #define MEMORY_ERROR_NULL_PARAMETER ((memory_error_code)8)
 #define MEMORY_ERROR_FAILED_ALLOCATION ((memory_error_code)9)
 #define MEMORY_ERROR_ZERO_PARAMETER ((memory_error_code)10)
-#define MEMORY_ERROR_GLOBAL_RAW_ALLOC_ARRAY_FAILED_ALLOC ((memory_error_code)11)
-#define MEMORY_ERROR_GLOBAL_RAW_ALLOC_ARRAY_FAILED_REALLOC ((memory_error_code)12)
-#define MEMORY_ERROR_GLOBAL_RAW_ALLOC_DICT_FAILED_ALLOC ((memory_error_code)13)
-#define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_SMALL ((memory_error_code)14)
-#define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE ((memory_error_code)15)
+#define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_SMALL ((memory_error_code)11)
+#define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE ((memory_error_code)12)
 
 memory_error_code
 memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);

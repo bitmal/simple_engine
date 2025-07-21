@@ -77,6 +77,9 @@ utils_generate_random_sign64();
 i32
 utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr);
 
+u64
+utils_generate_prime_above_u64(u64 value);
+
 // use with caution...
 #define UTILS_MUTABLE_CAST(type, var) (*(type *)&(var))
 

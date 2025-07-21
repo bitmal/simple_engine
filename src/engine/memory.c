@@ -77,6 +77,8 @@ struct memory_page_header
     u32 allocatorFreeCount;
     struct memory_allocator *allocatorActiveList;
     struct memory_allocator *allocatorFreeList;
+    struct memory_page_header *prev;
+    struct memory_page_header *next;
 };
 
 // (pageId, allocationKey) -->
@@ -98,8 +100,12 @@ struct memory_context
     p64 pagesRegionByteOffset;
     u64 pagesRegionByteCapacity;
     struct memory_page_info *pagesRegionInfoArr;
-    u16 pagesRegionCount;
-    u16 pagesRegionCapacity;
+    u16 pagesRegionInfoCount;
+    u16 pagesRegionInfoCapacity;
+    struct memory_page_header *activePages;
+    u16 pagesRegionActiveCount;
+    struct memory_page_header *freePages;
+    u16 pagesRegionFreeCount;
     u32 pagesRegionActiveAllocationCount;
     u32 pagesRegionFreeAllocationCount;
     u8 *heap;
@@ -151,6 +157,13 @@ static p64 **g_MEMORY_RAW_ALLOC_MAP;
 static u16 g_MEMORY_RAW_ALLOC_MAP_BUCKET_COUNT;
 static struct memory_raw_alloc_info *g_MEMORY_RAW_ALLOC_INFO_ACTIVE_LIST;
 static struct memory_raw_alloc_info *g_MEMORY_RAW_ALLOC_INFO_FREE_LIST;
+static struct memory_debug_context *g_DEBUG_CONTEXT_ARR;
+static struct memory_context *g_CONTEXT_ARR;
+u16 g_DEBUG_CONTEXT_CAPACITY;
+u16 g_DEBUG_CONTEXT_COUNT;
+static struct memory_debug_context *g_DEBUG_CONTEXT_ARR;
+u16 g_CONTEXT_CAPACITY;
+u16 g_CONTEXT_COUNT;
 
 static memory_error_code
 _memory_generate_unique_byte_id(memory_byte_id *outResult)
@@ -261,79 +274,102 @@ _memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
         return MEMORY_ERROR_NULL_PARAMETER;
     }
 
-    static struct memory_context *memoryContextArr = NULL;
-    static u16 memoryContextCount = 0;
-    
-    static struct memory_debug_context *memoryDebugContextArr = NULL;
-    static u16 memoryDebugContextCount = 0;
+    #define MEMORY_DEBUG_CONTEXT_ARR_REALLOC_MULTIPLIER 2
 
     if (isDebug)
     {
-        if (memoryDebugContextCount > 0)
-        {
-            struct memory_debug_context *reallocatedMemoryContextPtr = 
-                realloc(memoryDebugContextArr, sizeof(struct memory_debug_context)*(memoryDebugContextCount + 1));
+        u16 debugContextIndex = g_DEBUG_CONTEXT_COUNT;
 
-            if (reallocatedMemoryContextPtr)
+        if (g_DEBUG_CONTEXT_COUNT == g_DEBUG_CONTEXT_CAPACITY)
+        {
+            if (g_DEBUG_CONTEXT_CAPACITY > 0)
             {
-                memoryDebugContextArr = reallocatedMemoryContextPtr;
+                struct memory_debug_context *reallocatedMemoryContext =
+                    realloc(g_DEBUG_CONTEXT_ARR, sizeof(struct memory_debug_context)*(g_DEBUG_CONTEXT_CAPACITY*
+                        MEMORY_DEBUG_CONTEXT_ARR_REALLOC_MULTIPLIER));
+
+                if (reallocatedMemoryContext)
+                {
+                    g_DEBUG_CONTEXT_ARR = reallocatedMemoryContext;
+                    g_DEBUG_CONTEXT_CAPACITY *= MEMORY_DEBUG_CONTEXT_ARR_REALLOC_MULTIPLIER;
+                }
+                else 
+                {
+                    fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate context array. "
+                            "Cannot allocate new context.\n", __LINE__);
+
+                    return MEMORY_ERROR_FAILED_ALLOCATION;
+                }
             }
             else 
             {
-                fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate debug context array. "
-                        "Cannot allocate new debug context.\n", __LINE__);
+                g_DEBUG_CONTEXT_ARR = malloc(sizeof(struct memory_debug_context));
 
-                return MEMORY_ERROR_FAILED_ALLOCATION;
-            }
-        }
-        else 
-        {
-            memoryDebugContextArr = malloc(sizeof(struct memory_debug_context));
-            
-            if (!memoryDebugContextArr) 
-            {
-                fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate debug context array. "
-                        "Cannot allocate new debug context.\n", __LINE__);
+                if (g_DEBUG_CONTEXT_ARR)
+                {
+                    ++g_DEBUG_CONTEXT_CAPACITY;
+                }
+                else 
+                {
+                    fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate debug context array. "
+                            "Cannot allocate new debug context.\n", __LINE__);
 
-                return MEMORY_ERROR_FAILED_ALLOCATION;
+                    return MEMORY_ERROR_FAILED_ALLOCATION;
+                }
             }
+
         }
 
-        *outMemoryContext = (struct memory_context *)&memoryDebugContextArr[memoryDebugContextCount++];
+        *outMemoryContext = (struct memory_context *)&g_DEBUG_CONTEXT_ARR[debugContextIndex];
+        ++g_DEBUG_CONTEXT_COUNT;
     }
     else 
     {
-        if (memoryContextCount > 0)
-        {
-            struct memory_context *reallocatedMemoryContextPtr = 
-                realloc(memoryContextArr, sizeof(struct memory_context)*(memoryContextCount + 1));
+        #define MEMORY_CONTEXT_ARR_REALLOC_MULTIPLIER 2
 
-            if (reallocatedMemoryContextPtr)
+        u16 contextIndex = g_CONTEXT_COUNT;
+
+        if (g_CONTEXT_COUNT == g_CONTEXT_CAPACITY)
+        {
+            if (g_CONTEXT_CAPACITY > 0)
             {
-                memoryContextArr = reallocatedMemoryContextPtr;
+                struct memory_context *reallocatedMemoryContext =
+                    realloc(g_CONTEXT_ARR, sizeof(struct memory_context)*(g_CONTEXT_CAPACITY*
+                        MEMORY_CONTEXT_ARR_REALLOC_MULTIPLIER));
+
+                if (reallocatedMemoryContext)
+                {
+                    g_CONTEXT_ARR = reallocatedMemoryContext;
+                    g_CONTEXT_CAPACITY *= MEMORY_CONTEXT_ARR_REALLOC_MULTIPLIER;
+                }
+                else 
+                {
+                    fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate context array. "
+                            "Cannot allocate new context.\n", __LINE__);
+
+                    return MEMORY_ERROR_FAILED_ALLOCATION;
+                }
             }
             else 
             {
-                fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate context array. "
-                        "Cannot allocate new context.\n", __LINE__);
+                g_CONTEXT_ARR = malloc(sizeof(struct memory_context));
 
-                return MEMORY_ERROR_FAILED_ALLOCATION;
-            }
-        }
-        else 
-        {
-            memoryContextArr = malloc(sizeof(struct memory_context));
-            
-            if (!memoryDebugContextArr) 
-            {
-                fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate context array. "
-                        "Cannot allocate new context.\n", __LINE__);
+                if (g_CONTEXT_ARR)
+                {
+                    ++g_CONTEXT_CAPACITY;
+                }
+                else 
+                {
+                    fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate context array. "
+                            "Cannot allocate new context.\n", __LINE__);
 
-                return MEMORY_ERROR_FAILED_ALLOCATION;
+                    return MEMORY_ERROR_FAILED_ALLOCATION;
+                }
             }
         }
 
-        *outMemoryContext = (struct memory_context *)&memoryContextArr[memoryContextCount++];
+        *outMemoryContext = (struct memory_context *)&g_CONTEXT_ARR[contextIndex];
+        ++g_CONTEXT_COUNT;
     }
     
     return MEMORY_OK;
@@ -487,22 +523,23 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
     debugContextPtr->_.id = *outputMemoryDebugContextId;
     debugContextPtr->_.pagesRegionActiveAllocationCount = 0;
     debugContextPtr->_.pagesRegionFreeAllocationCount = 0;
-    debugContextPtr->_.pagesRegionCount = 0;
     debugContextPtr->_.pagesRegionByteCapacity = pagesRegionByteCapacity;
-    debugContextPtr->_.pagesRegionByteOffset = (p64)(safePtrRegionByteCapacity + labelRegionByteCapacity);
+    debugContextPtr->_.pagesRegionByteOffset = (p64)(safePtrRegionByteCapacity);
     debugContextPtr->_.pagesRegionInfoArr = NULL;
     debugContextPtr->_.safePtrRegionByteCapacity = safePtrRegionByteCapacity;
     debugContextPtr->_.safePtrRegionByteOffset = 0;
     debugContextPtr->_.heap = malloc(totalBytesToAllocate);
-    debugContextPtr->_.pagesRegionCapacity = 0;
+    debugContextPtr->_.pagesRegionInfoCapacity = 0;
+    debugContextPtr->_.pagesRegionInfoCount = 0;
+    debugContextPtr->_.isDebug = B32_TRUE;
 
     debugContextPtr->eventQueueCapacity = 0;
     debugContextPtr->eventQueueReadIndex = 0;
     debugContextPtr->eventQueueWriteIndex = 0;
 
-    if (label)
+    if (contextLabel)
     {
-        strncpy(debugContextPtr->label, label, MEMORY_MAX_NAME_LENGTH);
+        strncpy(debugContextPtr->label, contextLabel, MEMORY_MAX_NAME_LENGTH);
     }
     else 
     {
@@ -587,14 +624,15 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     contextPtr->id = *outputMemoryContextId;
     contextPtr->pagesRegionActiveAllocationCount = 0;
     contextPtr->pagesRegionFreeAllocationCount = 0;
-    contextPtr->pagesRegionCount = 0;
     contextPtr->pagesRegionByteCapacity = pagesRegionByteCapacity;
     contextPtr->pagesRegionByteOffset = (p64)(safePtrRegionByteCapacity);
     contextPtr->pagesRegionInfoArr = NULL;
     contextPtr->safePtrRegionByteCapacity = safePtrRegionByteCapacity;
     contextPtr->safePtrRegionByteOffset = 0;
     contextPtr->heap = malloc(totalBytesToAllocate);
-    contextPtr->pagesRegionCapacity = 0;
+    contextPtr->pagesRegionInfoCapacity = 0;
+    contextPtr->pagesRegionInfoCount = 0;
+    contextPtr->isDebug = B32_FALSE;
 
     return MEMORY_OK;
 }
@@ -602,6 +640,9 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
 memory_error_code
 memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_short_id *outPageIdPtr)
 {
+    // TODO: check bounds and pointers for NULL
+
+    // get a free page or allocate one
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
