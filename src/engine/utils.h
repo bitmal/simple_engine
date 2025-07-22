@@ -72,7 +72,7 @@ i32
 utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr);
 
 u64
-utils_generate_prime_above_u64(u64 value);
+utils_generate_next_prime_number(u64 startingValue);
 
 // use with caution...
 #define UTILS_MUTABLE_CAST(type, var) (*(type *)&(var))

@@ -14,7 +14,7 @@
     #include <stdlib.h>
 #endif
 
-#define MEMORY_USER_REGION_PAGE_IDENTIFIER (0xDEAD)
+#define MEMORY_HEADER_ID ((u16)0xDEAD)
 
 struct memory_allocator
 {
@@ -40,8 +40,7 @@ struct memory_raw_allocation_key
 
 struct memory_allocation_info
 {
-    memory_int_id allocId;
-    memory_int_id pageId;
+    memory_short_id pageId;
     struct memory_allocator *allocatorPtr;
     struct memory_allocation_info *prev;
     struct memory_allocation_info *next;
@@ -649,22 +648,248 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
 }
 
 memory_error_code
-memory_alloc_page(memory_short_id memoryContextId, u64 byteSize, memory_short_id *outPageIdPtr)
+memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, memory_short_id *outPageIdPtr)
 {
-    // TODO: check bounds and pointers for NULL
+    if (!memoryContextKeyPtr)
+    {
+        fprintf(stderr, "memory_alloc_page(%d): 'memoryContextKeyPtr' parameter is NULL. "
+                "Cannot allocate a page.\n", __LINE__);
+                
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+    
+    if (!outPageIdPtr)
+    {
+        fprintf(stderr, "memory_alloc_page(%d): Output parameter is NULL. "
+                "Cannot allocate a page.\n", __LINE__);
 
-    // get a free page or allocate one
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+
+    struct memory_context *contextPtr;
+    {
+        memory_error_code contextSearchResultCode;
+
+        if (!memoryContextKeyPtr->isDebug)
+        {
+            if (memoryContextKeyPtr->contextId > 0)
+            {
+                u16 contextIndex = memoryContextKeyPtr->contextId - 1;
+                
+                if (contextIndex < g_CONTEXT_COUNT)
+                {
+                    contextPtr = &g_CONTEXT_ARR[memoryContextKeyPtr->contextId - 1];
+                    contextSearchResultCode = MEMORY_OK;
+                }
+                else 
+                {
+                    contextSearchResultCode = MEMORY_ERROR_INDEX_OUT_OF_RANGE;
+                }
+            }
+            else 
+            {
+                contextSearchResultCode = MEMORY_ERROR_NULL_ID;
+            }
+        }
+        else 
+        {
+            if (memoryContextKeyPtr->contextId > 0)
+            {
+                u16 contextIndex = memoryContextKeyPtr->contextId - 1;
+                
+                if (contextIndex < g_DEBUG_CONTEXT_COUNT)
+                {
+                    contextPtr = (struct memory_context *)&g_DEBUG_CONTEXT_ARR[memoryContextKeyPtr->contextId - 1];
+                    contextSearchResultCode = MEMORY_OK;
+                }
+                else 
+                {
+                    contextSearchResultCode = MEMORY_ERROR_INDEX_OUT_OF_RANGE;
+                }
+            }
+            else 
+            {
+                contextSearchResultCode = MEMORY_ERROR_NULL_ID;
+            }
+        }
+
+        if (contextSearchResultCode != MEMORY_OK)
+        {
+            *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+            
+            fprintf(stderr, "memory_alloc_page(%d): Failure to identiy memory context from key. "
+                    "Cannot allocate a page.\n", __LINE__);
+
+            return contextSearchResultCode;
+        }
+    }
+
+    // get/allocate a page header and allocated bytes
+    struct memory_page_header *pageHeaderPtr;
+
+    if (contextPtr->pagesRegionFreeCount > 0)
+    {
+        pageHeaderPtr = contextPtr->freePages;
+
+        memory_error_code resultCode = MEMORY_OK;
+
+        do
+        {
+            if (pageHeaderPtr->heapByteSize >= byteSize)
+            {
+                break;
+            }
+        } while((pageHeaderPtr = pageHeaderPtr->next) != contextPtr->freePages);
+
+        if (resultCode != MEMORY_OK)
+        {
+            *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+            
+            fprintf(stderr, "memory_alloc_page(%d): Failure to locate page large enough. "
+                    "Cannot allocate a page.\n", __LINE__);
+
+            return resultCode;
+        }
+
+        --contextPtr->pagesRegionFreeCount;
+    }
+    // if there are no free pages, and there are no active pages, then there are zero allocated pages! 
+    // Therefore allocate the first one.
+    else if (contextPtr->pagesRegionActiveCount < 1)
+    {
+        pageHeaderPtr = (struct memory_page_header *)(contextPtr->heap + contextPtr->pagesRegionByteOffset);
+
+        memset(pageHeaderPtr, '\0', sizeof(struct memory_page_header));
+
+        pageHeaderPtr->heapByteSize = contextPtr->pagesRegionByteCapacity - sizeof(struct memory_page_header);
+        pageHeaderPtr->identifier = MEMORY_HEADER_ID;
+    }
+    else 
+    {
+        *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+
+        fprintf(stderr, "memory_alloc_page(%d): Out of space. "
+                "Cannot allocate a page.\n", __LINE__);
+
+        return MEMORY_ERROR_FAILED_ALLOCATION;
+    }
+
+    if (contextPtr->pagesRegionActiveCount > 0)
+    {
+        pageHeaderPtr->next = contextPtr->activePages;
+        pageHeaderPtr->prev = contextPtr->activePages->prev;
+
+        contextPtr->activePages->prev->next = pageHeaderPtr;
+        contextPtr->activePages->prev = pageHeaderPtr;
+    }
+    else 
+    {
+        pageHeaderPtr->prev = pageHeaderPtr->next = pageHeaderPtr;
+    }
+
+    pageHeaderPtr->identifier = MEMORY_HEADER_ID;
+
+    contextPtr->activePages = pageHeaderPtr;
+    ++contextPtr->pagesRegionActiveCount;
+
+    // split the page for future page allocations, if we can
+    u64 diffByteSize = pageHeaderPtr->heapByteSize - byteSize;
+    
+    if (diffByteSize > sizeof(struct memory_page_header))
+    {
+        p64 splitPageHeaderByteOffset = contextPtr->pagesRegionByteOffset + sizeof(struct memory_page_header) + pageHeaderPtr->heapByteSize;
+        struct memory_page_header *splitPageHeader = (struct memory_page_header *)(contextPtr->heap + splitPageHeaderByteOffset);
+
+        memset(splitPageHeader, '\0', sizeof(struct memory_page_header));
+
+        splitPageHeader->identifier = MEMORY_HEADER_ID;
+        splitPageHeader->heapByteSize = diffByteSize - sizeof(struct memory_page_header);
+
+        if (contextPtr->pagesRegionFreeCount > 0)
+        {
+            contextPtr->freePages->prev->next = splitPageHeader;
+            contextPtr->freePages->prev = splitPageHeader;
+
+            splitPageHeader->prev = contextPtr->freePages->prev;
+            splitPageHeader->next = contextPtr->freePages;
+        }
+        else 
+        {
+            splitPageHeader->prev = splitPageHeader->next = splitPageHeader;
+        }
+        
+        contextPtr->freePages = splitPageHeader;
+        ++contextPtr->pagesRegionFreeCount;
+    }
+
+    #define PAGES_REGION_INFO_ARR_REALLOC_MULTIPLIER 4
+
+    memory_short_id pageId = contextPtr->pagesRegionInfoCount + 1;
+    struct memory_page_info *pageInfoPtr;
+
+    if (contextPtr->pagesRegionInfoCount != contextPtr->pagesRegionInfoCapacity)
+    {
+    }
+    else
+    {
+        if (contextPtr->pagesRegionInfoCount > 0)
+        {
+            struct memory_page_info *tempPtr = realloc(contextPtr->pagesRegionInfoArr, sizeof(struct memory_page_info)*
+                (contextPtr->pagesRegionInfoCapacity*PAGES_REGION_INFO_ARR_REALLOC_MULTIPLIER));
+            
+            if (tempPtr)
+            {
+                contextPtr->pagesRegionInfoArr = tempPtr;
+                contextPtr->pagesRegionInfoCapacity *= PAGES_REGION_INFO_ARR_REALLOC_MULTIPLIER;
+            }
+            else 
+            {
+                *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+
+                fprintf(stderr, "memory_alloc_page(%d): Could not reallocate the pages info array. "
+                        "Cannot allocate a page.\n", __LINE__);
+                        
+                return MEMORY_ERROR_FAILED_ALLOCATION;
+            }
+        }
+        else 
+        {
+            contextPtr->pagesRegionInfoArr = malloc(sizeof(struct memory_page_info));
+
+            if (contextPtr->pagesRegionInfoArr)
+            {
+                ++contextPtr->pagesRegionInfoCapacity;
+            }
+            else 
+            {
+                *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+
+                fprintf(stderr, "memory_alloc_page(%d): Could not allocate the pages info array. "
+                        "Cannot allocate a page.\n", __LINE__);
+                        
+                return MEMORY_ERROR_FAILED_ALLOCATION;
+            }
+        }
+    }
+
+    ++contextPtr->pagesRegionInfoCount;
+
+    pageInfoPtr->pageHeaderByteOffset = (p64)pageHeaderPtr - (p64)contextPtr->heap;
+    pageInfoPtr->status = MEMORY_PAGE_STATUS_UNLOCKED;
+
+    *outPageIdPtr = pageId;
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+memory_free_page(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId)
+{
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
 memory_error_code
-memory_free_page(memory_short_id memoryContextId, memory_short_id pageId)
-{
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
-}
-
-memory_error_code
-memory_realloc_page(memory_short_id memoryContextId, memory_short_id pageId)
+memory_realloc_page(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId, u64 byteSize)
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }

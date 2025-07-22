@@ -297,6 +297,7 @@ renderer_create_mesh(struct renderer *context, const char *name, void *vertices,
             context->vertexArrays = memory_alloc(context->memoryContext,
                 sizeof(struct opengl_vao_info)*(++context->vertexArrayCount));
         }
+        
         memcpy(&context->vertexArrays[context->vertexArrayCount - 1], &vao, sizeof(vao));
         mesh.vertexArray = context->vertexArrayCount - 1;
         

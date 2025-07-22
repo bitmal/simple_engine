@@ -79,6 +79,10 @@ utils_get_elapsed_ms()
 b32
 utils_set_random_seed(u32 seed)
 {
+    // TODO: see initstate and setstate functions in cstdlib for controlling the numbers generated,
+    // the quality of random using the state, and the amount of numbers used in random generation.
+    // this is useful for generating the same 'random' values each time (or different), using the same seed
+    // across running sessions
     if ((!g_IS_RANDOM_SEED_SET) ||
         (seed != g_RANDOM_SEED))
     {
@@ -152,7 +156,7 @@ real64
 utils_generate_random_positive_normalized_real64_from_string(const char *str, real64 *outRandomPtr)
 {
     assert(B32_FALSE);
-    
+
     // TODO:
     return B32_FALSE;
 }
@@ -181,27 +185,46 @@ utils_sort_compare64(void *database, void *lhs, void *rhs, u32 elementSize, void
 }
 
 u64
-utils_generate_prime_above_u64(u64 value)
+utils_generate_next_prime_number(u64 startingValue)
 {
     u64 result;
 
-    for (result = value;; ++result)    
+    for (result = startingValue;;)    
     {
-        b32 isPrime = B32_TRUE;
-
-        for (u64 i = 2; i < result; ++i)
+        if ((result%2) > 0)
         {
-            if ((result%i) == 0)
+            b32 isPrime = B32_TRUE;
+            u64 halfResult = result/2;
+
+            for (u64 i = 2; i <= halfResult;)
             {
-                isPrime = B32_FALSE;
+                if ((result%i) == 0)
+                {
+                    isPrime = B32_FALSE;
+                    
+                    break;
+                }
+
+                if ((i%2) > 0)
+                {
+                    i += 2;
+                }
+                else 
+                {
+                    ++i;
+                }
+            }
                 
+            if (isPrime)
+            {
                 break;
             }
+
+            result += 2;
         }
-            
-        if (isPrime)
+        else 
         {
-            break;
+            ++result;
         }
     }
 
