@@ -80,6 +80,7 @@ struct memory_diagnostic_info
 #define MEMORY_ERROR_ZERO_PARAMETER ((memory_error_code)10)
 #define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_SMALL ((memory_error_code)11)
 #define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE ((memory_error_code)12)
+#define MEMORY_ERROR_PAGE_ALREADY_FREE ((memory_error_code)13)
 
 memory_error_code
 memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);

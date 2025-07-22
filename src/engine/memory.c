@@ -419,6 +419,93 @@ _memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
 }
 
 memory_error_code
+_memory_get_context(struct memory_context_key *contextKeyPtr, struct memory_context **outContextPtr)
+{
+    if (!contextKeyPtr)
+    {
+        fprintf(stderr, "_memory_get_context(%d): 'memoryContextKeyPtr' parameter is NULL. "
+                "Cannot find context.\n", __LINE__);
+
+        if (outContextPtr)
+        {
+            *outContextPtr = NULL;
+        }
+                
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+    
+    if (!outContextPtr)
+    {
+        fprintf(stderr, "_memory_get_context(%d): Output parameter is NULL. "
+                "Cannot get context.\n", __LINE__);
+                
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+
+    struct memory_context *contextPtr;
+    {
+        memory_error_code contextSearchResultCode;
+        
+        if (!contextKeyPtr->isDebug)
+        {
+            if (contextKeyPtr->contextId > 0)
+            {
+                u16 contextIndex = contextKeyPtr->contextId - 1;
+                
+                if (contextIndex < g_CONTEXT_COUNT)
+                {
+                    contextPtr = &g_CONTEXT_ARR[contextKeyPtr->contextId - 1];
+                    contextSearchResultCode = MEMORY_OK;
+                }
+                else 
+                {
+                    contextSearchResultCode = MEMORY_ERROR_INDEX_OUT_OF_RANGE;
+                }
+            }
+            else 
+            {
+                contextSearchResultCode = MEMORY_ERROR_NULL_ID;
+            }
+        }
+        else 
+        {
+            if (contextKeyPtr->contextId > 0)
+            {
+                u16 contextIndex = contextKeyPtr->contextId - 1;
+                
+                if (contextIndex < g_DEBUG_CONTEXT_COUNT)
+                {
+                    contextPtr = (struct memory_context *)&g_DEBUG_CONTEXT_ARR[contextKeyPtr->contextId - 1];
+                    contextSearchResultCode = MEMORY_OK;
+                }
+                else 
+                {
+                    contextSearchResultCode = MEMORY_ERROR_INDEX_OUT_OF_RANGE;
+                }
+            }
+            else 
+            {
+                contextSearchResultCode = MEMORY_ERROR_NULL_ID;
+            }
+        }
+        
+        if (contextSearchResultCode != MEMORY_OK)
+        {
+            *outContextPtr = NULL;
+            
+            fprintf(stderr, "memory_alloc_page(%d): Failure to identiy memory context from key. "
+                    "Cannot allocate a page.\n", __LINE__);
+                    
+            return contextSearchResultCode;
+        }
+    }
+
+    *outContextPtr = contextPtr;
+    
+    return MEMORY_OK;
+}
+
+memory_error_code
 memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize)
 {
     {
@@ -588,7 +675,7 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     if (!outputMemoryContextKeyPtr)
     {
         fprintf(stderr, "memory_create_context(%d): 'outputMemoryContextKeyPtr' parameter is NULL.\n", __LINE__);
-        
+
         return MEMORY_ERROR_NULL_PARAMETER;
     }
 
@@ -613,6 +700,8 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
                 {
                     fprintf(stderr, "memory_create_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
                          __LINE__);
+                    
+                    memset((struct memory_context_key *)outputMemoryContextKeyPtr, '\0', sizeof(struct memory_context_key));
 
                     return MEMORY_ERROR_FAILED_ALLOCATION;
                 } break;
@@ -621,6 +710,8 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
                 {
                     fprintf(stderr, "memory_create_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
                          __LINE__);
+                    
+                    memset((struct memory_context_key *)outputMemoryContextKeyPtr, '\0', sizeof(struct memory_context_key));
 
                     return MEMORY_ERROR_UNKNOWN;
                 } break;
@@ -654,6 +745,11 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     {
         fprintf(stderr, "memory_alloc_page(%d): 'memoryContextKeyPtr' parameter is NULL. "
                 "Cannot allocate a page.\n", __LINE__);
+
+        if (outPageIdPtr)
+        {
+            *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+        }
                 
         return MEMORY_ERROR_NULL_PARAMETER;
     }
@@ -668,59 +764,14 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
     struct memory_context *contextPtr;
     {
-        memory_error_code contextSearchResultCode;
+        memory_error_code resultCode;
 
-        if (!memoryContextKeyPtr->isDebug)
-        {
-            if (memoryContextKeyPtr->contextId > 0)
-            {
-                u16 contextIndex = memoryContextKeyPtr->contextId - 1;
-                
-                if (contextIndex < g_CONTEXT_COUNT)
-                {
-                    contextPtr = &g_CONTEXT_ARR[memoryContextKeyPtr->contextId - 1];
-                    contextSearchResultCode = MEMORY_OK;
-                }
-                else 
-                {
-                    contextSearchResultCode = MEMORY_ERROR_INDEX_OUT_OF_RANGE;
-                }
-            }
-            else 
-            {
-                contextSearchResultCode = MEMORY_ERROR_NULL_ID;
-            }
-        }
-        else 
-        {
-            if (memoryContextKeyPtr->contextId > 0)
-            {
-                u16 contextIndex = memoryContextKeyPtr->contextId - 1;
-                
-                if (contextIndex < g_DEBUG_CONTEXT_COUNT)
-                {
-                    contextPtr = (struct memory_context *)&g_DEBUG_CONTEXT_ARR[memoryContextKeyPtr->contextId - 1];
-                    contextSearchResultCode = MEMORY_OK;
-                }
-                else 
-                {
-                    contextSearchResultCode = MEMORY_ERROR_INDEX_OUT_OF_RANGE;
-                }
-            }
-            else 
-            {
-                contextSearchResultCode = MEMORY_ERROR_NULL_ID;
-            }
-        }
-
-        if (contextSearchResultCode != MEMORY_OK)
+        if ((resultCode =_memory_get_context((struct memory_context_key *)memoryContextKeyPtr, 
+            &contextPtr)) != MEMORY_OK)
         {
             *outPageIdPtr = MEMORY_SHORT_ID_NULL;
             
-            fprintf(stderr, "memory_alloc_page(%d): Failure to identiy memory context from key. "
-                    "Cannot allocate a page.\n", __LINE__);
-
-            return contextSearchResultCode;
+            return resultCode;
         }
     }
 
@@ -761,7 +812,6 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
         memset(pageHeaderPtr, '\0', sizeof(struct memory_page_header));
 
-        pageHeaderPtr->heapByteSize = contextPtr->pagesRegionByteCapacity - sizeof(struct memory_page_header);
         pageHeaderPtr->identifier = MEMORY_HEADER_ID;
     }
     else 
@@ -804,13 +854,16 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
         splitPageHeader->identifier = MEMORY_HEADER_ID;
         splitPageHeader->heapByteSize = diffByteSize - sizeof(struct memory_page_header);
+        
+        pageHeaderPtr->heapByteSize = byteSize;
 
         if (contextPtr->pagesRegionFreeCount > 0)
         {
             contextPtr->freePages->prev->next = splitPageHeader;
-            contextPtr->freePages->prev = splitPageHeader;
 
             splitPageHeader->prev = contextPtr->freePages->prev;
+            contextPtr->freePages->prev = splitPageHeader;
+
             splitPageHeader->next = contextPtr->freePages;
         }
         else 
@@ -821,6 +874,10 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
         contextPtr->freePages = splitPageHeader;
         ++contextPtr->pagesRegionFreeCount;
     }
+    else 
+    {
+        pageHeaderPtr->heapByteSize = contextPtr->pagesRegionByteCapacity - sizeof(struct memory_page_header);
+    }
 
     #define PAGES_REGION_INFO_ARR_REALLOC_MULTIPLIER 4
 
@@ -829,6 +886,7 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
     if (contextPtr->pagesRegionInfoCount != contextPtr->pagesRegionInfoCapacity)
     {
+        pageInfoPtr = &contextPtr->pagesRegionInfoArr[pageId - 1];
     }
     else
     {
@@ -840,6 +898,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
             if (tempPtr)
             {
                 contextPtr->pagesRegionInfoArr = tempPtr;
+                pageInfoPtr = &tempPtr[pageId - 1];
+
                 contextPtr->pagesRegionInfoCapacity *= PAGES_REGION_INFO_ARR_REALLOC_MULTIPLIER;
             }
             else 
@@ -858,6 +918,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
             if (contextPtr->pagesRegionInfoArr)
             {
+                pageInfoPtr = &contextPtr->pagesRegionInfoArr[pageId - 1];
+
                 ++contextPtr->pagesRegionInfoCapacity;
             }
             else 
@@ -885,7 +947,94 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 memory_error_code
 memory_free_page(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId)
 {
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
+    if (!memoryContextKeyPtr)
+    {
+        fprintf(stderr, "memory_free_page(%d): 'memoryContextKeyPtr' parameter is NULL. "
+                "Cannot free page.\n", __LINE__);
+                
+        return MEMORY_ERROR_NULL_PARAMETER;
+    }
+
+    if (pageId == MEMORY_SHORT_ID_NULL)
+    {
+        fprintf(stderr, "memory_free_page(%d): 'pageId' is NULL_ID. "
+                "Cannot free a NULL page.\n", __LINE__);
+        
+        return MEMORY_ERROR_NULL_ID;
+    }
+
+    struct memory_context *contextPtr;
+    {
+        memory_error_code resultCode;
+
+        if ((resultCode = _memory_get_context((struct memory_context_key *)memoryContextKeyPtr, 
+            &contextPtr)) != MEMORY_OK)
+        {
+            return resultCode;
+        }
+    }
+
+    struct memory_page_info *pageInfoPtr;
+    {
+        u16 infoIndex = pageId - 1;
+
+        if (infoIndex < contextPtr->pagesRegionInfoCount)
+        {
+            pageInfoPtr = &contextPtr->pagesRegionInfoArr[infoIndex];
+        }
+        else 
+        {
+            fprintf(stderr, "memory_free_page(%d): 'pageId' produced pageInfo index out of range. "
+                    "Cannot free a non-existent page.\n", __LINE__);
+
+            return MEMORY_ERROR_INDEX_OUT_OF_RANGE;
+        }
+    }
+
+    if (pageInfoPtr->status == MEMORY_PAGE_STATUS_FREED)
+    {
+        fprintf(stderr, "memory_free_page(%d): Page is already freed.\n", __LINE__);
+
+        return MEMORY_ERROR_PAGE_ALREADY_FREE;
+    }
+
+    pageInfoPtr->status = MEMORY_PAGE_STATUS_FREED;
+
+    struct memory_page_header *pageHeaderPtr = (struct memory_page_header *)(contextPtr->heap + pageInfoPtr->pageHeaderByteOffset);
+
+    if (contextPtr->pagesRegionActiveCount > 1)
+    {
+        contextPtr->activePages->prev->next = contextPtr->activePages->next;
+        contextPtr->activePages->next->prev = contextPtr->activePages->prev;
+
+        if (contextPtr->activePages == pageHeaderPtr)
+        {
+            contextPtr->activePages = contextPtr->activePages->next;
+        }
+    }
+    else 
+    {
+        contextPtr->activePages = NULL;
+    }
+
+    --contextPtr->pagesRegionActiveCount;
+
+    if (contextPtr->pagesRegionFreeCount > 0)
+    {
+        contextPtr->freePages->prev->next = pageHeaderPtr;
+        pageHeaderPtr->prev = contextPtr->freePages->prev;
+        contextPtr->freePages->prev = pageHeaderPtr;
+        pageHeaderPtr->next = contextPtr->freePages;
+    }
+    else 
+    {
+        pageHeaderPtr->prev = pageHeaderPtr->next = pageHeaderPtr;
+    }
+
+    contextPtr->freePages = pageHeaderPtr;
+    ++contextPtr->pagesRegionFreeCount;
+
+    return MEMORY_OK;
 }
 
 memory_error_code
