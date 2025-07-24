@@ -2,9 +2,9 @@
 #define __STATISTICS_H
 
 #include "types.h"
+#include "memory.h"
 
 struct context;
-struct memory;
 
 typedef i32 statistics_timestamp_id;
 
@@ -14,7 +14,7 @@ typedef i32 statistics_timestamp_id;
 
 struct statistics_timestamp
 {
-	u8 _header[sizeof(u32) + sizeof(b32)];
+	u8 header[sizeof(u32) + sizeof(b32)];
 
 	statistics_timestamp_id id;
 	u8 name[STATISTICS_MAX_TIMESTAMP_LABEL_LENGTH];
@@ -25,13 +25,9 @@ struct statistics_timestamp
 	struct context *app;
 };
 
-struct statistics
-{
-	void *_userPtr;
-	struct statistics_timestamp _timeStamps[STATISTICS_MAX_TIMESTAMPS];
-};
+struct statistics;
 
-struct statistics *
-statistics_init(struct context *app);
+b32
+statistics_init(const struct context *app, const struct memory_context_key *memoryKeyPtr);
 
 #endif

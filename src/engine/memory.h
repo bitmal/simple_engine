@@ -92,12 +92,14 @@ struct memory_diagnostic_info
 #define MEMORY_ERROR_SIZE_TOO_SMALL ((memory_error_code)5)
 #define MEMORY_ERROR_NOT_IMPLEMENTED ((memory_error_code)6)
 #define MEMORY_ERROR_TOO_MANY_OBJECTS ((memory_error_code)7)
-#define MEMORY_ERROR_NULL_PARAMETER ((memory_error_code)8)
+#define MEMORY_ERROR_NULL_ARGUMENT ((memory_error_code)8)
 #define MEMORY_ERROR_FAILED_ALLOCATION ((memory_error_code)9)
 #define MEMORY_ERROR_ZERO_PARAMETER ((memory_error_code)10)
 #define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_SMALL ((memory_error_code)11)
 #define MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE ((memory_error_code)12)
-#define MEMORY_ERROR_PAGE_ALREADY_FREE ((memory_error_code)13)
+#define MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT ((memory_error_code)13)
+#define MEMORY_ERROR_NOT_AN_ACTIVE_PAGE ((memory_error_code)14)
+#define MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION ((memory_error_code)15)
 
 memory_error_code
 memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
@@ -123,6 +125,9 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     const struct memory_context_key *outputMemoryContextKeyPtr);
 
 memory_error_code
+memory_get_context_key_is_ok(const struct memory_context_key *contextKeyPtr);
+
+memory_error_code
 memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, const struct memory_page_key *outPageKeyPtr);
 
 memory_error_code
@@ -144,6 +149,9 @@ memory_error_code
 memory_page_clean(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId);
 
 memory_error_code
+memory_get_page_key_is_ok(const struct memory_page_key *pageKeyPtr);
+
+memory_error_code
 memory_pages_reorder(const struct memory_context_key *memoryContextKeyPtr);
 
 memory_error_code
@@ -161,6 +169,9 @@ memory_map_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllo
 
 memory_error_code
 memory_unmap_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllocPtr);
+
+memory_error_code
+memory_get_alloc_key_is_ok(const struct memory_allocation_key *allocKeyPtr);
 
 memory_error_code
 memory_context_get_diagnostic_info(const struct memory_context_key *memoryContextKeyPtr, const struct memory_context_diagnostic_info *outDiagInfoPtr);

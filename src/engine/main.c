@@ -96,8 +96,25 @@ main(int argc, char **argv)
     {
         return -1;
     }
+    
+#if 0
+    const struct memory_context_key statsMemoryKey;
+    {
+        memory_error_code resultCode;
 
-	app.statsContext = statistics_init(&app);
+        if ((resultCode = memory_create_debug_context(MEMORY_SAFE_PTR_REGION_SIZE, 
+            CONFIG_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "stats", &statsMemoryKey))
+            != MEMORY_OK)
+        {
+            return -1;
+        }
+    }
+
+	if (!statistics_init(&app, &statsMemoryKey))
+    {
+        return -1;
+    }
+#endif
     
     const struct memory_context_key gameMemoryKey;
     {

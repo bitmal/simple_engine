@@ -284,25 +284,11 @@ _memory_generate_unique_id(memory_id *outResult)
 }
 
 static memory_error_code
-_memory_raw_alloc_ok()
-{
-    // TODO:
-    static b32 isInit = B32_FALSE;
-
-    if (!isInit)
-    {
-        isInit = B32_TRUE;
-    }
-
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
-}
-
-static memory_error_code
 _memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
 {
     if (!outMemoryContext)
     {
-        return MEMORY_ERROR_NULL_PARAMETER;
+        return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
     #define MEMORY_DEBUG_CONTEXT_ARR_REALLOC_MULTIPLIER 2
@@ -419,7 +405,7 @@ _memory_get_context(struct memory_context_key *contextKeyPtr, struct memory_cont
             *outContextPtr = NULL;
         }
                 
-        return MEMORY_ERROR_NULL_PARAMETER;
+        return MEMORY_ERROR_NULL_ARGUMENT;
     }
     
     if (!outContextPtr)
@@ -427,7 +413,7 @@ _memory_get_context(struct memory_context_key *contextKeyPtr, struct memory_cont
         fprintf(stderr, "_memory_get_context(%d): Output parameter is NULL. "
                 "Cannot get context.\n", __LINE__);
                 
-        return MEMORY_ERROR_NULL_PARAMETER;
+        return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
     struct memory_context *contextPtr;
@@ -494,6 +480,43 @@ _memory_get_context(struct memory_context_key *contextKeyPtr, struct memory_cont
 }
 
 memory_error_code
+_memory_get_context_key_is_ok(const struct memory_context_key *contextKeyPtr)
+{
+    if (!contextKeyPtr)
+    {
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    if (contextKeyPtr->contextId == MEMORY_SHORT_ID_NULL)
+    {
+        return MEMORY_ERROR_NULL_ID;
+    }
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+_memory_get_page_key_is_ok(const struct memory_page_key *pageKeyPtr)
+{
+    if (!pageKeyPtr)
+    {
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    if (pageKeyPtr->pageId == MEMORY_SHORT_ID_NULL)
+    {
+        return MEMORY_ERROR_NULL_ID;
+    }
+
+    if ((_memory_get_context_key_is_ok(&pageKeyPtr->contextKey)) != MEMORY_OK)
+    {
+        return MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT;
+    }
+
+    return MEMORY_OK;
+}
+
+memory_error_code
 memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize)
 {
     {
@@ -509,7 +532,7 @@ memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocK
             {
                 fprintf(stderr, "memory_alloc_raw_heap(%d): 'outRawAllocId' parameter cannot be NULL.\n", __LINE__);
 
-                resultCode = MEMORY_ERROR_NULL_PARAMETER;
+                resultCode = MEMORY_ERROR_NULL_ARGUMENT;
             }
             
             if (byteSize < 1)
@@ -575,20 +598,18 @@ memory_error_code
 memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
     const char *contextLabel, const struct memory_context_key *outputMemoryDebugContextKeyPtr)
 {
-    if (!outputMemoryDebugContextKeyPtr)
     {
-        fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextKeyPtr' parameter is NULL.\n", __LINE__);
-        
-        return MEMORY_ERROR_NULL_PARAMETER;
+        memory_error_code errorCode;
+
+        if ((errorCode = _memory_get_context_key_is_ok(outputMemoryDebugContextKeyPtr)) != MEMORY_OK)
+        {
+            fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextKeyPtr' parameter is NULL.\n", __LINE__);
+            
+            return MEMORY_ERROR_NULL_ARGUMENT;
+        }
     }
 
     u64 totalBytesToAllocate = safePtrRegionByteCapacity + pagesRegionByteCapacity + labelRegionByteCapacity;
-
-#ifndef MEMORY_DEBUG
-    // check byte offset bounds
-    {
-    }
-#endif
 
     struct memory_debug_context *debugContextPtr;
     memory_short_id contextId = g_DEBUG_CONTEXT_COUNT;
@@ -664,16 +685,10 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     {
         fprintf(stderr, "memory_create_context(%d): 'outputMemoryContextKeyPtr' parameter is NULL.\n", __LINE__);
 
-        return MEMORY_ERROR_NULL_PARAMETER;
+        return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
     u64 totalBytesToAllocate = safePtrRegionByteCapacity + pagesRegionByteCapacity;
-    
-#ifndef MEMORY_DEBUG
-    // check byte offset bounds
-    {
-    }
-#endif
 
     struct memory_context *contextPtr;
     memory_short_id contextId = g_CONTEXT_COUNT;
@@ -727,21 +742,37 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
 }
 
 memory_error_code
+memory_get_context_key_is_ok(const struct memory_context_key *contextKeyPtr)
+{
+    return _memory_get_context_key_is_ok(contextKeyPtr);
+}
+
+memory_error_code
 memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, const struct memory_page_key *outPageKeyPtr)
 {
-    if (!memoryContextKeyPtr)
     {
-        fprintf(stderr, "memory_alloc_page(%d): 'memoryContextKeyPtr' parameter is NULL. "
-                "Cannot allocate a page.\n", __LINE__);
+        memory_error_code resultCode;
 
-        if (outPageKeyPtr)
+        if ((resultCode = _memory_get_context_key_is_ok(memoryContextKeyPtr)) != MEMORY_OK)
         {
-            ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
-            ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
-            ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+            switch (resultCode)
+            {
+                default: 
+                {
+                    fprintf(stderr, "%s(%d): Cannot allocate page, context key is not valid!\n", 
+                            __FUNCTION__, __LINE__);
+                } return resultCode;
+            }
+            
+            if ((resultCode = _memory_get_page_key_is_ok(outPageKeyPtr)) != MEMORY_OK)
+            {
+                ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+            }
+                    
+            return MEMORY_ERROR_NULL_ARGUMENT;
         }
-                
-        return MEMORY_ERROR_NULL_PARAMETER;
     }
     
     if (!outPageKeyPtr)
@@ -749,7 +780,7 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
         fprintf(stderr, "memory_alloc_page(%d): Output parameter is NULL. "
                 "Cannot allocate a page.\n", __LINE__);
 
-        return MEMORY_ERROR_NULL_PARAMETER;
+        return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
     struct memory_context *contextPtr;
@@ -954,7 +985,7 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
         fprintf(stderr, "memory_free_page(%d): 'pageKeyPtr' is NULL. "
                 "Cannot free a NULL page.\n", __LINE__);
         
-        return MEMORY_ERROR_NULL_PARAMETER;
+        return MEMORY_ERROR_NULL_ARGUMENT;
     }
     
     if (pageKeyPtr->pageId == MEMORY_SHORT_ID_NULL)
@@ -1051,4 +1082,10 @@ memory_error_code
 memory_realloc_page(const struct memory_page_key *pageKeyPtr, u64 byteSize)
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
+}
+
+memory_error_code
+memory_get_page_key_is_ok(const struct memory_page_key *pageKeyPtr)
+{
+    return _memory_get_page_key_is_ok(pageKeyPtr);
 }
