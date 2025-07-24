@@ -41,18 +41,10 @@ struct memory_raw_allocation_key
 struct memory_allocation_info
 {
     memory_short_id pageId;
-    struct memory_allocator *allocatorPtr;
-    struct memory_allocation_info *prev;
-    struct memory_allocation_info *next;
-    b32 isActive;
-};
-
-// if ((id - 1) < 1); then return NULL Error : return index
-struct memory_allocation_safe_ptr
-{
-    memory_int_id safePtrId;
-    p64 allocByteOffset;
-    u64 refCount;
+    memory_int_id allocationId;
+    p64 allocatorByteOffset;
+    memory_int_id prevAllocationId;
+    memory_int_id nextAllocationId;
     b32 isActive;
 };
 
@@ -750,36 +742,18 @@ memory_get_context_key_is_ok(const struct memory_context_key *contextKeyPtr)
 memory_error_code
 memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, const struct memory_page_key *outPageKeyPtr)
 {
+    if ((_memory_get_context_key_is_ok(memoryContextKeyPtr)) != MEMORY_OK)
     {
-        memory_error_code resultCode;
-
-        if ((resultCode = _memory_get_context_key_is_ok(memoryContextKeyPtr)) != MEMORY_OK)
-        {
-            switch (resultCode)
-            {
-                default: 
-                {
-                    fprintf(stderr, "%s(%d): Cannot allocate page, context key is not valid!\n", 
-                            __FUNCTION__, __LINE__);
-                } return resultCode;
-            }
-            
-            if ((resultCode = _memory_get_page_key_is_ok(outPageKeyPtr)) != MEMORY_OK)
-            {
-                ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
-                ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
-                ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
-            }
-                    
-            return MEMORY_ERROR_NULL_ARGUMENT;
-        }
+        fprintf(stderr, "%s(%d): Cannot allocate page, context key is not valid!\n", 
+                __FUNCTION__, __LINE__);
+        
+        return MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT;
     }
-    
-    if (!outPageKeyPtr)
+    else if (!outPageKeyPtr)
     {
-        fprintf(stderr, "memory_alloc_page(%d): Output parameter is NULL. "
-                "Cannot allocate a page.\n", __LINE__);
-
+        fprintf(stderr, "%s(%d): Cannot allocate page, 'cause 'outPageKeyPtr' argument is NULL!\n", 
+                __FUNCTION__, __LINE__);
+        
         return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
@@ -805,12 +779,14 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     {
         pageHeaderPtr = contextPtr->freePages;
 
-        memory_error_code resultCode = MEMORY_OK;
+        memory_error_code resultCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
         do
         {
             if (pageHeaderPtr->heapByteSize >= byteSize)
             {
+                resultCode = MEMORY_OK;
+
                 break;
             }
         } while((pageHeaderPtr = pageHeaderPtr->next) != contextPtr->freePages);
@@ -980,28 +956,13 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 memory_error_code
 memory_free_page(const struct memory_page_key *pageKeyPtr)
 {
-    if (!pageKeyPtr)
     {
-        fprintf(stderr, "memory_free_page(%d): 'pageKeyPtr' is NULL. "
-                "Cannot free a NULL page.\n", __LINE__);
-        
-        return MEMORY_ERROR_NULL_ARGUMENT;
-    }
-    
-    if (pageKeyPtr->pageId == MEMORY_SHORT_ID_NULL)
-    {
-        fprintf(stderr, "memory_free_page(%d): pageId in key is NULL ID. "
-                "Cannot free a NULL page.\n", __LINE__);
-        
-        return MEMORY_ERROR_NULL_ID;
-    }
-    
-    if (pageKeyPtr->contextKey.contextId == MEMORY_SHORT_ID_NULL)
-    {
-        fprintf(stderr, "memory_free_page(%d): contextId in key is NULL ID. "
-                "Cannot free a page without reference to its context.\n", __LINE__);
-        
-        return MEMORY_ERROR_NULL_ID;
+        memory_error_code errorCode;
+
+        if ((errorCode = _memory_get_page_key_is_ok(pageKeyPtr)) != MEMORY_OK)
+        {
+            return errorCode;
+        }
     }
 
     struct memory_context *contextPtr;
@@ -1036,7 +997,7 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
     {
         fprintf(stderr, "memory_free_page(%d): Page is already freed.\n", __LINE__);
 
-        return MEMORY_ERROR_PAGE_ALREADY_FREE;
+        return MEMORY_ERROR_NOT_AN_ACTIVE_PAGE;
     }
 
     pageInfoPtr->status = MEMORY_PAGE_STATUS_FREED;
@@ -1071,6 +1032,31 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
     {
         pageHeaderPtr->prev = pageHeaderPtr->next = pageHeaderPtr;
     }
+
+    for (struct memory_allocation_info *allocationInfo = pageHeaderPtr->allocationActiveList;
+        allocationInfo && (allocationInfo->nextAllocationId != pageHeaderPtr->allocationActiveList->allocationId); 
+        allocationInfo = &pageHeaderPtr->allocationArr[allocationInfo->nextAllocationId - 1])
+    {
+        if (pageHeaderPtr->allocationFreeCount > 0)
+        {
+            allocationInfo->prevAllocationId = pageHeaderPtr->allocationFreeList->prevAllocationId;
+            allocationInfo->nextAllocationId = pageHeaderPtr->allocationFreeList->allocationId;
+            
+            pageHeaderPtr->allocationFreeList->prevAllocationId = allocationInfo->allocationId;
+        }
+        else 
+        {
+            allocationInfo->prevAllocationId = allocationInfo->nextAllocationId = allocationInfo->allocationId;
+        }
+        
+        allocationInfo->isActive = B32_FALSE;
+        allocationInfo->allocatorByteOffset = 0;
+
+        pageHeaderPtr->allocationFreeList = allocationInfo;
+    }
+    
+    pageHeaderPtr->allocationFreeCount += pageHeaderPtr->allocationActiveCount;
+    pageHeaderPtr->allocationActiveCount = 0;
 
     contextPtr->freePages = pageHeaderPtr;
     ++contextPtr->pagesRegionFreeCount;

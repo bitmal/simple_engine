@@ -24,7 +24,7 @@ statistics_init(const struct context *app, const struct memory_context_key *memo
 			
 			isArgsSafe = B32_FALSE;
 		}
-		
+
 		if (!memoryKeyPtr)
 		{
 			fprintf(stderr, "%s(%d): 'app' argument cannot be NULL. Failure to allocate statistics.\n", 
