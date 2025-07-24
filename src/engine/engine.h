@@ -3,22 +3,15 @@
 
 #include "types.h"
 #include "constants.h"
-
-struct physics;
-struct renderer;
-struct memory;
-struct config;
-struct input;
-struct statistics;
+#include "memory.h"
 
 struct context
 {
-    struct memory *memoryContext;
-    struct config *config;
-    struct physics *physics;
-    struct renderer *renderContext;
-    struct input *inputContext;
-		struct statistics *statsContext;
+    const struct memory_allocation_key configKey;
+    const struct memory_allocation_key physicsKey;
+    const struct memory_allocation_key renderKey;
+    const struct memory_allocation_key inputKey;
+    const struct memory_allocation_key statsKey;
     b32 isRunning;
     u32 msSinceStart;
 };

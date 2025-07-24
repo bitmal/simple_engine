@@ -1,3 +1,5 @@
+#include "constants.h"
+#include "memory.h"
 #include "utils.h"
 #include <SDL3/SDL_oldnames.h>
 #define MEMORY_DEBUG
@@ -34,23 +36,13 @@
 #include "game.c"
 #include "statistics.c"
 
-MEMORY_DEFINE(config, 1 << 14);
-MEMORY_DEFINE(game, GAME_MEMORY_SIZE);
-MEMORY_DEFINE(physics, PHYSICS_MEMORY_SIZE);
-MEMORY_DEFINE(graphics, GRAPHICS_MEMORY_SIZE);
-
 int 
 main(int argc, char **argv)
 {
-    {
-        u16 seedU16[3];
-
-        ((u32 *)&seedU16)[0] = 0;
-        seedU16[2] = 0;
-
-        utils_set_random_seed_u64(seedU16);
-        utils_set_random_seed_real64(0);
-    }
+    // TODO: set seed to possibly some randomly generated value at startup, from gathered and (stored to disk) noise/entropy
+    // from A. The Graphics Card or B. The CPU. Fallback could be some default seed value lookup table and result coupled with
+    // date/time for the seed result hash
+    utils_set_random_seed(0);
 
     #if 0
     void *cimguiPlugin = dlopen("libcimgui.so", RTLD_NOW);
@@ -71,21 +63,90 @@ main(int argc, char **argv)
     }
     #endif
 
-    MEMORY_INIT(config, "config");
+    const struct memory_context_key configMemoryKey;
+    {
+        memory_error_code resultCode;
+
+        if ((resultCode = memory_create_debug_context(MEMORY_SAFE_PTR_REGION_SIZE, 
+            CONFIG_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "config", &configMemoryKey))
+            != MEMORY_OK)
+        {
+            return -1;
+        }
+    }
 
     struct context app;
     
-    app.config = config_init(MEMORY_PTR(config));
-    config_load_config(app.config, "system");
-    config_load_config(app.config, "game");
-    config_load_config(app.config, "physics");
+    if (!config_init(&configMemoryKey, CONFIG_MEMORY_SIZE, &app.configKey))
+    {
+        return -1;
+    }
+    
+    if (!config_load_config(&app.configKey, "system"))
+    {
+        return -1;
+    }
+    
+    if (!config_load_config(&app.configKey, "game"))
+    {
+        return -1;
+    }
+    
+    if (!config_load_config(&app.configKey, "physics"))
+    {
+        return -1;
+    }
 
 	app.statsContext = statistics_init(&app);
-
-    MEMORY_INIT(game, "game");
-    MEMORY_INIT(physics, "physics");
-    MEMORY_INIT(graphics, "graphics");
     
+    const struct memory_context_key gameMemoryKey;
+    {
+        memory_error_code resultCode;
+
+        if ((resultCode = memory_create_debug_context(MEMORY_SAFE_PTR_REGION_SIZE, 
+            GAME_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "game", &gameMemoryKey))
+            != MEMORY_OK)
+        {
+            return -1;
+        }
+    }
+    
+    const struct memory_context_key physicsMemoryKey;
+    {
+        memory_error_code resultCode;
+
+        if ((resultCode = memory_create_debug_context(MEMORY_SAFE_PTR_REGION_SIZE, 
+            PHYSICS_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "physics", &physicsMemoryKey))
+            != MEMORY_OK)
+        {
+            return -1;
+        }
+    }
+
+    const struct memory_context_key graphicsMemoryKey;
+    {
+        memory_error_code resultCode;
+
+        if ((resultCode = memory_create_debug_context(MEMORY_SAFE_PTR_REGION_SIZE, 
+            GRAPHICS_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "graphics", &graphicsMemoryKey))
+            != MEMORY_OK)
+        {
+            return -1;
+        }
+    }
+    
+    const struct memory_context_key inputMemoryKey;
+    {
+        memory_error_code resultCode;
+
+        if ((resultCode = memory_create_debug_context(MEMORY_SAFE_PTR_REGION_SIZE, 
+            INPUT_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "input", &inputMemoryKey))
+            != MEMORY_OK)
+        {
+            return -1;
+        }
+    }
+
     ImGuiContext *imguiContext = igCreateContext(NULL);
     
     SDL_Init(SDL_INIT_VIDEO);
@@ -114,12 +175,11 @@ main(int argc, char **argv)
     
     SDL_ShowWindow(window);
 
-    app.inputContext = input_init(MEMORY_PTR(game), NULL);
+    app.inputKey; input_init(&app.inputKey, NULL);
     app.isRunning = B32_TRUE;
-    app.memoryContext = MEMORY_PTR(game);
     app.msSinceStart = SDL_GetTicks();
-    app.physics = physics_init(MEMORY_PTR(physics));
-    app.renderContext = renderer_create_context(MEMORY_PTR(graphics));
+    app.physics = physics_init(&physicsMemoryKey);
+    app.renderContext = renderer_create_context(&graphicsMemoryKey);
 
     struct game *gameContext = game_init(&app);
     app.inputContext->dataPtr = gameContext;
@@ -130,7 +190,8 @@ main(int argc, char **argv)
     u64 elapsedNS = 0;
     u32 elapsedMS = 0;
 
-    utils_set_elapsed_time_ptr(&elapsedMS);
+    utils_set_elapsed_time_ns_ptr(&elapsedNS);
+    utils_set_elapsed_time_ms_ptr(&elapsedMS);
 
     while (app.isRunning)
     {
@@ -252,10 +313,10 @@ main(int argc, char **argv)
 
         u64 currentTicksWide = SDL_GetTicks64();
         u32 currentTicks = SDL_GetTicks();
-        elapsedTicks += currentTicks - previousTicks;
+        elapsedMS += currentTicks - previousTicks;
         previousTicks = currentTicks;
                 
-        while (elapsedTicks >= MS_PER_FRAME)
+        while (elapsedMS >= MS_PER_FRAME)
         {
             game_cycle(gameContext, 1.f/FRAMES_PER_SEC);
             physics_update(app.physics, 1.f/FRAMES_PER_SEC);
@@ -264,7 +325,7 @@ main(int argc, char **argv)
             renderer_draw(app.renderContext);
             SDL_GL_SwapWindow(window);
 
-            elapsedTicks -= MS_PER_FRAME;
+            elapsedMS -= MS_PER_FRAME;
             elapsedMS += MS_PER_FRAME;
             app.msSinceStart += MS_PER_FRAME;
         }

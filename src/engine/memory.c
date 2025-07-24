@@ -47,12 +47,6 @@ struct memory_allocation_info
     b32 isActive;
 };
 
-struct memory_allocation_key
-{
-    memory_int_id allocId;
-    u32 allocInfoIndex;
-};
-
 // if ((id - 1) < 1); then return NULL Error : return index
 struct memory_allocation_safe_ptr
 {
@@ -122,12 +116,6 @@ struct memory_debug_context
     u32 eventQueueReadIndex;
     u32 eventQueueWriteIndex;
     u32 eventQueueCapacity;
-};
-
-struct memory_context_key
-{
-    memory_short_id contextId;
-    b32 isDebug;
 };
 
 struct memory_event
@@ -282,13 +270,13 @@ _memory_generate_unique_id(memory_id *outResult)
         }
         else 
         {
-            *outResult = MEMORY_INT_ID_NULL;
+            *outResult = MEMORY_ID_NULL;
             errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
         }
     }
     else
     {
-        *outResult = MEMORY_INT_ID_NULL;
+        *outResult = MEMORY_ID_NULL;
         errorResult = MEMORY_ERROR_RANDOM_NOT_SEEDED;
     }
 
@@ -739,22 +727,24 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
 }
 
 memory_error_code
-memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, memory_short_id *outPageIdPtr)
+memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, const struct memory_page_key *outPageKeyPtr)
 {
     if (!memoryContextKeyPtr)
     {
         fprintf(stderr, "memory_alloc_page(%d): 'memoryContextKeyPtr' parameter is NULL. "
                 "Cannot allocate a page.\n", __LINE__);
 
-        if (outPageIdPtr)
+        if (outPageKeyPtr)
         {
-            *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
         }
                 
         return MEMORY_ERROR_NULL_PARAMETER;
     }
     
-    if (!outPageIdPtr)
+    if (!outPageKeyPtr)
     {
         fprintf(stderr, "memory_alloc_page(%d): Output parameter is NULL. "
                 "Cannot allocate a page.\n", __LINE__);
@@ -769,8 +759,10 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
         if ((resultCode =_memory_get_context((struct memory_context_key *)memoryContextKeyPtr, 
             &contextPtr)) != MEMORY_OK)
         {
-            *outPageIdPtr = MEMORY_SHORT_ID_NULL;
-            
+            ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+
             return resultCode;
         }
     }
@@ -794,7 +786,9 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
         if (resultCode != MEMORY_OK)
         {
-            *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
             
             fprintf(stderr, "memory_alloc_page(%d): Failure to locate page large enough. "
                     "Cannot allocate a page.\n", __LINE__);
@@ -816,7 +810,9 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     }
     else 
     {
-        *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+        ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
+        ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
+        ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
 
         fprintf(stderr, "memory_alloc_page(%d): Out of space. "
                 "Cannot allocate a page.\n", __LINE__);
@@ -904,7 +900,9 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
             }
             else 
             {
-                *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
 
                 fprintf(stderr, "memory_alloc_page(%d): Could not reallocate the pages info array. "
                         "Cannot allocate a page.\n", __LINE__);
@@ -924,7 +922,9 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
             }
             else 
             {
-                *outPageIdPtr = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
 
                 fprintf(stderr, "memory_alloc_page(%d): Could not allocate the pages info array. "
                         "Cannot allocate a page.\n", __LINE__);
@@ -939,26 +939,36 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     pageInfoPtr->pageHeaderByteOffset = (p64)pageHeaderPtr - (p64)contextPtr->heap;
     pageInfoPtr->status = MEMORY_PAGE_STATUS_UNLOCKED;
 
-    *outPageIdPtr = pageId;
+    ((struct memory_page_key *)outPageKeyPtr)->pageId = pageId;
+    ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = contextPtr->id;
+    ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = contextPtr->isDebug;
 
     return MEMORY_OK;
 }
 
 memory_error_code
-memory_free_page(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId)
+memory_free_page(const struct memory_page_key *pageKeyPtr)
 {
-    if (!memoryContextKeyPtr)
+    if (!pageKeyPtr)
     {
-        fprintf(stderr, "memory_free_page(%d): 'memoryContextKeyPtr' parameter is NULL. "
-                "Cannot free page.\n", __LINE__);
-                
+        fprintf(stderr, "memory_free_page(%d): 'pageKeyPtr' is NULL. "
+                "Cannot free a NULL page.\n", __LINE__);
+        
         return MEMORY_ERROR_NULL_PARAMETER;
     }
-
-    if (pageId == MEMORY_SHORT_ID_NULL)
+    
+    if (pageKeyPtr->pageId == MEMORY_SHORT_ID_NULL)
     {
-        fprintf(stderr, "memory_free_page(%d): 'pageId' is NULL_ID. "
+        fprintf(stderr, "memory_free_page(%d): pageId in key is NULL ID. "
                 "Cannot free a NULL page.\n", __LINE__);
+        
+        return MEMORY_ERROR_NULL_ID;
+    }
+    
+    if (pageKeyPtr->contextKey.contextId == MEMORY_SHORT_ID_NULL)
+    {
+        fprintf(stderr, "memory_free_page(%d): contextId in key is NULL ID. "
+                "Cannot free a page without reference to its context.\n", __LINE__);
         
         return MEMORY_ERROR_NULL_ID;
     }
@@ -967,7 +977,7 @@ memory_free_page(const struct memory_context_key *memoryContextKeyPtr, memory_sh
     {
         memory_error_code resultCode;
 
-        if ((resultCode = _memory_get_context((struct memory_context_key *)memoryContextKeyPtr, 
+        if ((resultCode = _memory_get_context((struct memory_context_key *)&pageKeyPtr->contextKey, 
             &contextPtr)) != MEMORY_OK)
         {
             return resultCode;
@@ -976,7 +986,7 @@ memory_free_page(const struct memory_context_key *memoryContextKeyPtr, memory_sh
 
     struct memory_page_info *pageInfoPtr;
     {
-        u16 infoIndex = pageId - 1;
+        u16 infoIndex = pageKeyPtr->pageId - 1;
 
         if (infoIndex < contextPtr->pagesRegionInfoCount)
         {
@@ -1038,7 +1048,7 @@ memory_free_page(const struct memory_context_key *memoryContextKeyPtr, memory_sh
 }
 
 memory_error_code
-memory_realloc_page(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId, u64 byteSize)
+memory_realloc_page(const struct memory_page_key *pageKeyPtr, u64 byteSize)
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }

@@ -59,24 +59,85 @@ _config_get_type_size(enum config_var_type type)
     return typeSize;
 }
 
-struct config *
-config_init(struct memory *mem)
+b32
+config_init(const struct memory_context_key *memKeyPtr, u64 varMemoryByteSize, const struct memory_allocation_key *outAllocationKeyPtr)
 {
-    assert(mem);
+    assert(memKeyPtr);
+    assert(outAllocationKeyPtr);
 
-    struct config *context = memory_alloc(mem, sizeof(struct config));
-    context->_arenaOffset = 0;
-    context->_arenaSize = 0;
-    context->_varCount = 0;
-    context->_mem = mem;
-    context->_varMap = DICTIONARY(mem, NULL, NULL);
+    const struct memory_page_key configPageKey;
+    const struct memory_page_key varPageKey;
+    struct config *configPtr;
+    {
+        memory_error_code resultCode;
 
-    return context;
+        if ((resultCode = memory_alloc_page(memKeyPtr, 
+            sizeof(struct config) + 256, &configPageKey)) != MEMORY_OK)
+        {
+            fprintf(stderr, "config_init(%d): Failure to allocate config context page.\n", __LINE__);
+
+            return B32_FALSE;
+        }
+
+        if ((resultCode = memory_alloc(&configPageKey, 
+            sizeof(struct config), outAllocationKeyPtr)) != MEMORY_OK)
+        {
+            fprintf(stderr, "config_init(%d): Failure to allocate config context.\n", __LINE__);
+            
+            memory_free_page(&configPageKey);
+            
+            return B32_FALSE;
+        }
+
+
+        if ((resultCode = memory_alloc_page(memKeyPtr, varMemoryByteSize, &varPageKey)) != MEMORY_OK)
+        {
+            fprintf(stderr, "config_init(%d): Failure to allocate var page.\n", __LINE__);
+            
+            memory_free(outAllocationKeyPtr);
+            memory_free_page(&configPageKey);
+
+            return B32_FALSE;
+        }
+        
+        if ((resultCode = memory_map_alloc(outAllocationKeyPtr, (void **)&configPtr)) != MEMORY_OK)
+        {
+            memory_free(outAllocationKeyPtr);
+            memory_free_page(&configPageKey);
+            memory_free_page(&varPageKey);
+            
+            return B32_FALSE;
+        }
+    }
+
+    configPtr->arenaOffset = 0;
+    configPtr->arenaSize = 0;
+    configPtr->varCount = 0;
+    configPtr->memKeyPtr = memKeyPtr;
+    configPtr->varDictKeyPtr = DICTIONARY(memKeyPtr, NULL, NULL);
+
+    memory_unmap_alloc(outAllocationKeyPtr, (void **)&configPtr);
+
+    return B32_TRUE;
 }
 
 b32
-config_load_config(struct config *context, const char *fileName)
+config_load_config(const struct memory_allocation_key *configKeyPtr, const char *fileName)
 {
+    assert(configKeyPtr);
+    assert(fileName);
+
+    struct config *configContextPtr;
+    {
+        memory_error_code resultCode;
+        
+        if ((resultCode = memory_map_alloc(configKeyPtr, (void **)configContextPtr)) !=
+            MEMORY_OK)
+        {
+
+        }
+    }
+
     const u32 nameLength = strlen(fileName);
     char *filePath = memory_alloc(context->_mem, (sizeof("resources/configs/") - 1) + nameLength + sizeof(".conf"));
     strcpy(filePath, "resources/configs/");

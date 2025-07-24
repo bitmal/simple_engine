@@ -46,9 +46,26 @@ enum memory_event_type
 #define MEMORY_MAX_ALLOCS (MEMORY_INT_ID_MAX - 1)
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
 
-struct memory_raw_allocation_key;
-struct memory_allocation_key;
-struct memory_context_key;
+struct memory_raw_allocation_key; // TODO
+
+struct memory_context_key
+{
+    memory_short_id contextId;
+    b32 isDebug;
+};
+
+struct memory_page_key
+{
+    memory_short_id pageId;
+    struct memory_context_key contextKey;
+};
+
+struct memory_allocation_key
+{
+    memory_int_id allocId;
+    u32 allocInfoIndex;
+    struct memory_context_key contextKey;
+};
 
 struct memory_context_diagnostic_info
 {
@@ -106,13 +123,13 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     const struct memory_context_key *outputMemoryContextKeyPtr);
 
 memory_error_code
-memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, memory_short_id *outPageIdPtr);
+memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byteSize, const struct memory_page_key *outPageKeyPtr);
 
 memory_error_code
-memory_free_page(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId);
+memory_free_page(const struct memory_page_key *pageKeyPtr);
 
 memory_error_code
-memory_realloc_page(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId, u64 byteSize);
+memory_realloc_page(const struct memory_page_key *pageKeyPtr, u64 byteSize);
 
 enum memory_page_status_t
 memory_page_get_status(const struct memory_context_key *memoryContextKeyPtr, memory_short_id pageId);
@@ -130,19 +147,20 @@ memory_error_code
 memory_pages_reorder(const struct memory_context_key *memoryContextKeyPtr);
 
 memory_error_code
-memory_alloc(const struct memory_context_key *memoryContextKeyPtr, const struct memory_allocation_key *outputAllocKeyPtr);
+memory_alloc(const struct memory_page_key *pageKeyPtr, 
+    u64 byteSize, const struct memory_allocation_key *outAllocKeyPtr);
 
 memory_error_code
-memory_realloc(const struct memory_context_key *memoryContextKeyPtr, const struct memory_allocation_key *outputAllocKeyPtr, u64 byteSize);
+memory_realloc(const struct memory_allocation_key *outputAllocKeyPtr, u64 byteSize);
 
 memory_error_code
-memory_free(const struct memory_context_key *memoryContextKeyPtr, const struct memory_allocation_key *allocKeyPtr);
+memory_free(const struct memory_allocation_key *allocKeyPtr);
 
 memory_error_code
-memory_map_alloc(const struct memory_context_key *memoryContextKeyPtr, const struct memory_allocation_key *allocKeyPtr, void **outAllocPtr);
+memory_map_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllocPtr);
 
 memory_error_code
-memory_unmap_alloc(const struct memory_context_key *memoryContextKeyPtr, const struct memory_allocation_key *allocKeyPtr, void **outAllocPtr);
+memory_unmap_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllocPtr);
 
 memory_error_code
 memory_context_get_diagnostic_info(const struct memory_context_key *memoryContextKeyPtr, const struct memory_context_diagnostic_info *outDiagInfoPtr);
@@ -151,7 +169,7 @@ memory_error_code
 memory_get_diagnostic_info(const struct memory_diagnostic_info *outDiagInfoPtr);
 
 u64
-memory_sizeof(const struct memory_context_key *memoryContextKeyPtr, const struct memory_allocation_key *allocKeyPtr);
+memory_sizeof(const struct memory_allocation_key *allocKeyPtr);
 
 u64
 memory_raw_alloc_sizeof(const struct memory_raw_allocation_key *rawAllocKeyPtr);
