@@ -155,8 +155,8 @@ memory_error_code
 memory_pages_reorder(const struct memory_context_key *memoryContextKeyPtr);
 
 memory_error_code
-memory_alloc(const struct memory_page_key *pageKeyPtr, 
-    u64 byteSize, const struct memory_allocation_key *outAllocKeyPtr);
+memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, 
+    const struct memory_allocation_key *outAllocKeyPtr);
 
 memory_error_code
 memory_realloc(const struct memory_allocation_key *outputAllocKeyPtr, u64 byteSize);

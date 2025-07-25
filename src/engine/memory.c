@@ -56,14 +56,14 @@ struct memory_page_header
     u32 allocationFreeCount;
     u32 allocationCapacity;
     struct memory_allocation_info *allocationArr;
-    struct memory_allocation_info *allocationActiveList;
-    struct memory_allocation_info *allocationFreeList;
+    memory_int_id allocationActiveList;
+    memory_int_id allocationFreeList;
     u32 allocatorActiveCount;
     u32 allocatorFreeCount;
-    struct memory_allocator *allocatorActiveList;
-    struct memory_allocator *allocatorFreeList;
-    struct memory_page_header *prev;
-    struct memory_page_header *next;
+    memory_int_id allocatorActiveList;
+    memory_int_id allocatorFreeList;
+    p64 prevPageHeaderByteOffset;
+    p64 nextPageHeaderByteOffset;
 };
 
 // (pageId, allocationKey) -->
@@ -87,9 +87,9 @@ struct memory_context
     struct memory_page_info *pagesRegionInfoArr;
     u16 pagesRegionInfoCount;
     u16 pagesRegionInfoCapacity;
-    struct memory_page_header *activePages;
+    p64 activePagesByteOffsetList;
+    p64 freePagesByteOffsetList;
     u16 pagesRegionActiveCount;
-    struct memory_page_header *freePages;
     u16 pagesRegionFreeCount;
     u32 pagesRegionActiveAllocationCount;
     u32 pagesRegionFreeAllocationCount;
@@ -642,11 +642,11 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
     debugContextPtr->_.heap = malloc(totalBytesToAllocate);
     debugContextPtr->_.pagesRegionInfoCapacity = 0;
     debugContextPtr->_.pagesRegionInfoCount = 0;
-    debugContextPtr->_.isDebug = B32_TRUE;
-
-    debugContextPtr->eventQueueCapacity = 0;
-    debugContextPtr->eventQueueReadIndex = 0;
-    debugContextPtr->eventQueueWriteIndex = 0;
+    debugContextPtr->_.activePagesByteOffsetList = debugContextPtr->_.freePagesByteOffsetList = MEMORY_SHORT_ID_NULL;
+    debugContextPtr->_.pagesRegionActiveCount = 0;
+    debugContextPtr->_.pagesRegionFreeCount = 0;
+    debugContextPtr->_.reservedHeapBytes = 0;
+    debugContextPtr->_.isDebug = B32_FALSE;
 
     if (contextLabel)
     {
@@ -725,6 +725,10 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     contextPtr->heap = malloc(totalBytesToAllocate);
     contextPtr->pagesRegionInfoCapacity = 0;
     contextPtr->pagesRegionInfoCount = 0;
+    contextPtr->activePagesByteOffsetList = contextPtr->freePagesByteOffsetList = MEMORY_SHORT_ID_NULL;
+    contextPtr->pagesRegionActiveCount = 0;
+    contextPtr->pagesRegionFreeCount = 0;
+    contextPtr->reservedHeapBytes = 0;
     contextPtr->isDebug = B32_FALSE;
     
     ((struct memory_context_key *)outputMemoryContextKeyPtr)->contextId = contextId;
@@ -773,11 +777,12 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     }
 
     // get/allocate a page header and allocated bytes
+    p64 pagesRegionByteIndex = (p64)contextPtr->heap + contextPtr->pagesRegionByteOffset;
     struct memory_page_header *pageHeaderPtr;
 
     if (contextPtr->pagesRegionFreeCount > 0)
     {
-        pageHeaderPtr = contextPtr->freePages;
+        pageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + contextPtr->freePagesByteOffsetList);
 
         memory_error_code resultCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
@@ -789,7 +794,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
                 break;
             }
-        } while((pageHeaderPtr = pageHeaderPtr->next) != contextPtr->freePages);
+        } while((pageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + ((pageHeaderPtr->nextPageHeaderByteOffset !=
+                contextPtr->freePagesByteOffsetList) ? pageHeaderPtr->nextPageHeaderByteOffset : -pagesRegionByteIndex))));
 
         if (resultCode != MEMORY_OK)
         {
@@ -829,20 +835,26 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
     if (contextPtr->pagesRegionActiveCount > 0)
     {
-        pageHeaderPtr->next = contextPtr->activePages;
-        pageHeaderPtr->prev = contextPtr->activePages->prev;
+        struct memory_page_header *headActivePageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex +
+            contextPtr->activePagesByteOffsetList);
+        pageHeaderPtr->prevPageHeaderByteOffset = headActivePageHeaderPtr->prevPageHeaderByteOffset;
+        pageHeaderPtr->nextPageHeaderByteOffset = contextPtr->activePagesByteOffsetList;
+        
+        struct memory_page_header *prevActivePageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex +
+            headActivePageHeaderPtr->prevPageHeaderByteOffset);
 
-        contextPtr->activePages->prev->next = pageHeaderPtr;
-        contextPtr->activePages->prev = pageHeaderPtr;
+        prevActivePageHeaderPtr->nextPageHeaderByteOffset = (p64)pageHeaderPtr - pagesRegionByteIndex;
+        headActivePageHeaderPtr->prevPageHeaderByteOffset = (p64)pageHeaderPtr - pagesRegionByteIndex;
     }
     else 
     {
-        pageHeaderPtr->prev = pageHeaderPtr->next = pageHeaderPtr;
+        pageHeaderPtr->prevPageHeaderByteOffset = pageHeaderPtr->nextPageHeaderByteOffset = (p64)pageHeaderPtr - 
+            pagesRegionByteIndex;
     }
 
     pageHeaderPtr->identifier = MEMORY_HEADER_ID;
 
-    contextPtr->activePages = pageHeaderPtr;
+    contextPtr->activePagesByteOffsetList = (p64)pageHeaderPtr - pagesRegionByteIndex;
     ++contextPtr->pagesRegionActiveCount;
 
     // split the page for future page allocations, if we can
@@ -862,19 +874,23 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 
         if (contextPtr->pagesRegionFreeCount > 0)
         {
-            contextPtr->freePages->prev->next = splitPageHeader;
+            struct memory_page_header *headFreePageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + 
+                contextPtr->freePagesByteOffsetList);
+            
+            struct memory_page_header *prevFreePageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + 
+                headFreePageHeaderPtr->prevPageHeaderByteOffset);
 
-            splitPageHeader->prev = contextPtr->freePages->prev;
-            contextPtr->freePages->prev = splitPageHeader;
+            prevFreePageHeaderPtr->nextPageHeaderByteOffset = splitPageHeaderByteOffset;
+            splitPageHeader->prevPageHeaderByteOffset = pagesRegionByteIndex;
 
-            splitPageHeader->next = contextPtr->freePages;
+            splitPageHeader->nextPageHeaderByteOffset = contextPtr->freePagesByteOffsetList;
         }
         else 
         {
-            splitPageHeader->prev = splitPageHeader->next = splitPageHeader;
+            splitPageHeader->prevPageHeaderByteOffset = splitPageHeader->nextPageHeaderByteOffset = splitPageHeaderByteOffset;
         }
         
-        contextPtr->freePages = splitPageHeader;
+        contextPtr->freePagesByteOffsetList = splitPageHeaderByteOffset;
         ++contextPtr->pagesRegionFreeCount;
     }
     else 
@@ -1002,63 +1018,80 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
 
     pageInfoPtr->status = MEMORY_PAGE_STATUS_FREED;
 
-    struct memory_page_header *pageHeaderPtr = (struct memory_page_header *)(contextPtr->heap + pageInfoPtr->pageHeaderByteOffset);
+    p64 pagesRegionByteIndex = (p64)contextPtr->heap + contextPtr->pagesRegionByteOffset;
+    struct memory_page_header *pageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + 
+        pageInfoPtr->pageHeaderByteOffset);
 
     if (contextPtr->pagesRegionActiveCount > 1)
     {
-        contextPtr->activePages->prev->next = contextPtr->activePages->next;
-        contextPtr->activePages->next->prev = contextPtr->activePages->prev;
+        struct memory_page_header *headActivePageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + 
+            contextPtr->activePagesByteOffsetList);
+        struct memory_page_header *prevActivePageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + 
+            headActivePageHeaderPtr->prevPageHeaderByteOffset);
+        struct memory_page_header *nextActivePageHeaderPtr = (struct memory_page_header *)(pagesRegionByteIndex + 
+            headActivePageHeaderPtr->nextPageHeaderByteOffset);
 
-        if (contextPtr->activePages == pageHeaderPtr)
+        prevActivePageHeaderPtr->nextPageHeaderByteOffset = headActivePageHeaderPtr->nextPageHeaderByteOffset;
+        nextActivePageHeaderPtr->prevPageHeaderByteOffset = headActivePageHeaderPtr->prevPageHeaderByteOffset;
+
+        if (contextPtr->activePagesByteOffsetList == pageInfoPtr->pageHeaderByteOffset)
         {
-            contextPtr->activePages = contextPtr->activePages->next;
+            contextPtr->activePagesByteOffsetList = headActivePageHeaderPtr->nextPageHeaderByteOffset;
         }
     }
     else 
     {
-        contextPtr->activePages = NULL;
+        contextPtr->activePagesByteOffsetList = 0;
     }
 
     --contextPtr->pagesRegionActiveCount;
 
     if (contextPtr->pagesRegionFreeCount > 0)
     {
-        contextPtr->freePages->prev->next = pageHeaderPtr;
-        pageHeaderPtr->prev = contextPtr->freePages->prev;
-        contextPtr->freePages->prev = pageHeaderPtr;
-        pageHeaderPtr->next = contextPtr->freePages;
+        struct memory_page_header *headPtr = (struct memory_page_header *)(pagesRegionByteIndex + contextPtr->freePagesByteOffsetList);
+        struct memory_page_header *prevPtr = (struct memory_page_header *)(pagesRegionByteIndex + headPtr->prevPageHeaderByteOffset);
+
+        prevPtr->nextPageHeaderByteOffset = (p64)pageHeaderPtr - pagesRegionByteIndex;
+        pageHeaderPtr->prevPageHeaderByteOffset = headPtr->prevPageHeaderByteOffset;
+        headPtr->prevPageHeaderByteOffset = prevPtr->nextPageHeaderByteOffset;
+        pageHeaderPtr->nextPageHeaderByteOffset = contextPtr->freePagesByteOffsetList;
     }
     else 
     {
-        pageHeaderPtr->prev = pageHeaderPtr->next = pageHeaderPtr;
+        pageHeaderPtr->prevPageHeaderByteOffset = pageHeaderPtr->nextPageHeaderByteOffset = (p64)pageHeaderPtr - pagesRegionByteIndex;
     }
 
-    for (struct memory_allocation_info *allocationInfo = pageHeaderPtr->allocationActiveList;
-        allocationInfo && (allocationInfo->nextAllocationId != pageHeaderPtr->allocationActiveList->allocationId); 
-        allocationInfo = &pageHeaderPtr->allocationArr[allocationInfo->nextAllocationId - 1])
+    for (struct memory_allocation_info *allocationInfo = &pageHeaderPtr->allocationArr[pageHeaderPtr->allocationActiveList - 1];
+        allocationInfo && (allocationInfo->nextAllocationId != pageHeaderPtr->allocationActiveList);)
     {
-        if (pageHeaderPtr->allocationFreeCount > 0)
-        {
-            allocationInfo->prevAllocationId = pageHeaderPtr->allocationFreeList->prevAllocationId;
-            allocationInfo->nextAllocationId = pageHeaderPtr->allocationFreeList->allocationId;
-            
-            pageHeaderPtr->allocationFreeList->prevAllocationId = allocationInfo->allocationId;
-        }
-        else 
-        {
-            allocationInfo->prevAllocationId = allocationInfo->nextAllocationId = allocationInfo->allocationId;
-        }
+        memory_int_id nextAllocationId = allocationInfo->nextAllocationId;
+
+        allocationInfo->prevAllocationId = allocationInfo->nextAllocationId = MEMORY_INT_ID_NULL;
         
         allocationInfo->isActive = B32_FALSE;
         allocationInfo->allocatorByteOffset = 0;
 
-        pageHeaderPtr->allocationFreeList = allocationInfo;
+        allocationInfo = &pageHeaderPtr->allocationArr[nextAllocationId - 1];
     }
     
-    pageHeaderPtr->allocationFreeCount += pageHeaderPtr->allocationActiveCount;
-    pageHeaderPtr->allocationActiveCount = 0;
+    for (struct memory_allocation_info *allocationInfo = &pageHeaderPtr->allocationArr[pageHeaderPtr->allocationFreeList - 1];
+        allocationInfo && (allocationInfo->nextAllocationId != pageHeaderPtr->allocationFreeList);)
+    {
+        memory_int_id nextAllocationId = allocationInfo->nextAllocationId;
 
-    contextPtr->freePages = pageHeaderPtr;
+        allocationInfo->prevAllocationId = allocationInfo->nextAllocationId = MEMORY_INT_ID_NULL;
+        
+        allocationInfo->isActive = B32_FALSE;
+        allocationInfo->allocatorByteOffset = 0;
+
+        allocationInfo = &pageHeaderPtr->allocationArr[nextAllocationId - 1];
+    }
+    
+    pageHeaderPtr->allocationFreeCount = 0;
+    pageHeaderPtr->allocationActiveCount = 0;
+    pageHeaderPtr->allocationActiveList = pageHeaderPtr->allocationFreeList = MEMORY_INT_ID_NULL;
+
+    contextPtr->freePagesByteOffsetList = (p64)pageHeaderPtr - pagesRegionByteIndex;
     ++contextPtr->pagesRegionFreeCount;
 
     return MEMORY_OK;
@@ -1074,4 +1107,10 @@ memory_error_code
 memory_get_page_key_is_ok(const struct memory_page_key *pageKeyPtr)
 {
     return _memory_get_page_key_is_ok(pageKeyPtr);
+}
+
+memory_error_code
+memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, 
+    const struct memory_allocation_key *outAllocKeyPtr)
+{
 }
