@@ -39,7 +39,7 @@ _default_hash_func(const struct memory_allocation_key *dictKeyPtr, void *key)
 
 b32
 basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
-    i32 initBuckets, u64 keySize, const struct memory_allocation_key *userPtr, 
+    u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtr, 
     const struct memory_allocation_key *database)
 {
     const struct memory_allocation_key dictKey;
@@ -72,7 +72,7 @@ basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_has
         }
     }
 
-    dictPtr->buckets = initBuckets;
+    dictPtr->tableBucketCount = initBuckets;
     dictPtr->__table = memory_alloc(&dictKey, sizeof(struct basic_dict_pair *)*initBuckets);
     memset(dict->__table, 0, sizeof(struct basic_dict_pair *)*initBuckets);
     dict->__hashFunc = hashFunc ? hashFunc : &_default_hash_func;

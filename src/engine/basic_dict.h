@@ -23,7 +23,7 @@ struct basic_dict;
 
 b32
 basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
-    i32 initBuckets, u64 keySize, const struct memory_allocation_key *userPtr, 
+    u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtr, 
     const struct memory_allocation_key *database);
     
 #define DICTIONARY(memoryPageKeyPtr, hashFunc, keySize, userKeyPtr, dataKeyPtr) \

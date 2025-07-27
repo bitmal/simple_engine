@@ -5,12 +5,11 @@
 #include "types.h"
 
 #include <float.h>
+#include <stdio.h>
 
 #define UTILS_SORT_RESULT_BEFORE -1
 #define UTILS_SORT_RESULT_EQUALS 0
 #define UTILS_SORT_RESULT_AFTER 1
-
-struct memory;
 
 // before(-1) < ==(0) < after(1) 
 typedef i32 (*utils_sort_compare_func)(void *database, void *lhs, void *rhs, u32 elementSize, void *userPtr);
@@ -25,6 +24,12 @@ struct utils_string_hash
 
 typedef u64 utils_hash_u64;
 typedef utils_hash_u64 utils_hash;
+
+i32
+utils_fprintf(FILE *filePtr, const char *formatStrPtr, ...);
+
+i32
+utils_printf(const char *formatStrPtr, ...);
 
 b32 
 utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult);

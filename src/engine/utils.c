@@ -1,13 +1,41 @@
 #include "utils.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <assert.h>
+#include <stdarg.h>
 
 static const u64 *g_ELAPSED_TIME_PTR;
 static const u32 *g_ELAPSED_TIME_INT_PTR;
 static u32 g_RANDOM_SEED;
 static b32 g_IS_RANDOM_SEED_SET;
+
+i32
+utils_fprintf(FILE *filePtr, const char *formatStrPtr, ...)
+{
+    va_list args;
+    va_start(args, formatStrPtr);
+
+    i32 resultCode = vfprintf(filePtr, formatStrPtr, args);
+
+    va_end(args);
+
+    return resultCode;
+}
+
+i32
+utils_printf(const char *formatStrPtr, ...)
+{
+    va_list args;
+    va_start(args, formatStrPtr);
+
+    i32 resultCode = vprintf(formatStrPtr, args);
+
+    va_end(args);
+
+    return resultCode;
+}
 
 b32 
 utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult)

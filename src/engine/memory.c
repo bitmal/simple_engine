@@ -804,7 +804,6 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
     rawAllocationHeaderPtr->rawAllocationId = rawAllocationId;
     rawAllocationHeaderPtr->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
 
-    // output
     ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationId = rawAllocationId;
     ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
 
