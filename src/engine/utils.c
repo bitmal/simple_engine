@@ -39,17 +39,30 @@ utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResu
 }
 
 b32 
-utils_generate_string_from_hash(utils_hash hash, u64 outStrByteSize, char *outStr)
+utils_generate_string_from_hash(struct utils_string_hash *hashPtr, char *outStr)
 {
-    // TODO: reverse the hash into a string
-    assert(B32_FALSE);
-
-    if (!outStr)
+    if (outStr)
     {
+        const i32 p = 59;
+        const i32 m = 1e9 + 9;
+        u64 hash = hashPtr->hash;
+        u64 pPow = (pPow*p)*(hashPtr->stringByteSize - 1)%m;
+
+        u64 lastCharNumber = hashPtr->stringByteSize;
+
+        for (u64 charIndex = lastCharNumber - 1; charIndex >= 0; --charIndex)
+        {
+            //outStr[charIndex] = ;
+            hash = (hash - (outStr[charIndex] - 'a' + 1)*pPow%m)%m;
+            pPow -= (pPow*p)%m;
+        }
+
+        outStr[lastCharNumber] = '\0';
+
         return B32_FALSE;
     }
 
-    return B32_TRUE;
+    return B32_FALSE;
 }
 
 void
@@ -146,18 +159,34 @@ utils_generate_random_positive_normalized_real64(real64 *outRandomPtr)
 b32
 utils_generate_random_u64_from_string(const char *str, u64 *outRandomPtr)
 {
-    assert(B32_FALSE);
+    if (g_IS_RANDOM_SEED_SET && outRandomPtr)
+    {
+        struct utils_string_hash resultHash;
+
+        utils_generate_hash_from_string(str, &resultHash);
+
+        *outRandomPtr = (u64)((real64)rand()/RAND_MAX*resultHash.hash);
+
+        return B32_TRUE;
+    }
     
-    // TODO:
     return B32_FALSE;
 }
 
 real64
 utils_generate_random_positive_normalized_real64_from_string(const char *str, real64 *outRandomPtr)
 {
-    assert(B32_FALSE);
+    if (g_IS_RANDOM_SEED_SET && outRandomPtr)
+    {
+        struct utils_string_hash resultHash;
+        
+        utils_generate_hash_from_string(str, &resultHash);
 
-    // TODO:
+        *outRandomPtr = (real64)rand()/RAND_MAX*(real64)resultHash.hash;
+
+        return B32_TRUE;
+    }
+    
     return B32_FALSE;
 }
 

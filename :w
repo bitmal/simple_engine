@@ -618,9 +618,12 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
         }
     }
 
+    // TODO: index the bucket of the info map, based off of the generated id
     u16 rawAllocationInfoMapBucketIndex = (u16)((real64)rawAllocationId/MEMORY_MAX_RAW_ALLOCS*
         g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_COUNT) - 1;
     
+    // allocate info bucket array index, using the size of the bucket array branch
+    //  and allocate memory necessary first
     u16 rawAllocationInfoMapBranchIndex = 
         g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_BRANCH_INFO_TABLE[rawAllocationInfoMapBucketIndex].branchCount;
 
@@ -674,39 +677,16 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
         ++g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_BRANCH_INFO_TABLE[rawAllocationInfoMapBucketIndex].branchCapacity;
     }
 
+    // initialize the info object
     struct memory_raw_allocation_info *infoObjectPtr = &g_MEMORY_RAW_ALLOCATION_INFO_MAP[rawAllocationInfoMapBucketIndex][
         rawAllocationInfoMapBranchIndex];
 
 #define MEMORY_RAW_ALLOC_ALLOCATION_MULTIPLIER 2
 
-    u16 rawAllocationIndex;
+    u16 rawAllocationIndex = rawAllocationCount;
     u16 freeAllocationCount = g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT;
 
-    struct memory_raw_allocation_header *freeRawAllocationHeaderPtr;
-    if (g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT > 0)
-    {
-        freeRawAllocationHeaderPtr = ((struct memory_raw_allocation_header *)
-            g_MEMORY_RAW_ALLOCATION_ARR[g_MEMORY_RAW_ALLOCATION_ARR_FREE_LIST_HEAD_INDEX]);
-            
-        do
-        {
-            if (freeRawAllocationHeaderPtr->byteSize >= byteSize)
-            {
-                break;
-            }
-            else if (freeRawAllocationHeaderPtr->nextAllocationIndex == g_MEMORY_RAW_ALLOCATION_ARR_FREE_LIST_HEAD_INDEX)
-            {
-                freeRawAllocationHeaderPtr = NULL;
-                
-                break;
-            }
-
-            freeRawAllocationHeaderPtr = (struct memory_raw_allocation_header *)
-                g_MEMORY_RAW_ALLOCATION_ARR[freeRawAllocationHeaderPtr->nextAllocationIndex];
-        } while(B32_TRUE);
-    }
-
-    if (!freeRawAllocationHeaderPtr && (rawAllocationCount == g_MEMORY_RAW_ALLOCATION_CAPACITY))
+    if (rawAllocationCount == g_MEMORY_RAW_ALLOCATION_CAPACITY)
     {
         if (g_MEMORY_RAW_ALLOCATION_CAPACITY > 0)
         {
@@ -717,9 +697,6 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
             if (tempPtr)
             {
                 g_MEMORY_RAW_ALLOCATION_ARR = tempPtr;
-
-                rawAllocationIndex = g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT;
-                
                 ++g_MEMORY_RAW_ALLOCATION_CAPACITY;
             }
             else 
@@ -752,15 +729,9 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
             }
         }
     }
-    else if (freeRawAllocationHeaderPtr)
-    {
-        --freeAllocationCount;
-    }
     else 
     {
-        memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
-
-        return errorCode;
+        --freeAllocationCount;
     }
 
     struct memory_raw_allocation_header *rawAllocationHeaderPtr = malloc(sizeof(struct memory_raw_allocation_header) +
@@ -799,16 +770,10 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
 
     ++g_MEMORY_RAW_ALLOCATION_ACTIVE_LIST_COUNT;
     ++g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_BRANCH_INFO_TABLE[rawAllocationInfoMapBucketIndex].branchCount;
-    g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT = freeAllocationCount;
-
-    rawAllocationHeaderPtr->rawAllocationId = rawAllocationId;
-    rawAllocationHeaderPtr->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
 
     // output
-    ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationId = rawAllocationId;
-    ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
 
-    return MEMORY_OK;
+    return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
 memory_error_code
@@ -833,12 +798,6 @@ memory_error_code
 memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr)
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
-}
-
-memory_error_code
-memory_get_is_raw_allocation_operation_ok()
-{
-    return _memory_get_is_raw_allocation_operation_ok();
 }
 
 memory_error_code

@@ -30,7 +30,7 @@ b32
 utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult);
 
 b32 
-utils_generate_string_from_hash(utils_hash hash, u64 outStrByteSize, char *outStr);
+utils_generate_string_from_hash(struct utils_string_hash *hashPtr, char *outStr);
 
 void
 utils_set_elapsed_time_ns_ptr(u64 *ptr);

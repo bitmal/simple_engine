@@ -5,23 +5,80 @@
 #include <stdlib.h>
 #include <assert.h>
 
-static u64 
-_default_hash_func(struct basic_dict *dict, void *key)
+struct basic_dict_pair
 {
-    return utils_str_hash_func(key);
+    const void *key;
+    u64 hash;
+    basic_dict_rel_ptr dataPtr;
+    struct basic_dict_pair *next;
+};
+
+struct basic_dict
+{
+    const struct memory_page_key *
+    const struct memory_allocation_key tableKey;
+    const struct memory_allocation_key userPtrKey;
+    u32 tableBucketCount;
+    basic_dict_hash_func hashFunc;
+};
+
+static b32 
+_default_hash_func(const struct memory_allocation_key *dictKeyPtr, void *key)
+{
+    struct utils_string_hash resultHash;
+
+    if (!(utils_generate_hash_from_string(key, &resultHash)))
+    {
+        return B32_FALSE;
+    }
+
+    basic_dict_get_is_found(const struct memory_allocation_key *memoryKeyPtr, void *key)
+
+    return B32_TRUE;
 }
 
-struct basic_dict *
-basic_dict_create(struct memory *memory, basic_dict_hash_func hashFunc, i32 initBuckets, void *userPtr)
+b32
+basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
+    i32 initBuckets, u64 keySize, const struct memory_allocation_key *userPtr, 
+    const struct memory_allocation_key *database)
 {
-    struct basic_dict *dict = memory_alloc(memory, sizeof(struct basic_dict));
-    dict->buckets = initBuckets;
-    dict->__table = memory_alloc(memory, sizeof(struct basic_dict_pair *)*initBuckets);
+    const struct memory_allocation_key dictKey;
+    {
+        memory_error_code resultCode;
+
+        if ((resultCode = memory_alloc(memoryPageKeyPtr, 
+            sizeof(struct basic_dict) + sizeof(struct memory_raw_allocation_key), &dictKey) != MEMORY_OK))
+        {
+            fprintf(stderr, "%s(%d): Memory Error(%u), cannot allocate basic_dict.\n",
+                    __FUNCTION__, __LINE__, (u32)resultCode);
+
+            return B32_FALSE;
+        }
+    }
+
+    struct basic_dict *dictPtr;
+    {
+        memory_error_code resultCode;
+            
+        if ((resultCode = memory_map_alloc(&dictKey, 
+            (void **)&dictPtr)) != MEMORY_OK)
+        {
+            memory_free(&dictKey);
+
+            fprintf(stderr, "%s(%d): Memory Error(%u), cannot map basic_dict allocation.\n",
+                    __FUNCTION__, __LINE__, (u32)resultCode);
+
+            return B32_FALSE;
+        }
+    }
+
+    dictPtr->buckets = initBuckets;
+    dictPtr->__table = memory_alloc(&dictKey, sizeof(struct basic_dict_pair *)*initBuckets);
     memset(dict->__table, 0, sizeof(struct basic_dict_pair *)*initBuckets);
     dict->__hashFunc = hashFunc ? hashFunc : &_default_hash_func;
     dict->userPtr = userPtr;
 
-    return dict;
+    return B32_TRUE;
 }
 
 void *
@@ -135,8 +192,12 @@ basic_dict_clear(struct basic_dict *dict)
 }
 
 b32
-basic_dict_get_is_found(struct basic_dict *dict, void *key)
+basic_dict_get_is_found(const struct memory_allocation_key *dictKeyPtr, void *keyPtr)
 {
+    struct basic_dict *dictPtr;
+    {
+        memory_error_code
+    }
     const u64 hash = dict->__hashFunc(dict, key);
 
 

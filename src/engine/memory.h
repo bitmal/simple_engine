@@ -46,8 +46,6 @@ enum memory_event_type
 #define MEMORY_MAX_ALLOCS (MEMORY_INT_ID_MAX - 1)
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
 
-struct memory_raw_allocation_key; // TODO
-
 struct memory_context_key
 {
     memory_short_id contextId;
@@ -57,14 +55,20 @@ struct memory_context_key
 struct memory_page_key
 {
     memory_short_id pageId;
-    struct memory_context_key contextKey;
+    const struct memory_context_key contextKey;
+};
+
+struct memory_raw_allocation_key
+{
+    memory_short_id rawAllocationId;
+    u16 rawAllocationInfoBranchIndex;
 };
 
 struct memory_allocation_key
 {
     memory_int_id allocId;
     u32 allocInfoIndex;
-    struct memory_context_key contextKey;
+    const struct memory_context_key contextKey;
 };
 
 struct memory_context_diagnostic_info
@@ -102,7 +106,7 @@ struct memory_diagnostic_info
 #define MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION ((memory_error_code)15)
 
 memory_error_code
-memory_alloc_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
+memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
 memory_realloc_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, u64 byteSize);
@@ -115,6 +119,9 @@ memory_map_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr
 
 memory_error_code
 memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr);
+
+memory_error_code
+memory_get_is_raw_allocation_operation_ok();
 
 memory_error_code
 memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
@@ -165,10 +172,10 @@ memory_error_code
 memory_free(const struct memory_allocation_key *allocKeyPtr);
 
 memory_error_code
-memory_map_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllocPtr);
+memory_map_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllocationPtr);
 
 memory_error_code
-memory_unmap_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllocPtr);
+memory_unmap_alloc(void **outAllocationPtr);
 
 memory_error_code
 memory_get_alloc_key_is_ok(const struct memory_allocation_key *allocKeyPtr);
