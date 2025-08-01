@@ -6,29 +6,25 @@
 
 #include <stdio.h>
 
-typedef i32 basic_dict_id;
-typedef u64 basic_dict_rel_ptr;
+typedef u32 basic_dict_id;
+
+struct utils_string_hash;
 
 struct basic_dict;
-typedef b32 (*basic_dict_hash_func)(const struct memory_allocation_key *dictKeyPtr, void *key);
+
+typedef b32 (*basic_dict_hash_func)(const struct memory_allocation_key *dictKeyPtr, void *key, 
+    struct utils_string_hash *outHashPtr);
 typedef b32 (*basic_dict_data_is_found_equal_func)(struct basic_dict *dict, void *key);
-
-#define BASIC_DICT_NULL_REL_PTR ((basic_dict_rel_ptr)0 - (basic_dict_rel_ptr)1)
-#define BASIC_DICT_MAX_ADDRESS (BASIC_DICT_NULL_REL_PTR - 1)
-
-#define BASIC_DICT_DEFAULT_BUCKET_COUNT 101
 
 struct basic_dict_pair;
 struct basic_dict;
 
+#define BASIC_DICT_NULL_PTR ((p64)0)
+
 b32
 basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
-    u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtr, 
-    const struct memory_allocation_key *database);
-    
-#define DICTIONARY(memoryPageKeyPtr, hashFunc, keySize, userKeyPtr, dataKeyPtr) \
-    basic_dict_create(memoryPageKeyPtr, hashFunc, \
-    BASIC_DICT_DEFAULT_BUCKET_COUNT, keySize, userPtr, database)
+    u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtrKeyPtr, 
+    const struct memory_allocation_key *databaseKeyPtr);
 
 b32
 basic_dict_get(const struct memory_allocation_key *dictKeyPtr, void *keyPtr, 

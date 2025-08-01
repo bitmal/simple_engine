@@ -29,7 +29,13 @@ i32
 utils_fprintf(FILE *filePtr, const char *formatStrPtr, ...);
 
 i32
+utils_fprintfln(FILE *filePtr, const char *formatStrPtr, ...);
+
+i32
 utils_printf(const char *formatStrPtr, ...);
+
+i32
+utils_printfln(const char *formatStrPtr, ...);
 
 b32 
 utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult);

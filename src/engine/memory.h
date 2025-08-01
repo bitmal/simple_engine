@@ -46,6 +46,17 @@ enum memory_event_type
 #define MEMORY_MAX_ALLOCS (MEMORY_INT_ID_MAX - 1)
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
 
+#define MEMORY_IS_CONTEXT_NULL(contextKeyPtr) (contextKeyPtr ? ((contextKeyPtr->contextId == MEMORY_SHORT_ID_NULL) ? \
+    B32_TRUE : B32_FALSE) : B32_TRUE)
+
+#define MEMORY_IS_PAGE_NULL(pageKeyPtr) (pageKeyPtr ? ((pageKeyPtr->pageId == MEMORY_SHORT_ID_NULL) ? \
+    MEMORY_IS_CONTEXT_NULL((&pageKeyPtr->contextKey)) : B32_FALSE) : B32_TRUE)
+
+#define MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr) (allocationKeyPtr ? ((allocationKeyPtr->allocId == MEMORY_INT_ID_NULL) ? \
+    MEMORY_IS_CONTEXT_NULL((&allocationKeyPtr->contextKey))) : B32_TRUE)
+
+#define MEMORY_LABEL_REGION_ALLOCATION_BYTE_OFFSET ((p64)0)
+
 struct memory_context_key
 {
     memory_short_id contextId;
@@ -109,10 +120,10 @@ memory_error_code
 memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
-memory_realloc_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, u64 byteSize);
+memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
-memory_free_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr);
+memory_raw_free(const struct memory_raw_allocation_key *outRawAllocKeyPtr);
 
 memory_error_code
 memory_map_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr);
@@ -121,14 +132,18 @@ memory_error_code
 memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr);
 
 memory_error_code
+memory_set_raw_alloc_offset_width(const struct memory_raw_allocation_key *rawAllocationKeyPtr, p64 byteOffset, 
+    u64 byteWidth, u8 value);
+
+memory_error_code
 memory_get_is_raw_allocation_operation_ok();
 
 memory_error_code
-memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
+memory_create_debug_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
     const char *contextLabel, const struct memory_context_key *outputMemoryDebugContextKeyPtr);
 
 memory_error_code
-memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, 
+memory_create_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteCapacity, 
     const struct memory_context_key *outputMemoryContextKeyPtr);
 
 memory_error_code
@@ -162,8 +177,8 @@ memory_error_code
 memory_pages_reorder(const struct memory_context_key *memoryContextKeyPtr);
 
 memory_error_code
-memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, 
-    const struct memory_allocation_key *outAllocKeyPtr);
+memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char *debugLabelStr,
+    const struct memory_allocation_key *outAllocKeyPtr); // TODO: labels
 
 memory_error_code
 memory_realloc(const struct memory_allocation_key *outputAllocKeyPtr, u64 byteSize);
@@ -176,6 +191,10 @@ memory_map_alloc(const struct memory_allocation_key *allocKeyPtr, void **outAllo
 
 memory_error_code
 memory_unmap_alloc(void **outAllocationPtr);
+
+memory_error_code
+memory_set_alloc_offset_width(const struct memory_allocation_key *allocationKeyPtr, p64 byteOffset, 
+    u64 byteWidth, u8 value);
 
 memory_error_code
 memory_get_alloc_key_is_ok(const struct memory_allocation_key *allocKeyPtr);

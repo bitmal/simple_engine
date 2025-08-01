@@ -16,15 +16,6 @@
 
 #define MEMORY_HEADER_ID ((u16)0xDEAD)
 
-struct memory_allocator
-{
-    u16 identifier;
-    memory_int_id allocationId;
-    u64 byteSize;
-    p64 prevByteOffset;
-    p64 nextByteOffset;
-};
-
 struct memory_raw_allocation_header
 {
     u16 identifier;
@@ -47,13 +38,25 @@ struct memory_raw_allocation_info_map_branch_info
     u16 branchCapacity;
 };
 
+struct memory_allocator
+{
+    u16 identifier;
+    memory_int_id allocationId;
+    u64 byteSize;
+    p64 prevAllocatorByteOffset;
+    p64 nextAllocatorByteOffset;
+};
+
 struct memory_allocation_info
 {
     memory_short_id pageId;
     memory_int_id allocationId;
+    p64 labelStrByteOffset;
     p64 allocatorByteOffset;
-    memory_int_id prevAllocationId;
-    memory_int_id nextAllocationId;
+    memory_int_id prevAllocationInfoId;
+    memory_int_id nextAllocationInfoId;
+    b32 isMapped; // TODO: implement; imagine having threads able to 
+                    // operate on particular allocations, and they're safely gated
     b32 isActive;
 };
 
@@ -61,16 +64,12 @@ struct memory_page_header
 {
     u16 identifier;
     u64 heapByteSize;
-    u32 allocationActiveCount;
-    u32 allocationFreeCount;
-    u32 allocationCapacity;
-    struct memory_allocation_info *allocationArr;
-    memory_int_id allocationActiveList;
-    memory_int_id allocationFreeList;
-    u32 allocatorActiveCount;
-    u32 allocatorFreeCount;
-    memory_int_id allocatorActiveList;
-    memory_int_id allocatorFreeList;
+    u32 allocationInfoCount;
+    p64 allocationInfoByteOffsetList;
+    u32 activeAllocatorCount;
+    p64 activeAllocatorByteOffsetList;
+    u32 freeAllocatorCount;
+    p64 freeAllocatorByteOffsetList;
     p64 prevPageHeaderByteOffset;
     p64 nextPageHeaderByteOffset;
 };
@@ -89,19 +88,20 @@ struct memory_page_info
 struct memory_context
 {
     memory_id id;
-    p64 safePtrRegionByteOffset;
-    u64 safePtrRegionByteCapacity;
+    p64 allocationInfoRegionByteOffset;
+    u64 allocationInfoRegionByteCapacity;
+    u64 allocationInfoRegionBytesReserved;
     p64 pagesRegionByteOffset;
     u64 pagesRegionByteCapacity;
     struct memory_page_info *pagesRegionInfoArr;
     u16 pagesRegionInfoCount;
-    u16 pagesRegionInfoCapacity;
     p64 activePagesByteOffsetList;
     p64 freePagesByteOffsetList;
     u16 pagesRegionActiveCount;
     u16 pagesRegionFreeCount;
-    u32 pagesRegionActiveAllocationCount;
-    u32 pagesRegionFreeAllocationCount;
+    u32 pagesRegionAccumActiveAllocationCount;
+    u32 pagesRegionFreeAllocationInfoCount;
+    p64 pagesRegionFreeAllocationInfoByteOffsetList;
     u64 reservedHeapBytes;
     u8 *heap;
     b32 isDebug;
@@ -114,6 +114,7 @@ struct memory_debug_context
     char label[MEMORY_MAX_NAME_LENGTH + 1];
     p64 labelRegionByteOffset;
     u64 labelRegionByteCapacity;
+    p64 labelRegionNextAllocationByteOffset;
     u32 eventQueueReadIndex;
     u32 eventQueueWriteIndex;
     u32 eventQueueCapacity;
@@ -315,7 +316,7 @@ _memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
                 }
                 else 
                 {
-                    fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate context array. "
+                    utils_fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate context array. "
                             "Cannot allocate new context.\n", __LINE__);
 
                     return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -811,13 +812,13 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
 }
 
 memory_error_code
-memory_realloc_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, u64 byteSize)
+memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr, u64 byteSize)
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
 memory_error_code
-memory_free_raw_allocation(const struct memory_raw_allocation_key *outRawAllocKeyPtr)
+memory_raw_free(const struct memory_raw_allocation_key *outRawAllocKeyPtr)
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
@@ -841,7 +842,7 @@ memory_get_is_raw_allocation_operation_ok()
 }
 
 memory_error_code
-memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
+memory_create_debug_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteCapacity, u64 labelRegionByteCapacity, 
     const char *contextLabel, const struct memory_context_key *outputMemoryDebugContextKeyPtr)
 {
     {
@@ -856,7 +857,7 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
         }
     }
 
-    u64 totalBytesToAllocate = safePtrRegionByteCapacity + pagesRegionByteCapacity + labelRegionByteCapacity;
+    u64 totalBytesToAllocate = allocationInfoRegionByteCapacity + pagesRegionByteCapacity + labelRegionByteCapacity;
 
     struct memory_debug_context *debugContextPtr;
     memory_short_id contextId = g_DEBUG_CONTEXT_COUNT;
@@ -887,13 +888,14 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
     }
 
     debugContextPtr->_.id = contextId;
-    debugContextPtr->_.pagesRegionActiveAllocationCount = 0;
-    debugContextPtr->_.pagesRegionFreeAllocationCount = 0;
+    debugContextPtr->_.allocationInfoRegionBytesReserved = 0;
+    debugContextPtr->_.pagesRegionFreeAllocationInfoByteOffsetList = 0;
+    debugContextPtr->_.pagesRegionFreeAllocationInfoCount = 0;
     debugContextPtr->_.pagesRegionByteCapacity = pagesRegionByteCapacity;
-    debugContextPtr->_.pagesRegionByteOffset = (p64)(safePtrRegionByteCapacity);
+    debugContextPtr->_.pagesRegionByteOffset = (p64)(allocationInfoRegionByteCapacity);
     debugContextPtr->_.pagesRegionInfoArr = NULL;
-    debugContextPtr->_.safePtrRegionByteCapacity = safePtrRegionByteCapacity;
-    debugContextPtr->_.safePtrRegionByteOffset = 0;
+    debugContextPtr->_.allocationInfoRegionByteCapacity = allocationInfoRegionByteCapacity;
+    debugContextPtr->_.allocationInfoRegionByteOffset = 0;
     debugContextPtr->_.heap = malloc(totalBytesToAllocate);
     debugContextPtr->_.pagesRegionInfoCapacity = 0;
     debugContextPtr->_.pagesRegionInfoCount = 0;
@@ -916,7 +918,9 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
     debugContextPtr->eventQueueReadIndex = 0;
     debugContextPtr->eventQueueWriteIndex = 0;
     debugContextPtr->labelRegionByteCapacity = labelRegionByteCapacity;
-    debugContextPtr->labelRegionByteOffset = safePtrRegionByteCapacity;
+    debugContextPtr->labelRegionByteOffset = labelRegionByteCapacity;
+    debugContextPtr->labelRegionNextAllocationByteOffset = 0;
+    debugContextPtr->_.heap[debugContextPtr->labelRegionByteOffset] = '\0';
 
     ((struct memory_context_key *)outputMemoryDebugContextKeyPtr)->contextId = contextId;
     ((struct memory_context_key *)outputMemoryDebugContextKeyPtr)->isDebug = B32_TRUE;
@@ -925,7 +929,7 @@ memory_create_debug_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCa
 }
 
 memory_error_code
-memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity, 
+memory_create_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteCapacity, 
     const struct memory_context_key *outputMemoryContextKeyPtr)
 {
     if (!outputMemoryContextKeyPtr)
@@ -935,7 +939,7 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
         return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
-    u64 totalBytesToAllocate = safePtrRegionByteCapacity + pagesRegionByteCapacity;
+    u64 totalBytesToAllocate = allocationInfoRegionByteCapacity + pagesRegionByteCapacity;
 
     struct memory_context *contextPtr;
     memory_short_id contextId = g_CONTEXT_COUNT;
@@ -970,13 +974,13 @@ memory_create_context(u64 safePtrRegionByteCapacity, u64 pagesRegionByteCapacity
     }
 
     contextPtr->id = contextId;
-    contextPtr->pagesRegionActiveAllocationCount = 0;
-    contextPtr->pagesRegionFreeAllocationCount = 0;
+    contextPtr->pagesRegionAccumActiveAllocationCount = 0;
+    contextPtr->pagesRegionFreeAllocationInfoCount = 0;
     contextPtr->pagesRegionByteCapacity = pagesRegionByteCapacity;
-    contextPtr->pagesRegionByteOffset = (p64)(safePtrRegionByteCapacity);
+    contextPtr->pagesRegionByteOffset = (p64)(allocationInfoRegionByteCapacity);
     contextPtr->pagesRegionInfoArr = NULL;
-    contextPtr->safePtrRegionByteCapacity = safePtrRegionByteCapacity;
-    contextPtr->safePtrRegionByteOffset = 0;
+    contextPtr->allocationInfoRegionByteCapacity = allocationInfoRegionByteCapacity;
+    contextPtr->allocationInfoRegionByteOffset = 0;
     contextPtr->heap = malloc(totalBytesToAllocate);
     contextPtr->pagesRegionInfoCapacity = 0;
     contextPtr->pagesRegionInfoCount = 0;
@@ -1024,8 +1028,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
             &contextPtr)) != MEMORY_OK)
         {
             ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
-            ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
-            ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+            ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
 
             return resultCode;
         }
@@ -1055,8 +1059,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
         if (resultCode != MEMORY_OK)
         {
             ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
-            ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
-            ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+            ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
+            ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
             
             fprintf(stderr, "memory_alloc_page(%d): Failure to locate page large enough. "
                     "Cannot allocate a page.\n", __LINE__);
@@ -1079,8 +1083,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     else 
     {
         ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
-        ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
-        ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+        ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
+        ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
 
         fprintf(stderr, "memory_alloc_page(%d): Out of space. "
                 "Cannot allocate a page.\n", __LINE__);
@@ -1179,8 +1183,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
             else 
             {
                 ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
-                ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
-                ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+                ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
 
                 fprintf(stderr, "memory_alloc_page(%d): Could not reallocate the pages info array. "
                         "Cannot allocate a page.\n", __LINE__);
@@ -1201,8 +1205,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
             else 
             {
                 ((struct memory_page_key *)outPageKeyPtr)->pageId = MEMORY_SHORT_ID_NULL;
-                ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = MEMORY_SHORT_ID_NULL;
-                ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = B32_FALSE;
+                ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
+                ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
 
                 fprintf(stderr, "memory_alloc_page(%d): Could not allocate the pages info array. "
                         "Cannot allocate a page.\n", __LINE__);
@@ -1218,8 +1222,8 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     pageInfoPtr->status = MEMORY_PAGE_STATUS_UNLOCKED;
 
     ((struct memory_page_key *)outPageKeyPtr)->pageId = pageId;
-    ((struct memory_page_key *)outPageKeyPtr)->contextKey.contextId = contextPtr->id;
-    ((struct memory_page_key *)outPageKeyPtr)->contextKey.isDebug = contextPtr->isDebug;
+    ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = contextPtr->id;
+    ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = contextPtr->isDebug;
 
     return MEMORY_OK;
 }
@@ -1342,9 +1346,8 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
         allocationInfo = &pageHeaderPtr->allocationArr[nextAllocationId - 1];
     }
     
-    pageHeaderPtr->allocationFreeCount = 0;
-    pageHeaderPtr->allocationActiveCount = 0;
-    pageHeaderPtr->allocationActiveList = pageHeaderPtr->allocationFreeList = MEMORY_INT_ID_NULL;
+    pageHeaderPtr->allocationInfoCount = 0;
+    pageHeaderPtr->allocationInfoByteOffsetList = contextPtr->freePagesByteOffsetList = 0;
 
     contextPtr->freePagesByteOffsetList = (p64)pageHeaderPtr - pagesRegionByteIndex;
     ++contextPtr->pagesRegionFreeCount;
@@ -1365,8 +1368,199 @@ memory_get_page_key_is_ok(const struct memory_page_key *pageKeyPtr)
 }
 
 memory_error_code
-memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, 
+memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char *debugLabelStr,
     const struct memory_allocation_key *outAllocKeyPtr)
+{
+    if (!pageKeyPtr)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): 'pageKeyPtr' argument cannot be NULL.",
+            __func__, __LINE__);
+
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    if (MEMORY_IS_PAGE_NULL(pageKeyPtr))
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): 'pageKeyPtr' argument cannot be a NULL key value.", 
+            __func__, __LINE__);
+
+        return MEMORY_ERROR_NULL_ID;
+    }
+
+    if (byteSize < 1)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): 'ByteSize' argument must be greater than '0'.", 
+            __func__, __LINE__);
+
+        return MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_SMALL;
+    }
+
+    if (!outAllocKeyPtr)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): 'outAllocKeyPtr' argument cannot be NULL.");
+
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    struct memory_context *contextPtr;
+    const struct memory_allocation_key resultKey;
+    {
+        memory_error_code resultCode = _memory_get_context((void *)&pageKeyPtr->contextKey, 
+        (void *)&contextPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d): Could not get an active memory context "
+                "from the provided key.", __func__, __LINE__);
+
+            return MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT;
+        }
+
+        resultCode = _memory_generate_unique_int_id((void *)&resultKey.allocId);
+
+        if (resultCode != MEMORY_OK)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d): Failure to generate unique ID for allocation. "
+                "Aborting.", __func__, __LINE__);
+
+            return MEMORY_ERROR_FAILED_ALLOCATION;
+        }
+
+        memcpy((void *)&resultKey.contextKey, &pageKeyPtr->contextKey, sizeof(struct memory_context_key));
+    }
+
+    p64 pageHeaderByteOffset;
+    u16 pageInfoIndex = pageKeyPtr->pageId - 1;
+    struct memory_page_header *pageHeaderPtr;
+    {
+        if (contextPtr->pagesRegionInfoArr[pageInfoIndex].status == MEMORY_PAGE_STATUS_UNLOCKED)
+        {
+            pageHeaderByteOffset = contextPtr->pagesRegionInfoArr[pageInfoIndex].pageHeaderByteOffset;
+            pageHeaderPtr = (void *)&contextPtr->heap[contextPtr->pagesRegionByteOffset + 
+                contextPtr->pagesRegionInfoArr[pageInfoIndex].pageHeaderByteOffset];
+        }
+        else 
+        {
+            pageHeaderPtr = NULL;
+        }
+    }
+
+    if (!pageHeaderPtr)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): Page is not unlocked, or safe for "
+            "allocating memory.", __func__, __LINE__);
+        
+        return MEMORY_ERROR_FAILED_ALLOCATION;
+    }
+
+    // TODO: find an allocator with enough space
+    p64 allocatorByteOffset;
+    struct memory_allocator *allocatorPtr;
+
+    if (pageHeaderPtr->freeAllocatorCount > 0)
+    {
+        allocatorByteOffset = pageHeaderPtr->freeAllocatorByteOffsetList;
+        allocatorPtr = &contextPtr->heap[(p64)pageHeaderPtr + allocatorByteOffset];
+
+        do
+        {
+            if (allocatorPtr->byteSize >= byteSize)
+            {
+
+                break;
+            }
+            else if (allocatorPtr->nextAllocatorByteOffset == 
+                pageHeaderPtr->freeAllocatorByteOffsetList)
+            {
+                allocatorPtr = NULL;
+
+                break;
+            }
+
+            allocatorByteOffset = allocatorPtr->nextAllocatorByteOffset;
+            allocatorPtr = &contextPtr->heap[contextPtr->pagesRegionByteOffset + 
+                pageHeaderByteOffset + allocatorByteOffset];
+        } while(allocatorPtr);
+
+        if (!allocatorPtr)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d): "
+                "Could not find enough free space, "
+                "in page, for new allocation. Aborting.", __func__, __LINE__);
+
+            return MEMORY_ERROR_FAILED_ALLOCATION;
+        }
+
+        if (pageHeaderPtr->freeAllocatorCount > 1)
+        {
+            struct memory_allocator *prevAllocatorPtr = (void *)((p64)pageHeaderPtr + allocatorPtr->prevAllocatorByteOffset);
+            struct memory_allocator *nextAllocatorPtr = (void *)((p64)pageHeaderPtr + allocatorPtr->nextAllocatorByteOffset);
+
+            prevAllocatorPtr->nextAllocatorByteOffset = allocatorPtr->nextAllocatorByteOffset;
+            nextAllocatorPtr->nextAllocatorByteOffset = allocatorPtr->prevAllocatorByteOffset;
+
+            pageHeaderPtr->freeAllocatorByteOffsetList = allocatorByteOffset;
+        }
+        
+        --pageHeaderPtr->freeAllocatorCount;
+    }
+    // nothing has been allocated on this page yet, so we create some allocators
+    else if (pageHeaderPtr->activeAllocatorCount < 1)
+    {
+        allocatorByteOffset = sizeof(struct memory_page_header);
+        allocatorPtr = (void *)((p64)pageHeaderPtr + allocatorByteOffset);
+        
+        allocatorPtr->identifier = MEMORY_HEADER_ID;
+        allocatorPtr->byteSize = pageHeaderPtr->heapByteSize - sizeof(struct memory_allocator);
+    }
+    // signifier all free space of the page is reserved
+    else 
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): "
+            "Could not find enough free space, "
+            "in page, for new allocation. Aborting.", __func__, __LINE__);
+
+        return MEMORY_ERROR_FAILED_ALLOCATION;
+    }
+
+    // TODO: find/allocate an allocationInfo structure
+    struct memory_allocation_info *allocationInfoPtr;
+
+    if (contextPtr->pagesRegionFreeAllocationInfoCount > 0)
+    {
+    }
+    else 
+    {
+    }
+
+    // TODO: couple allocator with allocationInfo structure
+    allocationInfoPtr->pageId = pageKeyPtr->pageId;
+    allocationInfoPtr->allocatorByteOffset = allocatorByteOffset;
+    allocationInfoPtr->isActive = B32_TRUE;
+
+    if (pageHeaderPtr->activeAllocatorCount > 0)
+    {
+    }
+    else
+    {
+    }
+
+    ++pageHeaderPtr->activeAllocatorCount;
+
+    if (contextPtr->isDebug)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d):  "
+            "from the provided key.", __func__, __LINE__);
+    }
+
+    memcpy((void *)outAllocKeyPtr, &resultKey, sizeof(struct memory_allocation_key));
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+memory_set_alloc_offset_width(const struct memory_allocation_key *allocationKeyPtr, p64 byteOffset, 
+    u64 byteWidth, u8 value)
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }

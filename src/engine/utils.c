@@ -25,12 +25,42 @@ utils_fprintf(FILE *filePtr, const char *formatStrPtr, ...)
 }
 
 i32
+utils_fprintfln(FILE *filePtr, const char *formatStrPtr, ...)
+{
+    va_list args;
+    va_start(args, formatStrPtr);
+
+    i32 errorCode = utils_fprintf(filePtr, formatStrPtr, args);
+    
+    fprintf(filePtr, "\n");
+
+    va_end(args);
+
+    return errorCode;
+}
+
+i32
 utils_printf(const char *formatStrPtr, ...)
 {
     va_list args;
     va_start(args, formatStrPtr);
 
     i32 resultCode = vprintf(formatStrPtr, args);
+    
+    va_end(args);
+
+    return resultCode;
+}
+
+i32
+utils_printfln(const char *formatStrPtr, ...)
+{
+    va_list args;
+    va_start(args, formatStrPtr);
+    
+    i32 resultCode = utils_printf(formatStrPtr, args);
+
+    printf("\n");
 
     va_end(args);
 
