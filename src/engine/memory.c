@@ -95,6 +95,7 @@ struct memory_context
     u64 pagesRegionByteCapacity;
     struct memory_page_info *pagesRegionInfoArr;
     u16 pagesRegionInfoCount;
+    u16 pagesRegionInfoCapacity;
     p64 activePagesByteOffsetList;
     p64 freePagesByteOffsetList;
     u16 pagesRegionActiveCount;
@@ -897,8 +898,9 @@ memory_create_debug_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegio
     debugContextPtr->_.allocationInfoRegionByteCapacity = allocationInfoRegionByteCapacity;
     debugContextPtr->_.allocationInfoRegionByteOffset = 0;
     debugContextPtr->_.heap = malloc(totalBytesToAllocate);
-    debugContextPtr->_.pagesRegionInfoCapacity = 0;
+    debugContextPtr->_.reservedHeapBytes = 0;
     debugContextPtr->_.pagesRegionInfoCount = 0;
+    debugContextPtr->_.pagesRegionInfoCapacity = 0;
     debugContextPtr->_.activePagesByteOffsetList = debugContextPtr->_.freePagesByteOffsetList = MEMORY_SHORT_ID_NULL;
     debugContextPtr->_.pagesRegionActiveCount = 0;
     debugContextPtr->_.pagesRegionFreeCount = 0;
@@ -975,15 +977,17 @@ memory_create_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteC
 
     contextPtr->id = contextId;
     contextPtr->pagesRegionAccumActiveAllocationCount = 0;
+    contextPtr->allocationInfoRegionBytesReserved = 0;
     contextPtr->pagesRegionFreeAllocationInfoCount = 0;
+    contextPtr->reservedHeapBytes = 0;
     contextPtr->pagesRegionByteCapacity = pagesRegionByteCapacity;
     contextPtr->pagesRegionByteOffset = (p64)(allocationInfoRegionByteCapacity);
     contextPtr->pagesRegionInfoArr = NULL;
     contextPtr->allocationInfoRegionByteCapacity = allocationInfoRegionByteCapacity;
     contextPtr->allocationInfoRegionByteOffset = 0;
     contextPtr->heap = malloc(totalBytesToAllocate);
-    contextPtr->pagesRegionInfoCapacity = 0;
     contextPtr->pagesRegionInfoCount = 0;
+    contextPtr->pagesRegionInfoCapacity = 0;
     contextPtr->activePagesByteOffsetList = contextPtr->freePagesByteOffsetList = MEMORY_SHORT_ID_NULL;
     contextPtr->pagesRegionActiveCount = 0;
     contextPtr->pagesRegionFreeCount = 0;
@@ -1162,7 +1166,7 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
     memory_short_id pageId = contextPtr->pagesRegionInfoCount + 1;
     struct memory_page_info *pageInfoPtr;
 
-    if (contextPtr->pagesRegionInfoCount != contextPtr->pagesRegionInfoCapacity)
+    if (contextPtr->pagesRegionInfoCount < contextPtr->pagesRegionInfoCapacity)
     {
         pageInfoPtr = &contextPtr->pagesRegionInfoArr[pageId - 1];
     }
@@ -1320,36 +1324,55 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
         pageHeaderPtr->prevPageHeaderByteOffset = pageHeaderPtr->nextPageHeaderByteOffset = (p64)pageHeaderPtr - pagesRegionByteIndex;
     }
 
-    for (struct memory_allocation_info *allocationInfo = &pageHeaderPtr->allocationArr[pageHeaderPtr->allocationActiveList - 1];
-        allocationInfo && (allocationInfo->nextAllocationId != pageHeaderPtr->allocationActiveList);)
+    for (struct memory_allocation_info *allocationInfo = (void *)&(&contextPtr->heap[contextPtr->allocationInfoRegionByteOffset])[
+            pageHeaderPtr->activeAllocatorByteOffsetList - 1];
+        allocationInfo && (allocationInfo->nextAllocationInfoIndex != (pageHeaderPtr->
+            allocationInfoByteOffsetList/sizeof(struct memory_allocation_info)));)
     {
-        memory_int_id nextAllocationId = allocationInfo->nextAllocationId;
+        u32 nextAllocationIndex = allocationInfo->nextAllocationInfoIndex;
 
-        allocationInfo->prevAllocationId = allocationInfo->nextAllocationId = MEMORY_INT_ID_NULL;
+        allocationInfo->prevAllocationInfoIndex = allocationInfo->nextAllocationInfoIndex = MEMORY_INT_ID_NULL;
         
         allocationInfo->isActive = B32_FALSE;
         allocationInfo->allocatorByteOffset = 0;
 
-        allocationInfo = &pageHeaderPtr->allocationArr[nextAllocationId - 1];
-    }
-    
-    for (struct memory_allocation_info *allocationInfo = &pageHeaderPtr->allocationArr[pageHeaderPtr->allocationFreeList - 1];
-        allocationInfo && (allocationInfo->nextAllocationId != pageHeaderPtr->allocationFreeList);)
-    {
-        memory_int_id nextAllocationId = allocationInfo->nextAllocationId;
+        if (contextPtr->pagesRegionFreeAllocationInfoCount > 0)
+        {
+            struct memory_allocation_info *nextInfoPtr = (struct memory_allocation_info *)&(&contextPtr->heap[
+                contextPtr->allocationInfoRegionByteOffset])[
+                    contextPtr->pagesRegionFreeAllocationInfoByteOffsetList/sizeof(struct memory_allocation_info)];
 
-        allocationInfo->prevAllocationId = allocationInfo->nextAllocationId = MEMORY_INT_ID_NULL;
-        
-        allocationInfo->isActive = B32_FALSE;
-        allocationInfo->allocatorByteOffset = 0;
+            struct memory_allocation_info *prevInfoPtr = (struct memory_allocation_info *)&(&contextPtr->heap[
+                contextPtr->allocationInfoRegionByteOffset])[nextInfoPtr->prevAllocationInfoIndex];
 
-        allocationInfo = &pageHeaderPtr->allocationArr[nextAllocationId - 1];
+            allocationInfo->prevAllocationInfoIndex = nextInfoPtr->prevAllocationInfoIndex;
+            allocationInfo->nextAllocationInfoIndex = contextPtr->pagesRegionFreeAllocationInfoByteOffsetList/
+                sizeof(struct memory_allocation_info);
+
+            u32 infoIndex = (u32)((p64)allocationInfo - 
+                (p64)(&contextPtr->heap[contextPtr->allocationInfoRegionByteOffset]))/
+                    sizeof(struct memory_allocation_info);
+
+            prevInfoPtr->nextAllocationInfoIndex = infoIndex;
+            nextInfoPtr->prevAllocationInfoIndex = infoIndex;
+        }
+        else 
+        {
+            u32 infoIndex = (u32)((p64)allocationInfo - 
+                (p64)(&contextPtr->heap[contextPtr->allocationInfoRegionByteOffset]))/
+                    sizeof(struct memory_allocation_info);
+
+            allocationInfo->prevAllocationInfoIndex = allocationInfo->nextAllocationInfoIndex = infoIndex;
+        }
+
+        allocationInfo = (struct memory_allocation_info *)&(&contextPtr->heap[
+            contextPtr->allocationInfoRegionByteOffset])[nextAllocationIndex - 1];
     }
-    
-    pageHeaderPtr->allocationInfoCount = 0;
-    pageHeaderPtr->allocationInfoByteOffsetList = contextPtr->freePagesByteOffsetList = 0;
+
+    contextPtr->pagesRegionFreeAllocationInfoCount += pageHeaderPtr->allocationInfoCount;
 
     contextPtr->freePagesByteOffsetList = (p64)pageHeaderPtr - pagesRegionByteIndex;
+
     ++contextPtr->pagesRegionFreeCount;
 
     return MEMORY_OK;
