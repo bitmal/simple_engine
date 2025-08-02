@@ -41,7 +41,7 @@ struct memory_raw_allocation_info_map_branch_info
 struct memory_allocator
 {
     u16 identifier;
-    memory_int_id allocationId;
+    const struct memory_allocation_key allocationKey;
     u64 byteSize;
     p64 prevAllocatorByteOffset;
     p64 nextAllocatorByteOffset;
@@ -53,8 +53,8 @@ struct memory_allocation_info
     memory_int_id allocationId;
     p64 labelStrByteOffset;
     p64 allocatorByteOffset;
-    memory_int_id prevAllocationInfoId;
-    memory_int_id nextAllocationInfoId;
+    u32 prevAllocationInfoIndex;
+    u32 nextAllocationInfoIndex;
     b32 isMapped; // TODO: implement; imagine having threads able to 
                     // operate on particular allocations, and they're safely gated
     b32 isActive;
@@ -1469,8 +1469,7 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
 
                 break;
             }
-            else if (allocatorPtr->nextAllocatorByteOffset == 
-                pageHeaderPtr->freeAllocatorByteOffsetList)
+            else if (allocatorPtr->nextAllocatorByteOffset == pageHeaderPtr->freeAllocatorByteOffsetList)
             {
                 allocatorPtr = NULL;
 
@@ -1484,8 +1483,7 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
 
         if (!allocatorPtr)
         {
-            utils_fprintfln(stderr, "%s(Line: %d): "
-                "Could not find enough free space, "
+            utils_fprintfln(stderr, "%s(Line: %d): " "Could not find enough free space, "
                 "in page, for new allocation. Aborting.", __func__, __LINE__);
 
             return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -1497,7 +1495,7 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
             struct memory_allocator *nextAllocatorPtr = (void *)((p64)pageHeaderPtr + allocatorPtr->nextAllocatorByteOffset);
 
             prevAllocatorPtr->nextAllocatorByteOffset = allocatorPtr->nextAllocatorByteOffset;
-            nextAllocatorPtr->nextAllocatorByteOffset = allocatorPtr->prevAllocatorByteOffset;
+            nextAllocatorPtr->prevAllocatorByteOffset = allocatorPtr->prevAllocatorByteOffset;
 
             pageHeaderPtr->freeAllocatorByteOffsetList = allocatorByteOffset;
         }
@@ -1524,33 +1522,137 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
     }
 
     // TODO: find/allocate an allocationInfo structure
+    p64 allocationInfoByteOffset;
+    u64 allocationInfoIndex = contextPtr->allocationInfoRegionBytesReserved/sizeof(struct memory_allocation_info);
     struct memory_allocation_info *allocationInfoPtr;
 
     if (contextPtr->pagesRegionFreeAllocationInfoCount > 0)
     {
+        allocationInfoByteOffset = contextPtr->pagesRegionFreeAllocationInfoByteOffsetList;
+        allocationInfoPtr = &((struct memory_allocation_info *)&(contextPtr->heap[contextPtr->allocationInfoRegionByteOffset]))[allocationInfoIndex];
+
+        if (allocationInfoPtr->nextAllocationInfoIndex != allocationInfoIndex)
+        {
+            struct memory_allocation_info *prevInfoPtr = &((struct memory_allocation_info *)&(contextPtr->heap[contextPtr->
+                allocationInfoRegionByteOffset]))[allocationInfoPtr->prevAllocationInfoIndex];
+
+            struct memory_allocation_info *nextInfoPtr = &((struct memory_allocation_info *)&(contextPtr->heap[contextPtr->
+                allocationInfoRegionByteOffset]))[allocationInfoPtr->nextAllocationInfoIndex];
+
+            prevInfoPtr->nextAllocationInfoIndex = allocationInfoPtr->nextAllocationInfoIndex;
+            nextInfoPtr->prevAllocationInfoIndex = allocationInfoPtr->prevAllocationInfoIndex;
+        }
+
+        --contextPtr->pagesRegionFreeAllocationInfoCount;
     }
     else 
     {
+        if ((contextPtr->allocationInfoRegionByteCapacity - contextPtr->allocationInfoRegionBytesReserved) >= sizeof(struct memory_allocation_info))
+        {
+            allocationInfoPtr = (struct memory_allocation_info *)((p64)contextPtr->heap + contextPtr->allocationInfoRegionByteOffset + 
+                allocationInfoIndex);
+            allocationInfoByteOffset = contextPtr->allocationInfoRegionByteOffset;
+
+            contextPtr->allocationInfoRegionBytesReserved += sizeof(struct memory_allocation_info);
+        }
+        else 
+        {
+            utils_fprintfln(stderr, "%s(Line: %d): "
+                "Could not find enough free space, "
+                "in page, for new allocation. Aborting.", __func__, __LINE__);
+
+            return MEMORY_ERROR_FAILED_ALLOCATION;
+        }
     }
 
     // TODO: couple allocator with allocationInfo structure
     allocationInfoPtr->pageId = pageKeyPtr->pageId;
     allocationInfoPtr->allocatorByteOffset = allocatorByteOffset;
     allocationInfoPtr->isActive = B32_TRUE;
+    allocationInfoPtr->isMapped = B32_FALSE;
+    allocationInfoPtr->allocationId = resultKey.allocId;
+
+    u32 infoIndex = allocationInfoByteOffset/sizeof(struct memory_allocation_info);
+
+    if (pageHeaderPtr->allocationInfoCount > 0)
+    {
+        u32 nextInfoIndex = pageHeaderPtr->allocationInfoByteOffsetList/sizeof(struct memory_allocation_info);
+        struct memory_allocation_info *nextInfoPtr = &((struct memory_allocation_info *)&(contextPtr->heap[contextPtr->allocationInfoRegionByteOffset]))[
+            nextInfoIndex];
+
+        allocationInfoPtr->nextAllocationInfoIndex = nextInfoIndex;
+        
+        u32 prevInfoIndex = nextInfoPtr->prevAllocationInfoIndex;
+        struct memory_allocation_info *prevInfoPtr = &((struct memory_allocation_info *)&(contextPtr->heap[contextPtr->allocationInfoRegionByteOffset]))[
+            prevInfoIndex];
+        
+        allocationInfoPtr->prevAllocationInfoIndex = prevInfoIndex;
+
+        nextInfoPtr->prevAllocationInfoIndex = infoIndex;
+        prevInfoPtr->nextAllocationInfoIndex = infoIndex;
+    }
+    else 
+    {
+        allocationInfoPtr->prevAllocationInfoIndex = allocationInfoPtr->nextAllocationInfoIndex = allocationInfoByteOffset;
+    }
+
+    pageHeaderPtr->allocationInfoByteOffsetList = allocationInfoByteOffset;
+    ++pageHeaderPtr->allocationInfoCount;
 
     if (pageHeaderPtr->activeAllocatorCount > 0)
     {
+        struct memory_allocator *nextAllocatorPtr = (void *)((p64)pageHeaderPtr + pageHeaderPtr->activeAllocatorByteOffsetList);
+        struct memory_allocator *prevAllocatorPtr = (void *)((p64)pageHeaderPtr + nextAllocatorPtr->prevAllocatorByteOffset);
+
+        prevAllocatorPtr->nextAllocatorByteOffset = allocatorByteOffset;
+        nextAllocatorPtr->prevAllocatorByteOffset = allocatorByteOffset;
     }
     else
     {
+        allocatorPtr->prevAllocatorByteOffset = allocatorPtr->nextAllocatorByteOffset = allocatorByteOffset;
     }
 
+    pageHeaderPtr->activeAllocatorByteOffsetList = allocatorByteOffset;
     ++pageHeaderPtr->activeAllocatorCount;
+
+    resultKey.allocInfoIndex = infoIndex;
+
+    memcpy(&resultKey.contextKey, &pageKeyPtr->contextKey, sizeof(struct memory_context_key));
+    memcpy((void *)outAllocKeyPtr, &resultKey, sizeof(struct memory_allocation_key));
 
     if (contextPtr->isDebug)
     {
-        utils_fprintfln(stderr, "%s(Line: %d):  "
-            "from the provided key.", __func__, __LINE__);
+        if (debugLabelStr)
+        {
+            struct memory_debug_context *debugContextPtr = (void *)contextPtr;
+
+            size_t debugLabelLength = strlen(debugLabelStr);
+            u64 capacityFilled = debugContextPtr->labelRegionNextAllocationByteOffset - debugContextPtr->labelRegionByteOffset;
+
+            if ((debugContextPtr->labelRegionByteCapacity - capacityFilled) > debugLabelLength)
+            {
+                char *labelRegionPtr = (char *)&(contextPtr->heap[debugContextPtr->labelRegionByteOffset + 
+                    debugContextPtr->labelRegionNextAllocationByteOffset]);
+
+                strcpy(labelRegionPtr, debugLabelStr);
+
+                allocationInfoPtr->labelStrByteOffset = debugContextPtr->labelRegionNextAllocationByteOffset;
+
+                debugContextPtr->labelRegionNextAllocationByteOffset += debugLabelLength + 1;
+            }
+            else
+            {
+                allocationInfoPtr->labelStrByteOffset = MEMORY_LABEL_REGION_ALLOCATION_BYTE_OFFSET;
+            }
+        }
+        else 
+        {
+            allocationInfoPtr->labelStrByteOffset = MEMORY_LABEL_REGION_ALLOCATION_BYTE_OFFSET;
+        }
+    }
+    else 
+    {
+        allocationInfoPtr->labelStrByteOffset = MEMORY_LABEL_REGION_ALLOCATION_BYTE_OFFSET;
     }
 
     memcpy((void *)outAllocKeyPtr, &resultKey, sizeof(struct memory_allocation_key));
