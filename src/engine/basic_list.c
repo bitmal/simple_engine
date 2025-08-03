@@ -331,7 +331,7 @@ basic_list_append(const struct memory_allocation_key *listKeyPtr,
                 // TODO: place list node (back) into free list cause something went wrong with mapping 
                 // the current head node of the active list
                 // TODO: unmap and free other stuff above lol
-
+                
                 return B32_FALSE;
             }
 
@@ -339,6 +339,9 @@ basic_list_append(const struct memory_allocation_key *listKeyPtr,
 
             // TODO: unmap stuff here
             memory_unmap_alloc((void **)&activeHeadNode);
+        }
+        else 
+        {
         }
 
         if (isNewNode)

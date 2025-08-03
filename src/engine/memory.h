@@ -53,7 +53,7 @@ enum memory_event_type
     MEMORY_IS_CONTEXT_NULL((&pageKeyPtr->contextKey)) : B32_FALSE) : B32_TRUE)
 
 #define MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr) (allocationKeyPtr ? ((allocationKeyPtr->allocId == MEMORY_INT_ID_NULL) ? \
-    MEMORY_IS_CONTEXT_NULL((&allocationKeyPtr->contextKey))) : B32_TRUE)
+    MEMORY_IS_CONTEXT_NULL((&allocationKeyPtr->contextKey)) : B32_FALSE) : B32_TRUE)
 
 #define MEMORY_LABEL_REGION_ALLOCATION_BYTE_OFFSET ((p64)0)
 
