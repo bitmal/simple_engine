@@ -4,6 +4,8 @@
 #include "types.h"
 #include "memory.h"
 
+struct basic_list_node;
+
 b32
 basic_list_create(const struct memory_page_key *memoryPageKeyPtr, 
     const struct memory_allocation_key *outListKeyPtr);
@@ -22,20 +24,18 @@ basic_list_append(const struct memory_allocation_key *listKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr);
 
 b32
-basic_list_insert_front(const struct memory_allocation_key *memoryAllocationKeyPtr,
-    const struct basic_list_node *outNodePtr);
+basic_list_insert_front(const struct memory_allocation_key *listKeyPtr,
+    const struct memory_allocation_key *dataKeyPtr,
+    const struct memory_allocation_key *outNodeKeyPtr);
 
 b32
-basic_list_append_after(const struct memory_allocation_key *memoryAllocationKeyPtr,
-    const struct basic_list_node *lhsNodePtr, const struct basic_list_node *outRhsNodePtr);
+basic_list_append_after(const struct memory_allocation_key *listKeyPtr,
+    const struct memory_allocation_key *lhsNodeKeyPtr, 
+    const struct memory_allocation_key *outRhsNodeKeyPtr);
 
 b32
 basic_list_insert_before(const struct memory_allocation_key *memoryAllocationKeyPtr,
     const struct basic_list_node *lhsNodePtr, const struct basic_list_node *outRhsNodePtr);
-
-b32
-basic_list_get_allocation(const struct basic_list_node *nodePtr, 
-    const struct memory_allocation_key *memoryAllocationKeyPtr);
 
 b32
 basic_list_remove_node(const struct basic_list_node *nodePtr);

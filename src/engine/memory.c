@@ -1483,7 +1483,7 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
     if (pageHeaderPtr->freeAllocatorCount > 0)
     {
         allocatorByteOffset = pageHeaderPtr->freeAllocatorByteOffsetList;
-        allocatorPtr = &contextPtr->heap[(p64)pageHeaderPtr + allocatorByteOffset];
+        allocatorPtr = (void *)&contextPtr->heap[(p64)pageHeaderPtr + allocatorByteOffset];
 
         do
         {
@@ -1499,7 +1499,7 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
             }
 
             allocatorByteOffset = allocatorPtr->nextAllocatorByteOffset;
-            allocatorPtr = &contextPtr->heap[contextPtr->pagesRegionByteOffset + 
+            allocatorPtr = (void *)&contextPtr->heap[contextPtr->pagesRegionByteOffset + 
                 pageHeaderByteOffset + allocatorByteOffset];
         } while(allocatorPtr);
 
@@ -1634,7 +1634,6 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
         allocatorPtr->prevAllocatorByteOffset = allocatorPtr->nextAllocatorByteOffset = allocatorByteOffset;
     }
 
-    // TODO: split the allocator
     if (allocatorPtr->byteSize > byteSize)
     {
         u64 byteDiff = allocatorPtr->byteSize - byteSize;
@@ -1677,7 +1676,7 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
 
     ++pageHeaderPtr->activeAllocatorCount;
 
-    resultKey.allocInfoIndex = infoIndex;
+    ((struct memory_allocation_key *)(&resultKey))->allocInfoIndex = infoIndex;
 
     memcpy((void *)&resultKey.contextKey, &pageKeyPtr->contextKey, sizeof(struct memory_context_key));
     memcpy((void *)outAllocKeyPtr, &resultKey, sizeof(struct memory_allocation_key));
