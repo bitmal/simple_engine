@@ -34,7 +34,10 @@ b32
 basic_dict_set(const struct memory_allocation_key *dictKeyPtr, void *keyPtr, 
     const struct memory_allocation_key *dataKeyPtr);
 
-void
+b32
+basic_dict_remove(const struct memory_allocation_key *dictKeyPtr, void *keyPtr);
+
+b32
 basic_dict_clear(const struct memory_allocation_key *dictKeyPtr);
 
 b32

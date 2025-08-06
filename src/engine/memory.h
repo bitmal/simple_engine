@@ -46,14 +46,18 @@ enum memory_event_type
 #define MEMORY_MAX_ALLOCS (MEMORY_INT_ID_MAX - 1)
 #define MEMORY_MAX_NAME_LENGTH (UINT8_MAX - 1)
 
-#define MEMORY_IS_CONTEXT_NULL(contextKeyPtr) (contextKeyPtr ? ((contextKeyPtr->contextId == MEMORY_SHORT_ID_NULL) ? \
+#define MEMORY_IS_CONTEXT_NULL(contextKeyPtr) ((contextKeyPtr) ? (((contextKeyPtr)->contextId == MEMORY_SHORT_ID_NULL) ? \
     B32_TRUE : B32_FALSE) : B32_TRUE)
 
-#define MEMORY_IS_PAGE_NULL(pageKeyPtr) (pageKeyPtr ? ((pageKeyPtr->pageId == MEMORY_SHORT_ID_NULL) ? \
-    MEMORY_IS_CONTEXT_NULL((&pageKeyPtr->contextKey)) : B32_FALSE) : B32_TRUE)
+#define MEMORY_IS_PAGE_NULL(pageKeyPtr) ((pageKeyPtr) ? (((pageKeyPtr)->pageId == MEMORY_SHORT_ID_NULL) ? \
+    MEMORY_IS_CONTEXT_NULL((&(pageKeyPtr)->contextKey)) : B32_FALSE) : B32_TRUE)
 
-#define MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr) (allocationKeyPtr ? ((allocationKeyPtr->allocId == MEMORY_INT_ID_NULL) ? \
-    MEMORY_IS_CONTEXT_NULL((&allocationKeyPtr->contextKey)) : B32_FALSE) : B32_TRUE)
+#define MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr) ((allocationKeyPtr) ? (((allocationKeyPtr)->allocId == MEMORY_INT_ID_NULL) ? \
+    MEMORY_IS_CONTEXT_NULL((&(allocationKeyPtr)->contextKey)) : B32_FALSE) : B32_TRUE)
+
+#define MEMORY_IS_ALLOCATION_KEY_EQUAL(lhsKeyPtr, rhsKeyPtr) (((lhsKeyPtr) && (rhsKeyPtr)) ? \
+    (((lhsKeyPtr)->allocId == (rhsKeyPtr)->allocId) && ((lhsKeyPtr)->allocInfoIndex == (rhsKeyPtr)->allocInfoIndex) && \
+    ((lhsKeyPtr)->contextKey.contextId == (rhsKeyPtr)->contextKey.contextId)) : B32_FALSE)
 
 #define MEMORY_LABEL_REGION_ALLOCATION_BYTE_OFFSET ((p64)0)
 
@@ -210,5 +214,8 @@ memory_sizeof(const struct memory_allocation_key *allocKeyPtr);
 
 u64
 memory_raw_alloc_sizeof(const struct memory_raw_allocation_key *rawAllocKeyPtr);
+
+void
+memory_get_null_allocation_key(const struct memory_allocation_key *outAllocationKeyPtr);
 
 #endif

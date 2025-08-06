@@ -1727,3 +1727,9 @@ memory_set_alloc_offset_width(const struct memory_allocation_key *allocationKeyP
 {
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
+
+void
+memory_get_null_allocation_key(const struct memory_allocation_key *outAllocationKeyPtr)
+{
+    memset((void *)outAllocationKeyPtr, '\0', sizeof(struct memory_allocation_key));
+}
