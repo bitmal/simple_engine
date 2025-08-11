@@ -16,15 +16,12 @@ typedef b32 (*basic_dict_hash_func)(const struct memory_allocation_key *dictKeyP
     struct utils_string_hash *outHashPtr);
 typedef b32 (*basic_dict_data_is_found_equal_func)(struct basic_dict *dict, void *key);
 
-struct basic_dict_pair;
-struct basic_dict;
-
 #define BASIC_DICT_NULL_PTR ((p64)0)
 
 b32
 basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
     u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtrKeyPtr, 
-    const struct memory_allocation_key *databaseKeyPtr);
+    const struct memory_allocation_key *outDictKeyPtr);
 
 b32
 basic_dict_get(const struct memory_allocation_key *dictKeyPtr, void *keyPtr, 
@@ -39,6 +36,9 @@ basic_dict_remove(const struct memory_allocation_key *dictKeyPtr, void *keyPtr);
 
 b32
 basic_dict_clear(const struct memory_allocation_key *dictKeyPtr);
+
+b32
+basic_dict_reset(const struct memory_allocation_key *dictKeyPtr, const struct memory_allocation_key *databaseKeyPtr);
 
 b32
 basic_dict_get_is_found(const struct memory_allocation_key *dictKeyPtr, void *keyPtr);
