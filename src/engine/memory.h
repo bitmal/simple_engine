@@ -215,7 +215,7 @@ memory_sizeof(const struct memory_allocation_key *allocKeyPtr);
 u64
 memory_raw_alloc_sizeof(const struct memory_raw_allocation_key *rawAllocKeyPtr);
 
-void
+b32
 memory_get_null_allocation_key(const struct memory_allocation_key *outAllocationKeyPtr);
 
 #endif
