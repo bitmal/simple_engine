@@ -2,7 +2,9 @@
 #include "basic_list.h"
 #include "memory.h"
 #include "types.h"
-#include "utils.h"
+
+#include <stdlib.h>
+#include <string.h>
 
 struct unique_list
 {
