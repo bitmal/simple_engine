@@ -746,10 +746,22 @@ basic_dict_destroy(const struct memory_allocation_key *dictKeyPtr)
         (void **)&bucketTableKeyPtr);
     }
 
-    // TODO:
-
     memory_unmap_alloc((void **)&dictPtr);
 
+    for (u32 bucketIndex = 0; bucketIndex < dictPtr->tableBucketCount; ++bucketIndex)
+    {
+        const struct memory_allocation_key bucketKey;
+
+        if ((_basic_dict_get_bucket_by_index(dictKeyPtr, bucketIndex, &bucketKey)))
+        {
+            basic_list_destroy(&bucketKey);
+        }
+    }
+
+    memory_map_alloc(dictKeyPtr, (void **)&dictPtr);
+    basic_list_destroy(&dictPtr->freeNodeList);
+    memory_free(&dictPtr->bucketTableKey);
+    memory_unmap_alloc((void **)&dictPtr);
     memory_free(dictKeyPtr);
 
     return B32_TRUE;
