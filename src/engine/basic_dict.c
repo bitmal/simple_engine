@@ -10,10 +10,10 @@
 
 struct basic_dict_node
 {
-    const struct memory_allocation_key dictKey;
-    const void *key;
-    p64 databaseByteOffset;
-    u64 databaseByteSize;
+    void *keyPtr;
+    p64 dataByteOffset;
+    u64 dataByteSize;
+    const struct memory_allocation_key dataKey;
     b32 isActive;
 };
 
@@ -21,9 +21,7 @@ struct basic_dict
 {
     const struct memory_page_key pageKey;
     const struct memory_allocation_key bucketTableKey;
-    const struct memory_allocation_key databaseArrKey;
-    p64 databaseByteOffset;
-    u64 databaseByteSize;
+    const struct memory_allocation_key freeNodeList;
     const struct memory_allocation_key userPtrKey;
     u32 tableBucketCount;
     basic_dict_hash_func hashFunc;
@@ -47,14 +45,221 @@ _default_hash_func(struct basic_dict *dictPtr, void *key,
 }
 
 static b32
-_basic_dict_remove_pair(const struct memory_allocation_key *dictKeyPtr, void *keyPtr)
+_basic_dict_get_bucket_by_index(const struct memory_allocation_key *dictKeyPtr,
+    u64 bucketIndex, const struct memory_allocation_key *outBucketKeyPtr)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(dictKeyPtr)))
     {
         return B32_FALSE;
     }
 
+    struct basic_dict *dictPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, 
+        (void **)&dictPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    if (bucketIndex >= dictPtr->tableBucketCount)
+    {
+        memory_unmap_alloc((void **)&dictPtr);
+        memory_get_null_allocation_key(outBucketKeyPtr);
+
+        return B32_FALSE;
+    }
+
+    const struct memory_allocation_key *tablePtr;
+    const struct memory_allocation_key *bucketKeyPtr;
+    {
+
+        memory_error_code resultCode = memory_map_alloc(&dictPtr->bucketTableKey, 
+        (void **)&tablePtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&dictPtr);
+
+            memory_get_null_allocation_key(outBucketKeyPtr);
+
+            return B32_FALSE;
+        }
+
+        bucketKeyPtr = &tablePtr[bucketIndex];
+    }
+
+    memcpy((void *)outBucketKeyPtr, bucketKeyPtr, sizeof(struct memory_allocation_key));
+
+    memory_unmap_alloc((void **)&tablePtr);
+    memory_unmap_alloc((void **)&dictPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_basic_dict_get_node_by_key(const struct memory_allocation_key *dictKeyPtr,
+    void *keyPtr, const struct memory_allocation_key *outNodeKeyPtr,
+    const struct memory_allocation_key *outBucketKeyPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(dictKeyPtr)))
+    {
+        if (outNodeKeyPtr)
+        {
+            memory_get_null_allocation_key(outNodeKeyPtr);
+        }
+
+        return B32_FALSE;
+    }
+
     if (!keyPtr)
+    {
+        if (outNodeKeyPtr)
+        {
+            memory_get_null_allocation_key(outNodeKeyPtr);
+        }
+
+        if (outBucketKeyPtr)
+        {
+            memory_get_null_allocation_key(outBucketKeyPtr);
+        }
+
+        return B32_FALSE;
+    }
+
+    struct basic_dict *dictPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, 
+        (void **)&dictPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_get_null_allocation_key(outNodeKeyPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    struct utils_string_hash dictHash;
+
+    if (!(dictPtr->hashFunc(dictPtr, keyPtr, &dictHash)))
+    {
+        memory_unmap_alloc((void **)&dictPtr);
+        memory_get_null_allocation_key(outNodeKeyPtr);
+
+        return B32_FALSE;
+    }
+
+    const struct memory_allocation_key *bucketTablePtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(&dictPtr->bucketTableKey, 
+        (void **)&bucketTablePtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&dictPtr);
+            memory_get_null_allocation_key(outNodeKeyPtr);
+
+            return B32_FALSE;
+        }
+    }
+    
+    const struct memory_allocation_key *listKeyPtr = &bucketTablePtr[
+        dictPtr->tableBucketCount%dictHash.hash];
+
+    const struct memory_allocation_key headNodeKey;
+
+    if (!(basic_list_get_next_node(listKeyPtr, NULL, &headNodeKey)))
+    {
+        memory_unmap_alloc((void **)&bucketTablePtr);
+        memory_unmap_alloc((void **)&dictPtr);
+        memory_get_null_allocation_key(outNodeKeyPtr);
+
+        return B32_FALSE;
+    }
+
+    const struct memory_allocation_key currentNodeKey;
+
+    memcpy((void *)&currentNodeKey, &headNodeKey, sizeof(struct memory_allocation_key));
+
+    do 
+    {
+        struct basic_dict_node *currentNodePtr;
+
+        if (!(basic_list_map_data(&currentNodeKey, (void **)&currentNodePtr)))
+        {
+            memory_unmap_alloc((void **)&bucketTablePtr);
+            memory_unmap_alloc((void **)&dictPtr);
+            memory_get_null_allocation_key(outNodeKeyPtr);
+
+            return B32_FALSE;
+        }
+
+        if (!(memcmp(keyPtr, currentNodePtr->keyPtr, dictPtr->keyByteSize)))
+        {
+            memory_unmap_alloc((void **)&currentNodePtr);
+            memory_unmap_alloc((void **)&bucketTablePtr);
+            memory_unmap_alloc((void **)&dictPtr);
+
+            if (outNodeKeyPtr)
+            {
+                memcpy((void *)outNodeKeyPtr, &currentNodeKey, sizeof(struct memory_allocation_key));
+            }
+
+            if (outBucketKeyPtr)
+            {
+                memcpy((void *)outBucketKeyPtr, listKeyPtr, sizeof(struct memory_allocation_key));
+            }
+
+            return B32_TRUE;
+        }
+
+        const struct memory_allocation_key nextNodeKey;
+
+        if (!(basic_list_get_next_node(listKeyPtr, &currentNodeKey, &nextNodeKey)))
+        {
+            memory_unmap_alloc((void **)&currentNodePtr);
+            memory_unmap_alloc((void **)&bucketTablePtr);
+            memory_unmap_alloc((void **)&dictPtr);
+            memory_get_null_allocation_key(outNodeKeyPtr);
+
+            return B32_FALSE;
+        }
+
+        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&headNodeKey, &nextNodeKey)))
+        {
+            memcpy((void *)&currentNodeKey, &nextNodeKey, sizeof(struct memory_allocation_key));
+        }
+        else 
+        {
+            memory_get_null_allocation_key(&currentNodeKey);
+        }
+
+        memory_unmap_alloc((void **)&currentNodePtr);
+    } while (!(MEMORY_IS_ALLOCATION_NULL(&currentNodeKey)));
+
+    memory_unmap_alloc((void **)&bucketTablePtr);
+    memory_unmap_alloc((void **)&dictPtr);
+
+    return B32_FALSE;
+}
+
+static b32
+_basic_dict_clear_bucket(const struct memory_allocation_key *dictKeyPtr,
+    u64 bucketIndex)
+{
+    const struct memory_allocation_key bucketKey;
+
+    if (!(_basic_dict_get_bucket_by_index(dictKeyPtr, bucketIndex, &bucketKey)))
+    {
+        return B32_FALSE;
+    }
+
+    const struct memory_allocation_key headNodeKey;
+
+    if (!(basic_list_get_next_node(&bucketKey, NULL, &headNodeKey)))
     {
         return B32_FALSE;
     }
@@ -69,129 +274,39 @@ _basic_dict_remove_pair(const struct memory_allocation_key *dictKeyPtr, void *ke
         }
     }
 
-    struct utils_string_hash tableHash;
+    const struct memory_allocation_key currentNodeKey;
 
-    if (!(dictPtr->hashFunc(dictKeyPtr, keyPtr, &tableHash)))
-    {
-        memory_unmap_alloc((void **)&dictPtr);
-
-        return B32_FALSE;
-    }
-
-    const struct memory_allocation_key *tablePtr;
-    {
-        memory_error_code resultCode = memory_map_alloc(&dictPtr->tableKey, 
-        (void **)&tablePtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            memory_unmap_alloc((void **)&dictPtr);
-
-            return B32_FALSE;
-        }
-    }
-
-    const struct memory_allocation_key *bucketListKeyPtr = &tablePtr[dictPtr->tableBucketCount%tableHash.hash];
-
-    u64 listNodeCount;
-
-    if (!basic_list_get_active_count(bucketListKeyPtr, &listNodeCount))
-    {
-        return B32_FALSE;
-    }
-
-    if (listNodeCount < 1)
-    {
-        memory_unmap_alloc((void **)&tablePtr);
-        memory_unmap_alloc((void **)&dictPtr);
-        return B32_FALSE;
-    }
-
-    const struct memory_allocation_key headPairNodeKey;
-
-    if (!(basic_list_get_next_node(bucketListKeyPtr, NULL, 
-    &headPairNodeKey)))
-    {
-        memory_unmap_alloc((void **)&tablePtr);
-        memory_unmap_alloc((void **)&dictPtr);
-
-        return B32_FALSE;
-    }
-
-    const struct memory_allocation_key currentPairNodeKey;
-
-    memcpy((void *)&currentPairNodeKey, &headPairNodeKey, sizeof(struct memory_allocation_key));
+    memcpy((void *)&currentNodeKey, &headNodeKey, sizeof(struct memory_allocation_key));
 
     do 
     {
-        const struct memory_allocation_key *pairKeyPtr;
+        const struct memory_allocation_key nextNodeKey;
 
-        if ((basic_list_get_data(&currentPairNodeKey, (void *)&pairKeyPtr)))
+        if (!(basic_list_get_next_node(&bucketKey, &currentNodeKey, &nextNodeKey)))
         {
-            memory_unmap_alloc((void **)&tablePtr);
             memory_unmap_alloc((void **)&dictPtr);
 
             return B32_FALSE;
         }
 
-        struct basic_dict_node *pairPtr;
-        
-        memory_error_code resultCode = memory_map_alloc(pairKeyPtr, (void **)&pairPtr);
-
-        if (resultCode != MEMORY_OK)
+        if (!(basic_list_move_node(&bucketKey, &dictPtr->freeNodeList, 
+        &currentNodeKey)))
         {
-            memory_unmap_alloc((void **)&tablePtr);
             memory_unmap_alloc((void **)&dictPtr);
 
             return B32_FALSE;
         }
-        
-        if (!(strcmp(pairPtr->key, keyPtr)))
+
+        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&nextNodeKey, &headNodeKey)))
         {
-            memory_unmap_alloc((void **)&pairPtr);
-
-            break;
-        }
-
-        const struct memory_allocation_key nextPairNodeKey;
-
-        if (!(basic_list_get_next_node(&dictPtr->tableKey, &currentPairNodeKey, 
-            &nextPairNodeKey)))
-        {
-            memory_unmap_alloc((void **)&pairPtr);
-            memory_unmap_alloc((void **)&tablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
-
-            // TODO:
-
-            return B32_FALSE;
-        }
-
-        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&nextPairNodeKey, &headPairNodeKey)))
-        {
-            memcpy((void *)&currentPairNodeKey, &nextPairNodeKey, sizeof(struct memory_allocation_key));
+            memcpy((void *)&currentNodeKey, &nextNodeKey, sizeof(struct memory_allocation_key));
         }
         else 
         {
-            memory_get_null_allocation_key(&currentPairNodeKey);
+            memory_get_null_allocation_key(&currentNodeKey);
         }
+    } while (!(MEMORY_IS_ALLOCATION_NULL(&currentNodeKey)));
 
-        memory_unmap_alloc((void **)&pairPtr);
-    } while (!(MEMORY_IS_ALLOCATION_NULL(&currentPairNodeKey)));
-
-    if (!(MEMORY_IS_ALLOCATION_NULL(&currentPairNodeKey)))
-    {
-        basic_list_move_node(bucketListKeyPtr, &dictPtr->freePairKeyList, &currentPairNodeKey);
-    }
-    else 
-    {
-        memory_unmap_alloc((void **)&tablePtr);
-        memory_unmap_alloc((void **)&dictPtr);
-
-        return B32_FALSE;
-    }
-
-    memory_unmap_alloc((void **)&tablePtr);
     memory_unmap_alloc((void **)&dictPtr);
 
     return B32_TRUE;
@@ -200,11 +315,19 @@ _basic_dict_remove_pair(const struct memory_allocation_key *dictKeyPtr, void *ke
 b32
 basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
     u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtrKeyPtr,
-    p64 databaseByteOffset, u64 databaseByteSize,
-    const struct memory_allocation_key *databaseKeyPtr,
     const struct memory_allocation_key *outDictKeyPtr)
 {
-    if ((MEMORY_IS_ALLOCATION_NULL(databaseKeyPtr)))
+    if ((MEMORY_IS_PAGE_NULL(memoryPageKeyPtr)))
+    {
+        if (outDictKeyPtr)
+        {
+            memory_get_null_allocation_key(outDictKeyPtr);
+        }
+
+        return B32_FALSE;
+    }
+
+    if (!outDictKeyPtr)
     {
         return B32_FALSE;
     }
@@ -258,10 +381,7 @@ basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_has
 
     memcpy((struct memory_allocation_key*)&dictPtr->userPtrKey, userPtrKeyPtr, sizeof(struct memory_allocation_key));
 
-    memcpy((void *)&dictPtr->databaseArrKey, databaseKeyPtr, sizeof(struct memory_allocation_key));
-
-    dictPtr->databaseByteOffset = databaseByteOffset;
-    dictPtr->databaseByteSize = databaseByteSize;
+    basic_list_create(memoryPageKeyPtr, &dictPtr->freeNodeList);
 
     memory_unmap_alloc((void **)&dictPtr);
 
@@ -289,95 +409,45 @@ basic_dict_map_data(const struct memory_allocation_key *dictKeyPtr, void *keyPtr
         return B32_FALSE;
     }
 
-    struct basic_dict *dictPtr;
-    {
-        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, (void **)&dictPtr);
+    const struct memory_allocation_key foundNodeBucketKey;
+    const struct memory_allocation_key foundNodeKey;
 
-        if (resultCode != MEMORY_OK)
-        {
-            return B32_FALSE;
-        }
+    if (!(_basic_dict_get_node_by_key(dictKeyPtr, keyPtr, &foundNodeKey, 
+    &foundNodeBucketKey)))
+    {
+        return B32_FALSE;
     }
 
-    const struct memory_allocation_key *bucketTablePtr;
+    struct basic_dict_node *nodePtr;
+
+    if (!(basic_list_map_data(&foundNodeKey, (void **)&nodePtr)))
     {
-        memory_error_code resultCode = memory_map_alloc(&dictPtr->bucketTableKey, 
-        (void **)&bucketTablePtr);
+        *outDataPtr = NULL;
 
-        if (resultCode != MEMORY_OK)
-        {
-            memory_unmap_alloc((void **)&dictPtr);
-
-            return B32_FALSE;
-        }
-    }
-    
-    struct utils_string_hash dictHash;
-
-    dictPtr->hashFunc(dictPtr, keyPtr, &dictHash);
-
-    const struct memory_allocation_key *listKeyPtr = &bucketTablePtr[dictPtr->tableBucketCount%dictHash.hash];
-
-    const struct memory_allocation_key headNodeKey;
-
-    if (!(basic_list_get_next_node(listKeyPtr, NULL, &headNodeKey)))
-    {
-        memory_unmap_alloc((void **)&bucketTablePtr);
-        memory_unmap_alloc((void **)&dictPtr);
+        return B32_FALSE;
     }
 
-    const struct memory_allocation_key currentNodeKey;
+    u8 *resultPtr;
 
-    memcpy((void *)&currentNodeKey, &headNodeKey, sizeof(struct memory_allocation_key));
+    memory_error_code resultCode = memory_map_alloc(&nodePtr->dataKey, 
+    (void **)&resultPtr);
 
-    do 
+    if (resultCode != MEMORY_OK)
     {
-        struct basic_dict_node *nodePtr;
+        basic_list_unmap_data(&foundNodeBucketKey, &foundNodeKey, 
+        (void **)&nodePtr);
 
-        if (!(basic_list_map_data(&currentNodeKey, (void **)&nodePtr)))
-        {
-            memory_unmap_alloc((void **)&bucketTablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
+        return B32_FALSE;
+    }
 
-            return B32_FALSE;
-        }
+    resultPtr += nodePtr->dataByteOffset;
 
-        if (!(memcmp(keyPtr, nodePtr->key, dictPtr->keyByteSize)))
-        {
-            memory_unmap_alloc((void **)&nodePtr);
-            memory_unmap_alloc((void **)&bucketTablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
+    *outDataPtr = resultPtr;
 
-            return basic_list_map_data(&currentNodeKey, (void **)outDataPtr);
-        }
+    basic_list_unmap_data(&foundNodeBucketKey, &foundNodeKey, 
+    (void **)&nodePtr);
 
-        const struct memory_allocation_key nextNodeKey;
-
-        if (!(basic_list_get_next_node(listKeyPtr, &currentNodeKey, &nextNodeKey)))
-        {
-            memory_unmap_alloc((void **)&nodePtr);
-            memory_unmap_alloc((void **)&bucketTablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
-
-            return B32_FALSE;
-        }
-
-        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&nextNodeKey, &headNodeKey)))
-        {
-            memcpy((void *)&currentNodeKey, &nextNodeKey, sizeof(struct memory_allocation_key));
-        }
-        else
-        {
-            memory_get_null_allocation_key(&currentNodeKey);
-        }
-
-        memory_unmap_alloc((void **)&nodePtr);
-    } while ((MEMORY_IS_ALLOCATION_NULL(&currentNodeKey)));
-
-    memory_unmap_alloc((void **)&bucketTablePtr);
-    memory_unmap_alloc((void **)&dictPtr);
-
-    return B32_FALSE;
+    return B32_TRUE;
 }
 
 b32
@@ -399,20 +469,78 @@ basic_dict_unmap_data(const struct memory_allocation_key *dictKeyPtr, void *keyP
         return B32_FALSE;
     }
 
-    struct basic_dict *dictPtr;
+    const struct memory_allocation_key foundBucketKey;
+    const struct memory_allocation_key foundNodeKey;
+    
+    if (!(_basic_dict_get_node_by_key(dictKeyPtr, keyPtr, &foundNodeKey, 
+        &foundBucketKey)))
     {
-        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, (void **)&dictPtr);
+        return B32_FALSE;
+    }
+
+    struct basic_dict_node *nodePtr;
+
+    if (!(basic_list_map_data(&foundNodeKey, (void **)&nodePtr)))
+    {
+        return B32_FALSE;
+    }
+
+    u8 *resultPtr = *outDataPtr;
+    resultPtr -= nodePtr->dataByteOffset;
+
+    memory_unmap_alloc((void **)resultPtr);
+
+    *outDataPtr = NULL;
+
+    basic_list_unmap_data(&foundBucketKey, &foundNodeKey, 
+    (void **)&nodePtr);
+
+    return B32_TRUE;
+}
+
+b32
+basic_dict_push_data(const struct memory_allocation_key *dictKeyPtr,
+    void *keyPtr, p64 *dataByteOffset, u64 *dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(dictKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (!keyPtr)
+    {
+        return B32_FALSE;
+    }
+
+    const struct memory_allocation_key foundNodeKey;
+    const struct memory_allocation_key foundBucketKey;
+
+    if (!(_basic_dict_get_node_by_key(dictKeyPtr, keyPtr, &foundNodeKey,
+            &foundBucketKey)))
+    {
+        struct basic_dict *dictPtr;
+
+        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, 
+        (void **)&dictPtr);
 
         if (resultCode != MEMORY_OK)
         {
             return B32_FALSE;
         }
-    }
 
-    const struct memory_allocation_key *bucketTablePtr;
-    {
-        memory_error_code resultCode = memory_map_alloc(&dictPtr->bucketTableKey, 
-        (void **)&bucketTablePtr);
+        struct utils_string_hash dictHash;
+
+        if (!(dictPtr->hashFunc(dictPtr, keyPtr, &dictHash)))
+        {
+            memory_unmap_alloc((void **)&dictPtr);
+
+            return B32_FALSE;
+        }
+
+        const struct memory_allocation_key *bucketTablePtr;
+
+        resultCode = memory_map_alloc(&dictPtr->bucketTableKey, (void **)&bucketTablePtr);
 
         if (resultCode != MEMORY_OK)
         {
@@ -420,190 +548,209 @@ basic_dict_unmap_data(const struct memory_allocation_key *dictKeyPtr, void *keyP
 
             return B32_FALSE;
         }
-    }
-    
-    struct utils_string_hash dictHash;
 
-    dictPtr->hashFunc(dictPtr, keyPtr, &dictHash);
+        const struct memory_allocation_key *bucketKeyPtr = &bucketTablePtr[dictPtr->tableBucketCount%
+            dictHash.hash];
 
-    const struct memory_allocation_key *listKeyPtr = &bucketTablePtr[dictPtr->tableBucketCount%dictHash.hash];
+        if (!(basic_list_get_next_node(&dictPtr->freeNodeList, 
+        NULL, &foundNodeKey)))
+        {
+            const struct memory_allocation_key dictNodeKey;
 
-    const struct memory_allocation_key headNodeKey;
+            resultCode = memory_alloc(&dictPtr->pageKey, sizeof(struct basic_dict_node), 
+            NULL, &dictNodeKey);
 
-    if (!(basic_list_get_next_node(listKeyPtr, NULL, &headNodeKey)))
-    {
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&bucketTablePtr);
+                memory_unmap_alloc((void **)&dictPtr);
+
+                return B32_FALSE;
+            }
+
+            if (!(basic_list_append(bucketKeyPtr, 0, 
+            sizeof(struct basic_dict_node), &dictNodeKey, 
+            &foundNodeKey)))
+            {
+                memory_free(&dictNodeKey);
+                memory_unmap_alloc((void **)&bucketTablePtr);
+                memory_unmap_alloc((void **)&dictPtr);
+
+                return B32_FALSE;
+            }
+        }
+        else 
+        {
+            if (!(basic_list_move_node(&dictPtr->freeNodeList, 
+            bucketKeyPtr, &foundNodeKey)))
+            {
+                memory_unmap_alloc((void **)&bucketTablePtr);
+                memory_unmap_alloc((void **)&dictPtr);
+
+                return B32_FALSE;
+            }
+        }
+
+        memcpy((void *)&foundBucketKey, bucketKeyPtr, sizeof(struct memory_allocation_key));
+
         memory_unmap_alloc((void **)&bucketTablePtr);
         memory_unmap_alloc((void **)&dictPtr);
     }
 
-    const struct memory_allocation_key currentNodeKey;
+    struct basic_dict_node *nodePtr;
 
-    memcpy((void *)&currentNodeKey, &headNodeKey, sizeof(struct memory_allocation_key));
-
-    do 
+    if (!(basic_list_map_data(&foundNodeKey, (void **)&nodePtr)))
     {
-        struct basic_dict_node *nodePtr;
+        return B32_FALSE;
+    }
 
-        if (!(basic_list_map_data(&currentNodeKey, (void **)&nodePtr)))
-        {
-            memory_unmap_alloc((void **)&bucketTablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
+    if (dataByteOffset)
+    {
+        nodePtr->dataByteOffset = *dataByteOffset;
+    }
 
-            return B32_FALSE;
-        }
+    if (dataByteSize)
+    {
+        nodePtr->dataByteSize = *dataByteSize;
+    }
 
-        if (!(memcmp(keyPtr, nodePtr->key, dictPtr->keyByteSize)))
-        {
-            memory_unmap_alloc((void **)&nodePtr);
-            memory_unmap_alloc((void **)&bucketTablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
+    if (!(MEMORY_IS_ALLOCATION_NULL(dataKeyPtr)))
+    {
+        memcpy((void *)&nodePtr->dataKey, dataKeyPtr, sizeof(struct memory_allocation_key));
+    }
+    else 
+    {
+        memory_get_null_allocation_key(&nodePtr->dataKey);
+    }
 
-            return basic_list_unmap_data(listKeyPtr);
-        }
-
-        const struct memory_allocation_key nextNodeKey;
-
-        if (!(basic_list_get_next_node(listKeyPtr, &currentNodeKey, &nextNodeKey)))
-        {
-            memory_unmap_alloc((void **)&nodePtr);
-            memory_unmap_alloc((void **)&bucketTablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
-
-            return B32_FALSE;
-        }
-
-        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&nextNodeKey, &headNodeKey)))
-        {
-            memcpy((void *)&currentNodeKey, &nextNodeKey, sizeof(struct memory_allocation_key));
-        }
-        else
-        {
-            memory_get_null_allocation_key(&currentNodeKey);
-        }
-
-        memory_unmap_alloc((void **)&nodePtr);
-    } while ((MEMORY_IS_ALLOCATION_NULL(&currentNodeKey)));
-
-    memory_unmap_alloc((void **)&bucketTablePtr);
-    memory_unmap_alloc((void **)&dictPtr);
-
-    return B32_FALSE;
+    return B32_TRUE;
 }
 
 b32
-basic_dict_set_data_info(const struct memory_allocation_key *dictKeyPtr,
-    void *keyPtr, p64 *databaseByteoffset, u64 *databaseByteSize);
+basic_dict_get_data(const struct memory_allocation_key *dictKeyPtr,
+    void *keyPtr, p64 *dataByteOffset, u64 *dataByteSize,
+    const struct memory_allocation_key *outDataKeyPtr)
+{
+    const struct memory_allocation_key foundBucketKey;
+    const struct memory_allocation_key foundNodeKey;
+
+    if (!(_basic_dict_get_node_by_key(dictKeyPtr, keyPtr, &foundNodeKey, 
+    &foundBucketKey)))
+    {
+        return B32_FALSE;
+    }
+
+    struct basic_dict_node *nodePtr;
+
+    if (!(basic_list_map_data(&foundNodeKey, (void **)&nodePtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (dataByteOffset)
+    {
+        *dataByteOffset = nodePtr->dataByteOffset;
+    }
+
+    if (dataByteSize)
+    {
+        *dataByteSize = nodePtr->dataByteSize;
+    }
+
+    if (outDataKeyPtr)
+    {
+        memcpy((void *)outDataKeyPtr, &nodePtr->dataKey, sizeof(struct memory_allocation_key));
+    }
+
+    basic_list_unmap_data(&foundBucketKey, &foundNodeKey, (void **)&nodePtr);
+
+    return B32_TRUE;
+}
 
 b32
 basic_dict_remove(const struct memory_allocation_key *dictKeyPtr, void *keyPtr)
 {
-    return _basic_dict_remove_pair(dictKeyPtr, keyPtr);
+    const struct memory_allocation_key foundBucketKey;
+    const struct memory_allocation_key foundNodeKey;
+
+    if (!(_basic_dict_get_node_by_key(dictKeyPtr, keyPtr, &foundNodeKey, 
+    &foundBucketKey)))
+    {
+        return B32_FALSE;
+    }
+
+    struct basic_dict *dictPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, 
+        (void **)&dictPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    b32 isResult = basic_list_move_node(&foundBucketKey, 
+    &dictPtr->freeNodeList, &foundNodeKey);
+
+    memory_unmap_alloc((void **)&dictPtr);
+
+    return isResult;
 }
 
 b32
 basic_dict_clear(const struct memory_allocation_key *dictKeyPtr)
 {
-    return B32_TRUE;
+    struct basic_dict *dictPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, 
+        (void **)&dictPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    u32 bucketCount = dictPtr->tableBucketCount;
+
+    memory_unmap_alloc((void **)&dictPtr);
+
+    for (u32 bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+    {
+        _basic_dict_clear_bucket(dictKeyPtr, bucketIndex);
+    }
 }
 
 b32
 basic_dict_get_is_found(const struct memory_allocation_key *dictKeyPtr, void *keyPtr)
 {
+    return _basic_dict_get_node_by_key(dictKeyPtr, keyPtr, NULL, NULL);
+}
+
+b32
+basic_dict_destroy(const struct memory_allocation_key *dictKeyPtr)
+{
     struct basic_dict *dictPtr;
+    const struct memory_allocation_key *bucketTableKeyPtr;
     {
-        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, (void **)&dictPtr);
+        memory_error_code resultCode = memory_map_alloc(dictKeyPtr, 
+        (void **)&dictPtr);
 
         if (resultCode != MEMORY_OK)
         {
-            // TODO:
-
-            return B32_FALSE;
-        }
-    }
-
-    struct utils_string_hash tableHash;
-
-    if (!dictPtr->hashFunc(dictKeyPtr, keyPtr, &tableHash))
-    {
-        memory_unmap_alloc((void **)&dictPtr);
-
-        return B32_FALSE;
-    }
-
-    const struct memory_allocation_key *tablePtr;
-    {
-        memory_error_code resultCode = memory_map_alloc(&dictPtr->tableKey, 
-        (void **)&tablePtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            memory_unmap_alloc((void **)&dictPtr);
-
-            // TODO:
-
-            return B32_FALSE;
-        }
-    }
-
-    const struct memory_allocation_key *listKeyPtr = &tablePtr[dictPtr->tableBucketCount%tableHash.hash];
-
-    struct memory_allocation_key headTableListPairNodeKey;
-
-    if (!(basic_list_get_next_node(listKeyPtr, NULL, &headTableListPairNodeKey)))
-    {
-        memory_unmap_alloc((void **)&tablePtr);
-        memory_unmap_alloc((void **)&dictPtr);
-
-        // TODO:
-
-        return B32_FALSE;
-    }
-
-    const struct memory_allocation_key tableListPairNodeKey;
-
-    memcpy((void *)&tableListPairNodeKey, &headTableListPairNodeKey, 
-    sizeof(struct memory_allocation_key));
-
-    do 
-    {
-        struct basic_dict_pair *pairPtr;
-
-        memory_error_code resultCode = memory_map_alloc(&tableListPairNodeKey, 
-        (void *)&pairPtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            memory_unmap_alloc((void **)&tablePtr);
-            memory_unmap_alloc((void **)&dictPtr);
-
-            // TODO:
-
             return B32_FALSE;
         }
 
-        if (!strcmp(pairPtr->key, keyPtr))
-        {
-            return B32_TRUE;
-        }
+        resultCode = memory_map_alloc(&dictPtr->bucketTableKey, 
+        (void **)&bucketTableKeyPtr);
+    }
 
-        const struct memory_allocation_key nextTableListPairKeyNode;
+    // TODO:
 
-        basic_list_get_next_node(listKeyPtr, &tableListPairNodeKey, 
-        &nextTableListPairKeyNode);
-
-        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&nextTableListPairKeyNode, &headTableListPairNodeKey)))
-        {
-            memcpy((void *)&tableListPairNodeKey, &nextTableListPairKeyNode,
-            sizeof(struct memory_allocation_key));
-        }
-        else 
-        {
-            return B32_FALSE;
-        }
-    } while (!(MEMORY_IS_ALLOCATION_NULL(&tableListPairNodeKey)));
-
-    memory_unmap_alloc((void **)&tablePtr);
     memory_unmap_alloc((void **)&dictPtr);
+
+    memory_free(dictKeyPtr);
 
     return B32_TRUE;
 }

@@ -9,9 +9,6 @@ typedef u64 basic_list_id;
 
 b32
 basic_list_create(const struct memory_page_key *memoryPageKeyPtr, 
-    u64 databaseByteOffset,
-    u64 databaseByteSize,
-    const struct memory_allocation_key *databaseByteArrKeyPtr,
     const struct memory_allocation_key *outListKeyPtr);
 
 b32
@@ -36,6 +33,7 @@ basic_list_move_free_node(const struct memory_allocation_key *lhsListKeyPtr,
     const struct memory_allocation_key *rhsListKeyPtr,
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr);
 
 b32
@@ -56,38 +54,33 @@ b32
 basic_list_map_data(const struct memory_allocation_key *nodeKeyPtr, void **outDataPtr);
 
 b32
-basic_list_unmap_data(const struct memory_allocation_key *listKeyPtr);
+basic_list_unmap_data(const struct memory_allocation_key *listKeyPtr, 
+    const struct memory_allocation_key *nodeKeyPtr, void **dataPtr);
 
 b32
 basic_list_set_data_info(const struct memory_allocation_key *listKeyPtr, 
     const struct memory_allocation_key *nodeKeyPtr,
-    p64 dataByteOffset, u64 dataByteSize);
+    const struct memory_allocation_key *dataKeyPtr,
+    p64 *dataByteOffset, u64 *dataByteSize);
 
 b32
 basic_list_get_data_info(const struct memory_allocation_key *listKeyPtr, 
     const struct memory_allocation_key *nodeKeyPtr,
+    const struct memory_allocation_key *outDataKeyPtr,
     p64 *dataByteOffset, u64 *dataByteSize);
-
-b32
-basic_list_get_database(const struct memory_allocation_key *listKeyPtr,
-    const struct memory_allocation_key *outDatabaseKeyPtr,
-    p64 *outDataByteOffset, u64 *outDataByteSize);
-
-b32
-basic_list_reset_data(const struct memory_allocation_key *listKeyPtr,
-    const struct memory_allocation_key *databaseKeyPtr, p64 dataByteOffset,
-    u64 dataByteSize);
 
 b32
 basic_list_append(const struct memory_allocation_key *listKeyPtr,
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr);
 
 b32
 basic_list_insert_front(const struct memory_allocation_key *listKeyPtr,
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr);
 
 b32
@@ -95,6 +88,7 @@ basic_list_append_after(const struct memory_allocation_key *listKeyPtr,
     const struct memory_allocation_key *lhsNodeKeyPtr, 
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr);
 
 b32
@@ -102,6 +96,7 @@ basic_list_insert_before(const struct memory_allocation_key *listKeyPtr,
     const struct memory_allocation_key *lhsNodeKeyPtr, 
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr);
 
 b32

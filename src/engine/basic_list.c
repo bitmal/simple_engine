@@ -13,8 +13,9 @@ struct basic_list_node
 {
     basic_list_id id;
     const struct memory_allocation_key listKey;
-    p64 databaseByteOffset;
-    u64 databaseByteSize;
+    const struct memory_allocation_key dataKey;
+    p64 dataByteOffset;
+    u64 dataByteSize;
     const struct memory_allocation_key prevNodeKey;
     const struct memory_allocation_key nextNodeKey;
     b32 isActive;
@@ -27,9 +28,6 @@ struct basic_list
     const struct memory_allocation_key activeNodeKeyList;
     u64 freeListNodeCount;
     const struct memory_allocation_key freeNodeKeyList;
-    const struct memory_allocation_key databaseByteArrKey;
-    p64 databaseByteOffset;
-    u64 databaseByteSize;
 };
 
 b32
@@ -451,6 +449,7 @@ result_true:
 b32
 _basic_list_activate_node(const struct memory_allocation_key *listKeyPtr, 
     const struct memory_allocation_key *nodeKeyPtr,
+    const struct memory_allocation_key *dataKeyPtr,
     p64 dataByteOffset, u64 dataByteSize)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
@@ -481,19 +480,6 @@ _basic_list_activate_node(const struct memory_allocation_key *listKeyPtr,
 
             return B32_FALSE;
         }
-    }
-
-    u64 startDatabaseOffset = listPtr->databaseByteOffset + dataByteOffset;
-    u64 endDatabaseOffset = startDatabaseOffset + dataByteSize;
-
-    if (startDatabaseOffset < listPtr->databaseByteOffset)
-    {
-        goto result_false;
-    }
-
-    if (endDatabaseOffset > (listPtr->databaseByteOffset + listPtr->databaseByteSize))
-    {
-        goto result_false;
     }
 
     if (nodePtr->isActive)
@@ -544,8 +530,10 @@ _basic_list_activate_node(const struct memory_allocation_key *listKeyPtr,
 
     nodePtr->isActive = B32_TRUE;
 
-    nodePtr->databaseByteOffset = dataByteOffset;
-    nodePtr->databaseByteSize = dataByteSize;
+    nodePtr->dataByteOffset = dataByteOffset;
+    nodePtr->dataByteSize = dataByteSize;
+
+    memcpy((void *)&nodePtr->dataKey, dataKeyPtr, sizeof(struct memory_allocation_key));
 
     ++listPtr->activeListNodeCount;
 
@@ -566,17 +554,9 @@ result_true:
 
 b32
 basic_list_create(const struct memory_page_key *memoryPageKeyPtr, 
-    u64 databaseByteOffset,
-    u64 databaseByteSize,
-    const struct memory_allocation_key *databaseByteArrKeyPtr,
     const struct memory_allocation_key *outListKeyPtr)
 {
     if ((MEMORY_IS_PAGE_NULL(memoryPageKeyPtr)))
-    {
-        return B32_FALSE;
-    }
-
-    if ((MEMORY_IS_ALLOCATION_NULL(databaseByteArrKeyPtr)))
     {
         return B32_FALSE;
     }
@@ -620,32 +600,6 @@ basic_list_create(const struct memory_page_key *memoryPageKeyPtr,
 
     memcpy((void *)&listPtr->memoryPageKey, (void *)memoryPageKeyPtr, 
         sizeof(struct memory_page_key));
-
-    memcpy((void *)&listPtr->databaseByteArrKey, &databaseByteArrKeyPtr, sizeof(struct memory_allocation_key));
-
-    u64 allocByteSize = memory_sizeof(&listPtr->databaseByteArrKey);
-
-    if (databaseByteOffset >= allocByteSize)
-    {
-        memory_unmap_alloc((void **)&listPtr);
-        basic_list_destroy(&listKey);
-
-        return B32_FALSE;
-    }
-
-    u64 startOffsetByteIndex = databaseByteOffset;
-    u64 endOffsetByteIndex = startOffsetByteIndex + databaseByteSize;
-
-    if (endOffsetByteIndex > allocByteSize)
-    {
-        memory_unmap_alloc((void **)&listPtr);
-        basic_list_destroy(&listKey);
-
-        return B32_FALSE;
-    }
-
-    listPtr->databaseByteOffset = databaseByteOffset;
-    listPtr->databaseByteSize = databaseByteSize;
 
     memory_unmap_alloc((void **)&listPtr);
     
@@ -1037,7 +991,6 @@ basic_list_map_data(const struct memory_allocation_key *nodeKeyPtr, void **outDa
 
     struct basic_list *listPtr;
     struct basic_list_node *nodePtr;
-    void *databasePtr;
     {
         memory_error_code resultCode = memory_map_alloc(nodeKeyPtr, (void **)&nodePtr);
 
@@ -1058,21 +1011,23 @@ basic_list_map_data(const struct memory_allocation_key *nodeKeyPtr, void **outDa
 
             return B32_FALSE;
         }
-
-        resultCode = memory_map_alloc(&listPtr->databaseByteArrKey, (void **)&databasePtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            *outDataPtr = NULL;
-
-            memory_unmap_alloc((void **)&listPtr);
-            memory_unmap_alloc((void **)&nodePtr);
-
-            return B32_FALSE;
-        }
     }
 
-    *outDataPtr = (void *)((p64)databasePtr + listPtr->databaseByteOffset + nodePtr->databaseByteOffset);
+    u8 *resultPtr;
+    
+    memory_error_code resultCode = memory_map_alloc(&nodePtr->dataKey, 
+    (void **)&resultPtr);
+
+    if (resultCode != MEMORY_OK)
+    {
+        memory_unmap_alloc((void **)&listPtr);
+        memory_unmap_alloc((void **)&nodePtr);
+
+        return B32_FALSE;
+    }
+
+    resultPtr += nodePtr->dataByteOffset;
+    *outDataPtr = resultPtr;
 
     memory_unmap_alloc((void **)&listPtr);
     memory_unmap_alloc((void **)&nodePtr);
@@ -1081,24 +1036,48 @@ basic_list_map_data(const struct memory_allocation_key *nodeKeyPtr, void **outDa
 }
 
 b32
-basic_list_unmap_data(const struct memory_allocation_key *listKeyPtr)
+basic_list_unmap_data(const struct memory_allocation_key *listKeyPtr, 
+    const struct memory_allocation_key *nodeKeyPtr, void **dataPtr)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
     {
         return B32_FALSE;
     }
-
-    struct basic_list *listPtr;
-
-    memory_error_code resultCode = memory_map_alloc(listKeyPtr, (void **)&listPtr);
-
-    if (resultCode != MEMORY_OK)
+    
+    if ((MEMORY_IS_ALLOCATION_NULL(nodeKeyPtr)))
     {
         return B32_FALSE;
     }
 
-    memory_unmap_alloc((void **)&listPtr->databaseByteArrKey);
-    memory_unmap_alloc((void **)&listPtr);
+    if (!dataPtr)
+    {
+        return B32_FALSE;
+    }
+
+    struct basic_list_node *nodePtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(nodeKeyPtr, 
+        (void **)&nodePtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    u8 *resultPtr = *dataPtr;
+    resultPtr -= nodePtr->dataByteOffset;
+
+    memory_error_code resultCode = memory_unmap_alloc((void **)&resultPtr);
+
+    if (resultCode != MEMORY_OK)
+    {
+        memory_unmap_alloc((void **)&nodePtr);
+
+        return B32_FALSE;
+    }
+
+    memory_unmap_alloc((void **)&nodePtr);
 
     return B32_TRUE;
 }
@@ -1106,7 +1085,8 @@ basic_list_unmap_data(const struct memory_allocation_key *listKeyPtr)
 b32
 basic_list_set_data_info(const struct memory_allocation_key *listKeyPtr, 
     const struct memory_allocation_key *nodeKeyPtr,
-    p64 dataByteOffset, u64 dataByteSize)
+    const struct memory_allocation_key *dataKeyPtr,
+    p64 *dataByteOffset, u64 *dataByteSize)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
     {
@@ -1138,21 +1118,24 @@ basic_list_set_data_info(const struct memory_allocation_key *listKeyPtr,
         }
     }
 
-    p64 startByteOffset = listPtr->databaseByteOffset + dataByteOffset;
-    p64 endByteOffset = startByteOffset + dataByteSize;
-
-    if (startByteOffset < listPtr->databaseByteOffset)
+    if (dataByteOffset)
     {
-        goto result_false;
+        nodePtr->dataByteOffset = *dataByteOffset;
     }
 
-    if (endByteOffset > (listPtr->databaseByteOffset + listPtr->databaseByteSize))
+    if (dataByteSize)
     {
-        goto result_false;
+        nodePtr->dataByteSize = *dataByteSize;
     }
 
-    nodePtr->databaseByteOffset = dataByteOffset;
-    nodePtr->databaseByteSize = dataByteSize;
+    if (!(MEMORY_IS_ALLOCATION_NULL(dataKeyPtr)))
+    {
+        memcpy((void *)&nodePtr->dataKey, dataKeyPtr, sizeof(struct memory_allocation_key));
+    }
+    else if (dataKeyPtr)
+    {
+        memory_get_null_allocation_key(&nodePtr->dataKey);
+    }
 
 goto result_true;
 
@@ -1172,6 +1155,7 @@ result_true:
 b32
 basic_list_get_data_info(const struct memory_allocation_key *listKeyPtr, 
     const struct memory_allocation_key *nodeKeyPtr,
+    const struct memory_allocation_key *outDataKeyPtr,
     p64 *dataByteOffset, u64 *dataByteSize)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
@@ -1216,12 +1200,17 @@ basic_list_get_data_info(const struct memory_allocation_key *listKeyPtr,
 
     if (dataByteSize)
     {
-        *dataByteSize = nodePtr->databaseByteSize;
+        *dataByteSize = nodePtr->dataByteSize;
     }
     
     if (dataByteOffset)
     {
-        *dataByteOffset = nodePtr->databaseByteOffset;
+        *dataByteOffset = nodePtr->dataByteOffset;
+    }
+
+    if (outDataKeyPtr)
+    {
+        memcpy((void *)outDataKeyPtr, &nodePtr->dataKey, sizeof(struct memory_allocation_key));
     }
 
 goto result_true;
@@ -1240,102 +1229,13 @@ result_true:
 }
 
 b32
-basic_list_get_database(const struct memory_allocation_key *listKeyPtr,
-    const struct memory_allocation_key *outDatabaseKeyPtr,
-    p64 *outDataByteOffset, u64 *outDataByteSize)
-{
-    if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
-    {
-        if (outDatabaseKeyPtr)
-        {
-            memory_get_null_allocation_key(outDatabaseKeyPtr);
-        }
-
-        return B32_FALSE;
-    }
-
-    if (!outDatabaseKeyPtr)
-    {
-        return B32_FALSE;
-    }
-
-    if (!outDataByteOffset)
-    {
-        return B32_FALSE;
-    }
-    
-    if (!outDataByteSize)
-    {
-        return B32_FALSE;
-    }
-
-    struct basic_list *listPtr;
-
-    memory_error_code resultCode = memory_map_alloc(listKeyPtr, (void **)&listPtr);
-
-    if (resultCode != MEMORY_OK)
-    {
-        return B32_FALSE;
-    }
-
-    memcpy((void *)outDatabaseKeyPtr, &listPtr->databaseByteArrKey, sizeof(const struct memory_allocation_key));
-
-    *outDataByteOffset = listPtr->databaseByteOffset;
-    *outDataByteSize = listPtr->databaseByteSize;
-
-    memory_unmap_alloc((void **)&listPtr);
-
-    return B32_TRUE;
-}
-
-b32
-basic_list_reset_data(const struct memory_allocation_key *listKeyPtr,
-    const struct memory_allocation_key *databaseKeyPtr, p64 dataByteOffset,
-    u64 dataByteSize)
-{
-    if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
-    {
-        return B32_FALSE;
-    }
-    
-    if ((MEMORY_IS_ALLOCATION_NULL(databaseKeyPtr)))
-    {
-        return B32_FALSE;
-    }
-
-    if (dataByteOffset >= dataByteSize)
-    {
-        return B32_FALSE;
-    }
-    
-    struct basic_list *listPtr;
-
-    memory_error_code resultCode = memory_map_alloc(listKeyPtr, (void **)&listPtr);
-
-    if (resultCode != MEMORY_OK)
-    {
-        return B32_FALSE;
-    }
-
-    memcpy((void *)&listPtr->databaseByteArrKey, databaseKeyPtr, sizeof(struct memory_allocation_key));
-
-    listPtr->databaseByteOffset = dataByteOffset;
-    listPtr->databaseByteSize = dataByteSize;
-
-    memory_unmap_alloc((void **)&listPtr);
-
-    basic_list_clear_nodes(listKeyPtr);
-
-    return B32_TRUE;
-}
-
-b32
 basic_list_append(const struct memory_allocation_key *listKeyPtr,
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr)
 {
-    if (MEMORY_IS_ALLOCATION_NULL(listKeyPtr))
+    if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
     {
         utils_fprintfln(stderr, "%s(Line: %d): "
             "'listKeyPtr' argument cannot be NULL, nor the key itself. Aborting.", __func__, __LINE__);
@@ -1383,23 +1283,6 @@ basic_list_append(const struct memory_allocation_key *listKeyPtr,
         {
             utils_fprintfln(stderr, "%s(Line: %d): "
                 "Could not memory map list. Aborting.", __func__, __LINE__);
-
-            return B32_FALSE;
-        }
-
-        p64 startByteOffset = listPtr->databaseByteOffset + dataByteOffset;
-        p64 endByteOffset = startByteOffset + dataByteSize;
-
-        if (startByteOffset < listPtr->databaseByteOffset)
-        {
-            memory_unmap_alloc((void **)&listPtr);
-
-            return B32_FALSE;
-        }
-
-        if (endByteOffset > (listPtr->databaseByteOffset + listPtr->databaseByteSize))
-        {
-            memory_unmap_alloc((void **)&listPtr);
 
             return B32_FALSE;
         }
@@ -1457,8 +1340,10 @@ basic_list_append(const struct memory_allocation_key *listKeyPtr,
     }
 
     nodePtr->isActive = B32_TRUE;
-    nodePtr->databaseByteOffset = dataByteOffset;
-    nodePtr->databaseByteSize = dataByteSize;
+    nodePtr->dataByteOffset = dataByteOffset;
+    nodePtr->dataByteSize = dataByteSize;
+
+    memcpy((void *)&nodePtr->dataKey, dataKeyPtr, sizeof(struct memory_allocation_key));
 
     memory_unmap_alloc((void **)&nodePtr);
     memory_unmap_alloc((void **)&listPtr);
@@ -1472,6 +1357,7 @@ b32
 basic_list_insert_front(const struct memory_allocation_key *listKeyPtr,
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr)
 {
     if (MEMORY_IS_ALLOCATION_NULL(listKeyPtr))
@@ -1496,23 +1382,13 @@ basic_list_insert_front(const struct memory_allocation_key *listKeyPtr,
     {
         memory_error_code resultCode = MEMORY_OK;
 
-        if ((_basic_list_get_next_free_node(listKeyPtr, &nodeKey)))
-        {
-            resultCode = memory_map_alloc(&nodeKey, (void **)&nodePtr);
-
-            if (resultCode != MEMORY_OK)
-            {
-                memory_unmap_alloc((void **)&nodePtr);
-
-                return B32_FALSE;
-            }
-        }
-        else
+        if (!(_basic_list_get_next_free_node(listKeyPtr, &nodeKey)))
         {
             return B32_FALSE;
         }
 
-        if (!(_basic_list_activate_node(listKeyPtr, &nodeKey, dataByteOffset, dataByteSize)))
+        if (!(_basic_list_activate_node(listKeyPtr, &nodeKey, dataKeyPtr, 
+            dataByteOffset, dataByteSize)))
         {
             memory_unmap_alloc((void **)&nodePtr);
 
@@ -1520,8 +1396,6 @@ basic_list_insert_front(const struct memory_allocation_key *listKeyPtr,
         }
     }
 
-    memory_unmap_alloc((void **)&nodePtr);
-    
     memcpy((void *)outNodeKeyPtr, &nodeKey, sizeof(struct memory_allocation_key));
 
     return B32_TRUE;
@@ -1532,6 +1406,7 @@ basic_list_append_after(const struct memory_allocation_key *listKeyPtr,
     const struct memory_allocation_key *lhsNodeKeyPtr, 
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
@@ -1587,25 +1462,6 @@ basic_list_append_after(const struct memory_allocation_key *listKeyPtr,
         if (resultCode != MEMORY_OK)
         {
             memory_unmap_alloc((void **)&nodePtr);
-            _basic_list_free_node(listKeyPtr, &nodeKey);
-
-            return B32_FALSE;
-        }
-
-        p64 startByteOffset = listPtr->databaseByteOffset + dataByteOffset;
-        p64 endByteOffset = startByteOffset + dataByteSize;
-
-        if (startByteOffset < listPtr->databaseByteOffset)
-        {
-            memory_unmap_alloc((void **)&listPtr);
-            _basic_list_free_node(listKeyPtr, &nodeKey);
-
-            return B32_FALSE;
-        }
-
-        if (endByteOffset > (listPtr->databaseByteOffset + listPtr->databaseByteSize))
-        {
-            memory_unmap_alloc((void **)&listPtr);
             _basic_list_free_node(listKeyPtr, &nodeKey);
 
             return B32_FALSE;
@@ -1667,9 +1523,18 @@ basic_list_append_after(const struct memory_allocation_key *listKeyPtr,
         }
     }
 
-    nodePtr->databaseByteOffset = dataByteOffset;
-    nodePtr->databaseByteSize = dataByteSize;
+    nodePtr->dataByteOffset = dataByteOffset;
+    nodePtr->dataByteSize = dataByteSize;
     nodePtr->isActive = B32_TRUE;
+
+    if (!(MEMORY_IS_ALLOCATION_NULL(dataKeyPtr)))
+    {
+        memcpy((void *)&nodePtr->dataKey, dataKeyPtr, sizeof(struct memory_allocation_key));
+    }
+    else
+    {
+        memory_get_null_allocation_key(&nodePtr->dataKey);
+    }
 
     memcpy((void *)&nodePtr->listKey, listKeyPtr, sizeof(struct memory_allocation_key));
 
@@ -1892,6 +1757,7 @@ basic_list_move_free_node(const struct memory_allocation_key *lhsListKeyPtr,
     const struct memory_allocation_key *rhsListKeyPtr,
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(lhsListKeyPtr)))
@@ -1967,39 +1833,6 @@ basic_list_move_free_node(const struct memory_allocation_key *lhsListKeyPtr,
         }
     }
     
-    if (dataByteSize >= rhsListPtr->databaseByteSize)
-    {
-        memory_unmap_alloc((void **)nodePtr);
-        _basic_list_free_node(lhsListKeyPtr, &nodeKey);
-        memory_unmap_alloc((void **)lhsListPtr);
-        memory_unmap_alloc((void **)rhsListPtr);
-
-        return B32_FALSE;
-    }
-
-    u64 startByteOffset = rhsListPtr->databaseByteOffset + dataByteOffset;
-    u64 endByteOffset = startByteOffset + dataByteSize;
-
-    if (startByteOffset < rhsListPtr->databaseByteOffset)
-    {
-        memory_unmap_alloc((void **)nodePtr);
-        _basic_list_free_node(lhsListKeyPtr, &nodeKey);
-        memory_unmap_alloc((void **)lhsListPtr);
-        memory_unmap_alloc((void **)rhsListPtr);
-
-        return B32_FALSE;
-    }
-
-    if (endByteOffset > (rhsListPtr->databaseByteOffset + rhsListPtr->databaseByteSize))
-    {
-        memory_unmap_alloc((void **)nodePtr);
-        _basic_list_free_node(lhsListKeyPtr, &nodeKey);
-        memory_unmap_alloc((void **)lhsListPtr);
-        memory_unmap_alloc((void **)rhsListPtr);
-
-        return B32_FALSE;
-    }
-
     if (rhsListPtr->activeListNodeCount > 0)
     {
         struct basic_list_node *headNodePtr;
@@ -2048,9 +1881,18 @@ basic_list_move_free_node(const struct memory_allocation_key *lhsListKeyPtr,
         memcpy((void *)&nodePtr->nextNodeKey, &nodeKey, sizeof(struct memory_allocation_key));
     }
     
-    nodePtr->databaseByteOffset = dataByteOffset;
-    nodePtr->databaseByteSize = dataByteSize;
+    nodePtr->dataByteOffset = dataByteOffset;
+    nodePtr->dataByteSize = dataByteSize;
     nodePtr->isActive = B32_TRUE;
+
+    if (!(MEMORY_IS_ALLOCATION_NULL(dataKeyPtr)))
+    {
+        memcpy((void *)&nodePtr->dataKey, dataKeyPtr, sizeof(struct memory_allocation_key));
+    }
+    else 
+    {
+        memory_get_null_allocation_key(&nodePtr->dataKey);
+    }
 
     memcpy((void *)&nodePtr->listKey, &rhsListKeyPtr, sizeof(struct memory_allocation_key));
     memcpy((void *)&rhsListPtr->activeNodeKeyList, &nodeKey, sizeof(struct memory_allocation_key));
@@ -2074,6 +1916,7 @@ basic_list_insert_before(const struct memory_allocation_key *listKeyPtr,
     const struct memory_allocation_key *lhsNodeKeyPtr, 
     p64 dataByteOffset,
     u64 dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr,
     const struct memory_allocation_key *outNodeKeyPtr)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(listKeyPtr)))
@@ -2129,25 +1972,6 @@ basic_list_insert_before(const struct memory_allocation_key *listKeyPtr,
         if (resultCode != MEMORY_OK)
         {
             memory_unmap_alloc((void **)&nodePtr);
-            _basic_list_free_node(listKeyPtr, &nodeKey);
-
-            return B32_FALSE;
-        }
-
-        p64 startByteOffset = listPtr->databaseByteOffset + dataByteOffset;
-        p64 endByteOffset = startByteOffset + dataByteSize;
-
-        if (startByteOffset < listPtr->databaseByteOffset)
-        {
-            memory_unmap_alloc((void **)&listPtr);
-            _basic_list_free_node(listKeyPtr, &nodeKey);
-
-            return B32_FALSE;
-        }
-
-        if (endByteOffset > (listPtr->databaseByteOffset + listPtr->databaseByteSize))
-        {
-            memory_unmap_alloc((void **)&listPtr);
             _basic_list_free_node(listKeyPtr, &nodeKey);
 
             return B32_FALSE;
@@ -2214,9 +2038,18 @@ basic_list_insert_before(const struct memory_allocation_key *listKeyPtr,
         }
     }
 
-    nodePtr->databaseByteOffset = dataByteOffset;
-    nodePtr->databaseByteSize = dataByteSize;
+    nodePtr->dataByteOffset = dataByteOffset;
+    nodePtr->dataByteSize = dataByteSize;
     nodePtr->isActive = B32_TRUE;
+
+    if (!(MEMORY_IS_ALLOCATION_NULL(dataKeyPtr)))
+    {
+        memcpy((void *)&nodePtr->dataKey, dataKeyPtr, sizeof(struct memory_allocation_key));
+    }
+    else 
+    {
+        memory_get_null_allocation_key(&nodePtr->dataKey);
+    }
 
     memcpy((void *)&nodePtr->listKey, listKeyPtr, sizeof(struct memory_allocation_key));
 

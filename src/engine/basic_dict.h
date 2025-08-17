@@ -21,8 +21,6 @@ typedef b32 (*basic_dict_data_is_found_equal_func)(struct basic_dict *dict, void
 b32
 basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
     u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtrKeyPtr,
-    p64 databaseByteOffset, u64 databaseByteSize,
-    const struct memory_allocation_key *databaseKeyPtr,
     const struct memory_allocation_key *outDictKeyPtr);
 
 b32
@@ -34,8 +32,14 @@ basic_dict_unmap_data(const struct memory_allocation_key *dictKeyPtr, void *keyP
     void **outDataPtr);
 
 b32
-basic_dict_set_data_info(const struct memory_allocation_key *dictKeyPtr,
-    void *keyPtr, p64 *databaseByteoffset, u64 *databaseByteSize);
+basic_dict_push_data(const struct memory_allocation_key *dictKeyPtr,
+    void *keyPtr, p64 *dataByteOffset, u64 *dataByteSize,
+    const struct memory_allocation_key *dataKeyPtr);
+
+b32
+basic_dict_get_data(const struct memory_allocation_key *dictKeyPtr,
+    void *keyPtr, p64 *dataByteOffset, u64 *dataByteSize,
+    const struct memory_allocation_key *outDataKeyPtr);
 
 b32
 basic_dict_remove(const struct memory_allocation_key *dictKeyPtr, void *keyPtr);
@@ -48,5 +52,8 @@ basic_dict_reset(const struct memory_allocation_key *dictKeyPtr, const struct me
 
 b32
 basic_dict_get_is_found(const struct memory_allocation_key *dictKeyPtr, void *keyPtr);
+
+b32
+basic_dict_destroy(const struct memory_allocation_key *dictKeyPtr);
 
 #endif
