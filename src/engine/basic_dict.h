@@ -14,14 +14,16 @@ struct basic_dict;
 
 typedef b32 (*basic_dict_hash_func)(struct basic_dict *dictPtr, void *key, 
     struct utils_string_hash *outHashPtr);
-typedef b32 (*basic_dict_data_is_found_equal_func)(struct basic_dict *dict, void *key);
+
+typedef b32 (*basic_dict_create_key_copy_func)(struct basic_dict *dictPtr, void *keyPtr, 
+    const struct memory_raw_allocation_key *outRawKeyKeyPtr);
 
 #define BASIC_DICT_NULL_PTR ((p64)0)
 
 b32
-basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc, 
-    u32 initBucketCount, u64 keySize, const struct memory_allocation_key *userPtrKeyPtr,
-    const struct memory_allocation_key *outDictKeyPtr);
+basic_dict_create(const struct memory_page_key *memoryPageKeyPtr, basic_dict_hash_func hashFunc,
+    basic_dict_create_key_copy_func keyCopyFunc, u32 initBucketCount, u64 *keySize, 
+    const struct memory_allocation_key *userPtrKeyPtr, const struct memory_allocation_key *outDictKeyPtr);
 
 b32
 basic_dict_map_data(const struct memory_allocation_key *dictKeyPtr, void *keyPtr, 

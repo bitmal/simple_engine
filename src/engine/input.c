@@ -6,44 +6,173 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct input *
-input_init(struct memory *mem, void *dataPtr)
+struct input_key
 {
-    struct input *inputContext = memory_alloc(mem, sizeof(struct input));
-    
-    inputContext->dataPtr = dataPtr;
-    inputContext->keys = NULL;
-    inputContext->keyCount = 0;
-    inputContext->keyDict = DICTIONARY(mem, NULL, NULL);
-    inputContext->keybinds = NULL;
-    inputContext->keybindCount = 0;
-    inputContext->keybindDict = DICTIONARY(mem, NULL, NULL);
+    const char *key;
+    b32 isDown;
+};
 
-    return inputContext;
+struct input_keybind
+{
+    const char *key;
+    input_key_callback callback;
+};
+
+struct input
+{
+    const struct memory_context_key memoryContext;
+    const struct memory_page_key pageKey;
+    const struct memory_allocation_key keyArr;
+    i32 keyCount;
+    i32 keyCapacity;
+    const struct memory_allocation_key keyDict;
+    const struct memory_allocation_key keybindArr;
+    i32 keybindCount;
+    i32 keybindCapacity;
+    const struct memory_allocation_key keybindDict;
+    void *userPtr;
+};
+
+b32
+input_init(const struct memory_context_key *memoryContextKeyPtr, void *userPtr,
+    const struct memory_allocation_key *outInputKeyPtr)
+{
+    const struct memory_page_key pageKey;
+    {
+        memory_error_code resultCode = memory_alloc_page(memoryContextKeyPtr, 
+        sizeof(struct input) + 8192, &pageKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    struct memory_allocation_key inputKey;
+    struct input *inputPtr;
+    {
+        memory_error_code resultCode = memory_alloc(&pageKey, sizeof(struct input), NULL,
+            &inputKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free_page(&pageKey);
+
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&inputKey, (void **)&inputPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free(&inputKey);
+            memory_free_page(&pageKey);
+
+            return B32_FALSE;
+        }
+    }
+
+    memory_set_alloc_offset_width(&inputKey, 0, sizeof(struct input), '\0');
+    
+    inputPtr->userPtr = userPtr;
+
+    if (!(basic_dict_create(&pageKey, NULL, NULL, 
+        utils_generate_next_prime_number(100), NULL, 
+        userPtr, &inputPtr->keybindDict)))
+    {
+        memory_unmap_alloc((void **)&inputPtr);
+        memory_free_page(&pageKey);
+
+        return B32_FALSE;
+    }
+    
+    if (!(basic_dict_create(&pageKey, NULL, NULL, 
+        utils_generate_next_prime_number(100), NULL, 
+        userPtr, &inputPtr->keyDict)))
+    {
+        memory_unmap_alloc((void **)&inputPtr);
+        memory_free_page(&pageKey);
+
+        return B32_FALSE;
+    }
+
+    memcpy((void *)&inputPtr->pageKey, &pageKey, sizeof(struct memory_page_key));
+    memcpy((void *)&inputPtr->memoryContext, memoryContextKeyPtr, 
+    sizeof(struct memory_context_key));
+
+    memory_unmap_alloc((void **)&inputPtr);
+
+    memcpy((void *)outInputKeyPtr, &inputKey, sizeof(struct memory_allocation_key));
+
+    return B32_TRUE;
 }
 
-void
-input_add_keys(struct input *inputContext, struct memory *mem, const char *keys[], i32 keyCount)
+b32
+input_add_keys(const struct memory_allocation_key *inputContextKeyPtr, 
+    const char *keys[], i32 keyCount)
 {
-    if (inputContext->keyCount > 0)
+    if ((MEMORY_IS_ALLOCATION_NULL(inputContextKeyPtr)))
     {
-        inputContext->keys = memory_realloc(mem, inputContext->keys, sizeof(struct input_key)*(inputContext->keyCount += keyCount));
-    }
-    else
-    {
-        inputContext->keys = memory_alloc(mem, sizeof(struct input_key)*(inputContext->keyCount = keyCount));
+        return B32_FALSE;
     }
 
-    for (i32 key = inputContext->keyCount - keyCount; key < inputContext->keyCount; ++key)
+    struct input *inputPtr;
     {
-        const size_t keySize = strlen(keys[key]) + 1;
+        memory_error_code resultCode = memory_map_alloc(inputContextKeyPtr, 
+        (void **)&inputPtr);
 
-        inputContext->keys[key].isDown = B32_FALSE;
-        inputContext->keys[key].key = memory_alloc(mem, keySize);
-        sprintf((char *)inputContext->keys[key].key, "%s", keys[key]);
-
-        basic_dict_set(inputContext->keyDict, mem, inputContext->keys, (char *)keys[key], keySize, &inputContext->keys[key]);
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
     }
+
+    i32 diff = inputPtr->keyCapacity - inputPtr->keyCount;
+
+#define KEY_ALLOC_MULTIPLIER 2
+
+    if (diff < keyCount)
+    {
+        if (inputPtr->keyCapacity > 0)
+        {
+            const struct memory_allocation_key resultKey;
+
+            memory_error_code resultCode = memory_realloc(&inputPtr->keyArr, &inputPtr->pageKey, 
+                sizeof(struct input_key)*(inputPtr->keyCapacity = keyCount*
+                KEY_ALLOC_MULTIPLIER), NULL, &inputPtr->keyArr);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&inputPtr);
+
+                return B32_FALSE;
+            }
+        }
+        else 
+        {
+            memory_error_code resultCode = memory_alloc(&inputPtr->pageKey, 
+                sizeof(struct input_key)*(inputPtr->keyCapacity = keyCount*
+                KEY_ALLOC_MULTIPLIER), NULL, &inputPtr->keyArr);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&inputPtr);
+
+                return B32_FALSE;
+            }
+        }
+    }
+
+    for (i32 i = 0; i < keyCount; ++i)
+    {
+        if ((!basic_dict_get_is_found(&inputPtr->keyDict, (void *)keys[i])))
+        {
+        }
+    }
+
+    memory_unmap_alloc((void **)&inputPtr);
+
+    return B32_TRUE;
 }
 
 void

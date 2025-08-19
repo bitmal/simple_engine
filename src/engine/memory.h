@@ -52,6 +52,9 @@ enum memory_event_type
 #define MEMORY_IS_PAGE_NULL(pageKeyPtr) ((pageKeyPtr) ? (((pageKeyPtr)->pageId == MEMORY_SHORT_ID_NULL) ? \
     MEMORY_IS_CONTEXT_NULL((&(pageKeyPtr)->contextKey)) : B32_FALSE) : B32_TRUE)
 
+#define MEMORY_IS_RAW_ALLOCATION_NULL(rawAllocationPtr) ((rawAllocationPtr) ? ((rawAllocationPtr)->rawAllocationId == \
+    MEMORY_SHORT_ID_NULL ? B32_FALSE : B32_TRUE) : B32_FALSE)
+
 #define MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr) ((allocationKeyPtr) ? (((allocationKeyPtr)->allocId == MEMORY_INT_ID_NULL) ? \
     MEMORY_IS_CONTEXT_NULL((&(allocationKeyPtr)->contextKey)) : B32_FALSE) : B32_TRUE)
 
@@ -185,7 +188,8 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
     const struct memory_allocation_key *outAllocKeyPtr); // TODO: labels
 
 memory_error_code
-memory_realloc(const struct memory_allocation_key *outputAllocKeyPtr, u64 byteSize);
+memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
+    const struct memory_allocation_key *outAllocKeyPtr);
 
 memory_error_code
 memory_free(const struct memory_allocation_key *allocKeyPtr);

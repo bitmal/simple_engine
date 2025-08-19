@@ -116,9 +116,17 @@ _basic_list_assign_id(const struct memory_allocation_key *listKeyPtr,
 
                     if (currentNodePtr->id != id)
                     {
-                        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&currentNodePtr->nextNodeKey, &listPtr->activeNodeKeyList)))
+                        if (!(MEMORY_IS_ALLOCATION_KEY_EQUAL(&currentNodePtr->nextNodeKey, 
+                            &listPtr->activeNodeKeyList)))
                         {
-                            memcpy((void *)&currentNodeKey, &currentNodePtr->nextNodeKey, 
+                            const struct memory_allocation_key nextNodeKey;
+
+                            memcpy((void *)&nextNodeKey, &currentNodePtr->nextNodeKey,
+                                sizeof(struct memory_allocation_key));
+
+                            memory_unmap_alloc((void **)&currentNodePtr);
+
+                            memcpy((void *)&currentNodeKey, &nextNodeKey, 
                             sizeof(struct memory_allocation_key));
                         }
                         else 
@@ -135,8 +143,6 @@ _basic_list_assign_id(const struct memory_allocation_key *listKeyPtr,
 
                         break;
                     }
-                    
-                    memory_unmap_alloc((void **)&currentNodePtr);
                 } while (!(MEMORY_IS_ALLOCATION_NULL(&currentNodeKey)));
 
                 if ((MEMORY_IS_ALLOCATION_NULL(&currentNodeKey)))

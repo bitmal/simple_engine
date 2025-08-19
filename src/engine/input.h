@@ -2,40 +2,20 @@
 #define __INPUT_H
 
 #include "types.h"
+#include "memory.h"
 
 struct basic_dict;
 struct memory;
 
 typedef void(*input_key_callback)(const char *key, const char *action, void *dataPtr);
 
-struct input_key
-{
-    const char *key;
-    b32 isDown;
-};
+b32
+input_init(const struct memory_context_key *memoryContextKeyPtr, void *userPtr,
+    const struct memory_allocation_key *outInputKeyPtr);
 
-struct input_keybind
-{
-    const char *key;
-    input_key_callback callback;
-};
-
-struct input
-{
-    struct input_key *keys;
-    i32 keyCount;
-    struct basic_dict *keyDict;
-    struct input_keybind *keybinds;
-    i32 keybindCount;
-    struct basic_dict *keybindDict;
-    void *dataPtr;
-};
-
-struct input *
-input_init(struct memory *mem, void *dataPtr);
-
-void
-input_add_keys(struct input *inputContext, struct memory *mem, const char *keys[], i32 keyCount);
+b32
+input_add_keys(const struct memory_allocation_key *inputContextKeyPtr, 
+    const char *keys[], i32 keyCount);
 
 void
 input_bind_key(struct input *inputContext, struct memory *mem, const char *key, input_key_callback cb);
