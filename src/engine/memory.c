@@ -1725,6 +1725,11 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
             "argument cannot be NULL.\n", 
             __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NULL_ARGUMENT);
 
+        if (outAllocKeyPtr)
+        {
+            memory_get_null_allocation_key(outAllocKeyPtr);
+        }
+
         return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
@@ -1752,6 +1757,8 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
                     "find the intended context.\n", 
                     __FUNCTION__, __LINE__, (u32)resultCode);
 
+                memory_get_null_allocation_key(outAllocKeyPtr);
+
                 return resultCode;
             }
         }
@@ -1760,6 +1767,8 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
             fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
                 "find the intended context.\n", 
                 __FUNCTION__, __LINE__, (u32)resultCode);
+            
+            memory_get_null_allocation_key(outAllocKeyPtr);
 
             return resultCode;
         }
@@ -1782,16 +1791,154 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
             fprintf(stderr, "%s(Line: %d; Error Code: %u): The page "
                 "is currently locked.\n", 
                 __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
+            
+            memory_get_null_allocation_key(outAllocKeyPtr);
 
             return MEMORY_ERROR_NOT_AN_ACTIVE_PAGE;
         }
     }
 
     struct memory_allocator *lhsAllocPtr = (void *)((u8 *)pagePtr + allocInfoPtr->allocatorByteOffset);
+    p64 rhsAllocatorByteOffset;
+    struct memory_allocator *rhsAllocatorPtr;
 
     if (lhsAllocPtr->byteSize < byteSize)
     {
-        // TODO: have to move the data to a new allocator
+        if (pagePtr->freeAllocatorCount < 1)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): The page "
+                "has no free allocators available. Likely out of space to reallocate alloc.", 
+                __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_FAILED_ALLOCATION);
+            
+            memory_get_null_allocation_key(outAllocKeyPtr);
+
+            return MEMORY_ERROR_FAILED_ALLOCATION;
+        }
+
+        rhsAllocatorByteOffset = pagePtr->freeAllocatorByteOffsetList;
+        rhsAllocatorPtr = (void *)((u8 *)pagePtr + rhsAllocatorByteOffset);
+
+        do
+        {
+            if (rhsAllocatorPtr->byteSize >= byteSize)
+            {
+                break;
+            }
+
+            if (rhsAllocatorPtr->nextAllocatorByteOffset != pagePtr->freeAllocatorByteOffsetList)
+            {
+                rhsAllocatorByteOffset = rhsAllocatorPtr->nextAllocatorByteOffset;
+                rhsAllocatorPtr = (void *)((u8 *)pagePtr + rhsAllocatorByteOffset);
+            }
+            else 
+            {
+                rhsAllocatorPtr = NULL;
+            }
+        } while(rhsAllocatorPtr);
+
+        if (!rhsAllocatorPtr)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): The page "
+                "has no free allocators available that can meet the requested byteSize. "
+                "Likely out of space to reallocate alloc.", 
+                __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_FAILED_ALLOCATION);
+            
+            memory_get_null_allocation_key(outAllocKeyPtr);
+
+            return MEMORY_ERROR_FAILED_ALLOCATION;
+        }
+
+        --pagePtr->freeAllocatorCount;
+
+        if (rhsAllocatorPtr->byteSize > byteSize)
+        {
+            u64 diff = rhsAllocatorPtr->byteSize - byteSize;
+
+            if (diff > sizeof(struct memory_allocator))
+            {
+                p64 splitAllocatorByteOffset = rhsAllocatorByteOffset + sizeof(struct memory_allocator) + 
+                    byteSize;
+                struct memory_allocator *splitAllocatorPtr = (void *)((u8 *)pagePtr + splitAllocatorByteOffset);
+
+                splitAllocatorPtr->byteSize = diff - sizeof(struct memory_allocator);
+                splitAllocatorPtr->identifier = MEMORY_HEADER_ID;
+
+                memory_get_null_allocation_key(&splitAllocatorPtr->allocationKey);
+
+                if (pagePtr->freeAllocatorCount > 0)
+                {
+                    struct memory_allocator *headFreeAllocatorPtr = (void *)((u8 *)pagePtr +
+                        pagePtr->freeAllocatorByteOffsetList);
+                    struct memory_allocator *tailFreeAllocatorPtr = (void *)((u8 *)pagePtr +
+                        headFreeAllocatorPtr->prevAllocatorByteOffset);
+
+                    splitAllocatorPtr->prevAllocatorByteOffset = headFreeAllocatorPtr->prevAllocatorByteOffset;
+                    splitAllocatorPtr->nextAllocatorByteOffset = pagePtr->freeAllocatorByteOffsetList;
+
+                    headFreeAllocatorPtr->prevAllocatorByteOffset = splitAllocatorByteOffset;
+                    tailFreeAllocatorPtr->nextAllocatorByteOffset = splitAllocatorByteOffset;
+                }
+                else 
+                {
+                    splitAllocatorPtr->prevAllocatorByteOffset = splitAllocatorPtr->nextAllocatorByteOffset =
+                        splitAllocatorByteOffset;
+                }
+
+                pagePtr->freeAllocatorByteOffsetList = splitAllocatorByteOffset;
+                ++pagePtr->freeAllocatorCount;
+            }
+        }
+
+        if (pagePtr->activeAllocatorCount > 0)
+        {
+            struct memory_allocator *headActiveAllocatorPtr = (void *)((u8 *)pagePtr + 
+                pagePtr->activeAllocatorByteOffsetList);
+            struct memory_allocator *tailActiveAllocatorPtr = (void *)((u8 *)pagePtr + 
+                headActiveAllocatorPtr->prevAllocatorByteOffset);
+
+            rhsAllocatorPtr->nextAllocatorByteOffset = pagePtr->activeAllocatorByteOffsetList;
+            rhsAllocatorPtr->prevAllocatorByteOffset = headActiveAllocatorPtr->prevAllocatorByteOffset;
+
+            headActiveAllocatorPtr->prevAllocatorByteOffset = rhsAllocatorByteOffset;
+            tailActiveAllocatorPtr->nextAllocatorByteOffset = rhsAllocatorByteOffset;
+        }
+        else
+        {
+            rhsAllocatorPtr->prevAllocatorByteOffset = rhsAllocatorPtr->nextAllocatorByteOffset =
+                rhsAllocatorByteOffset;
+        }
+        
+        // note: do not need to inc active count, since we're simply replacing 
+        // with new allocator the old one
+
+        pagePtr->activeAllocatorByteOffsetList = rhsAllocatorByteOffset;
+
+        if (pagePtr->freeAllocatorCount > 0)
+        {
+            struct memory_allocator *headFreeAllocatorPtr = (void *)((u8 *)pagePtr + 
+                pagePtr->freeAllocatorByteOffsetList);
+            struct memory_allocator *tailFreeAllocatorPtr = (void *)((u8 *)pagePtr + 
+                headFreeAllocatorPtr->prevAllocatorByteOffset);
+
+            lhsAllocPtr->nextAllocatorByteOffset = pagePtr->freeAllocatorByteOffsetList;
+            lhsAllocPtr->prevAllocatorByteOffset = headFreeAllocatorPtr->prevAllocatorByteOffset;
+
+            headFreeAllocatorPtr->prevAllocatorByteOffset = allocInfoPtr->allocatorByteOffset;
+            tailFreeAllocatorPtr->nextAllocatorByteOffset = allocInfoPtr->allocatorByteOffset;
+        }
+        else 
+        {
+            lhsAllocPtr->prevAllocatorByteOffset = lhsAllocPtr->nextAllocatorByteOffset = 
+                allocInfoPtr->allocatorByteOffset;
+        }
+
+        pagePtr->freeAllocatorByteOffsetList = allocInfoPtr->allocatorByteOffset;
+        ++pagePtr->freeAllocatorCount;
+
+        allocInfoPtr->allocatorByteOffset = rhsAllocatorByteOffset;
+
+        memcpy((u8 *)rhsAllocatorPtr + sizeof(struct memory_allocator), (u8 *)lhsAllocPtr + sizeof(
+            struct memory_allocator), byteSize);
     }
     else if (lhsAllocPtr->byteSize > byteSize)
     {
@@ -1799,14 +1946,14 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
 
         if (byteDiff > sizeof(struct memory_allocator))
         {
-            p64 rhsByteOffset = allocInfoPtr->allocatorByteOffset + sizeof(struct memory_allocator) + byteSize;
+            rhsAllocatorByteOffset = allocInfoPtr->allocatorByteOffset + sizeof(struct memory_allocator) + byteSize;
 
-            struct memory_allocator *rhsAllocPtr = (void *)((u8 *)lhsAllocPtr + rhsByteOffset);
+            rhsAllocatorPtr = (void *)((u8 *)lhsAllocPtr + rhsAllocatorByteOffset);
 
-            rhsAllocPtr->byteSize = byteDiff - sizeof(struct memory_allocator);
-            rhsAllocPtr->identifier = MEMORY_HEADER_ID;
+            rhsAllocatorPtr->byteSize = byteDiff - sizeof(struct memory_allocator);
+            rhsAllocatorPtr->identifier = MEMORY_HEADER_ID;
 
-            memory_get_null_allocation_key(&rhsAllocPtr->allocationKey);
+            memory_get_null_allocation_key(&rhsAllocatorPtr->allocationKey);
 
             if (pagePtr->freeAllocatorCount > 0)
             {
@@ -1816,36 +1963,192 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
                 struct memory_allocator *tailFreeAllocatorPtr = (void *)((u8 *)pagePtr +
                     headFreeAllocatorPtr->prevAllocatorByteOffset);
 
-                rhsAllocPtr->prevAllocatorByteOffset = headFreeAllocatorPtr->prevAllocatorByteOffset;
-                rhsAllocPtr->nextAllocatorByteOffset = pagePtr->freeAllocatorByteOffsetList;
+                rhsAllocatorPtr->prevAllocatorByteOffset = headFreeAllocatorPtr->prevAllocatorByteOffset;
+                rhsAllocatorPtr->nextAllocatorByteOffset = pagePtr->freeAllocatorByteOffsetList;
 
-                headFreeAllocatorPtr->prevAllocatorByteOffset = rhsByteOffset;
-                tailFreeAllocatorPtr->nextAllocatorByteOffset = rhsByteOffset;
+                headFreeAllocatorPtr->prevAllocatorByteOffset = rhsAllocatorByteOffset;
+                tailFreeAllocatorPtr->nextAllocatorByteOffset = rhsAllocatorByteOffset;
 
-                pagePtr->freeAllocatorByteOffsetList = rhsByteOffset;
+                pagePtr->freeAllocatorByteOffsetList = rhsAllocatorByteOffset;
             }
             else 
             {
-                rhsAllocPtr->prevAllocatorByteOffset = rhsByteOffset;
-                rhsAllocPtr->nextAllocatorByteOffset = rhsByteOffset;
-                pagePtr->freeAllocatorByteOffsetList = rhsByteOffset;
+                rhsAllocatorPtr->prevAllocatorByteOffset = rhsAllocatorByteOffset;
+                rhsAllocatorPtr->nextAllocatorByteOffset = rhsAllocatorByteOffset;
+                pagePtr->freeAllocatorByteOffsetList = rhsAllocatorByteOffset;
             }
 
+            lhsAllocPtr->byteSize -= byteDiff;
             ++pagePtr->freeAllocatorCount;
         }
-        else 
+    }
+
+    return MEMORY_OK;
+}
+
+memory_error_code
+memory_free(const struct memory_allocation_key *allocKeyPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(allocKeyPtr)))
+    {
+        fprintf(stderr, "%s(Line: %d; Error Code: %u): 'allocKeyPtr' argument "
+            "cannot be NULL.\n", 
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NULL_ARGUMENT);
+    
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    if ((MEMORY_IS_CONTEXT_NULL(&allocKeyPtr->contextKey)))
+    {
+        fprintf(stderr, "%s(Line: %d; Error Code: %u): Not an "
+            "active memory context.\n", 
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT);
+
+        return MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT;
+    }
+
+    struct memory_context *memoryPtr;
+    {
+        memory_error_code resultCode = _memory_get_context_key_is_ok(&allocKeyPtr->contextKey);
+
+        if (resultCode != MEMORY_OK)
         {
-            // Nothing to do, since we can't split the alloc
-            return MEMORY_OK;
+            fprintf(stderr, "%s(Line: %d; Error Code: %u): Context key "
+                "is not valid.\n", 
+                __FUNCTION__, __LINE__, (u32)resultCode);
+
+            return resultCode;
         }
+
+        resultCode = _memory_get_context((void *)&allocKeyPtr->contextKey, 
+        &memoryPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
+                "get the context using the provided key.\n", 
+                __FUNCTION__, __LINE__, (u32)resultCode);
+
+            return resultCode;
+        }
+    }
+
+    struct memory_allocation_info *allocInfoPtr = &((struct memory_allocation_info *)((p64)memoryPtr->heap + 
+        memoryPtr->allocationInfoRegionByteOffset))[allocKeyPtr->allocInfoIndex];
+
+    if (!allocInfoPtr->isActive)
+    {
+        fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
+            "get the context using the provided key.\n", 
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION);
+
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    struct memory_page_info *pageInfoPtr = &memoryPtr->pagesRegionInfoArr[allocInfoPtr->pageId - 1];
+
+    if (pageInfoPtr->status == MEMORY_PAGE_STATUS_LOCKED)
+    {
+        fprintf(stderr, "%s(Line: %d; Error Code: %u): Page is locked. "
+            "Cannot free allocation..\n", 
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
+
+        return MEMORY_ERROR_NOT_AN_ACTIVE_PAGE;
+    }
+
+    struct memory_page_header *pagePtr = (void *)((p64)memoryPtr->heap + memoryPtr->pagesRegionByteOffset +
+        pageInfoPtr->pageHeaderByteOffset);
+
+    struct memory_allocator *allocatorPtr = (void *)((p64)pagePtr + allocInfoPtr->allocatorByteOffset);
+
+    if (pagePtr->activeAllocatorCount > 1)
+    {
+        struct memory_allocator *prevAllocator = (void *)((p64)pagePtr + allocatorPtr->prevAllocatorByteOffset);
+        struct memory_allocator *nextAllocator = (void *)((p64)pagePtr + allocatorPtr->nextAllocatorByteOffset);
+
+        prevAllocator->nextAllocatorByteOffset = allocatorPtr->nextAllocatorByteOffset;
+        nextAllocator->prevAllocatorByteOffset = allocatorPtr->prevAllocatorByteOffset;
+        
+        if (allocInfoPtr->allocatorByteOffset == pagePtr->activeAllocatorByteOffsetList)
+        {
+            pagePtr->activeAllocatorByteOffsetList = allocatorPtr->nextAllocatorByteOffset;
+        }
+    }
+
+    --pagePtr->activeAllocatorCount;
+
+    if (pagePtr->freeAllocatorCount > 0)
+    {
+        struct memory_allocator *headFreeAllocatorPtr = (void *)((p64)pagePtr + pagePtr->freeAllocatorByteOffsetList);
+        struct memory_allocator *tailFreeAllocatorPtr = (void *)((p64)pagePtr + 
+            headFreeAllocatorPtr->prevAllocatorByteOffset);
+
+        allocatorPtr->nextAllocatorByteOffset = pagePtr->freeAllocatorByteOffsetList;
+        allocatorPtr->prevAllocatorByteOffset = headFreeAllocatorPtr->prevAllocatorByteOffset;
+
+        headFreeAllocatorPtr->prevAllocatorByteOffset = allocInfoPtr->allocatorByteOffset;
+        headFreeAllocatorPtr->nextAllocatorByteOffset = allocInfoPtr->allocatorByteOffset;
     }
     else 
     {
-        // same size of realloc, so don't do anything
-        return MEMORY_OK;
+        allocatorPtr->prevAllocatorByteOffset = allocatorPtr->nextAllocatorByteOffset = 
+            allocInfoPtr->allocatorByteOffset;
     }
 
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
+    pagePtr->freeAllocatorByteOffsetList = allocInfoPtr->allocatorByteOffset;
+    ++pagePtr->freeAllocatorCount;
+
+    if (pagePtr->allocationInfoCount > 1)
+    {
+        struct memory_allocation_info *prevAllocInfoPtr = &((struct memory_allocation_info *)(
+            (p64)memoryPtr->heap + memoryPtr->allocationInfoRegionByteOffset))[
+            allocInfoPtr->prevAllocationInfoIndex];
+        struct memory_allocation_info *nextAllocInfoPtr = &((struct memory_allocation_info *)(
+            (p64)memoryPtr->heap + memoryPtr->allocationInfoRegionByteOffset))[
+            allocInfoPtr->nextAllocationInfoIndex];
+
+        prevAllocInfoPtr->nextAllocationInfoIndex = allocInfoPtr->nextAllocationInfoIndex;
+        nextAllocInfoPtr->prevAllocationInfoIndex = allocInfoPtr->prevAllocationInfoIndex;
+
+        if (pagePtr->allocationInfoByteOffsetList == (sizeof(struct memory_allocation_info)*
+            allocKeyPtr->allocInfoIndex))
+        {
+            pagePtr->allocationInfoByteOffsetList = allocInfoPtr->nextAllocationInfoIndex*
+                sizeof(struct memory_allocation_info);
+        }
+    }
+    
+    --pagePtr->allocationInfoCount;
+
+    if (memoryPtr->pagesRegionFreeAllocationInfoCount > 0)
+    {
+        struct memory_allocation_info *headFreeAllocationInfoPtr = (void *)((p64)memoryPtr->heap +
+            memoryPtr->allocationInfoRegionByteOffset +
+            memoryPtr->pagesRegionFreeAllocationInfoByteOffsetList);
+        struct memory_allocation_info *tailFreeAllocationInfoPtr = (void *)((p64)memoryPtr->heap + 
+            memoryPtr->allocationInfoRegionByteOffset +
+            (headFreeAllocationInfoPtr->prevAllocationInfoIndex*sizeof(struct memory_allocation_info)));
+
+        allocInfoPtr->prevAllocationInfoIndex = headFreeAllocationInfoPtr->prevAllocationInfoIndex;
+        allocInfoPtr->nextAllocationInfoIndex = memoryPtr->pagesRegionFreeAllocationInfoByteOffsetList/
+            sizeof(struct memory_allocation_info);
+
+        headFreeAllocationInfoPtr->prevAllocationInfoIndex = allocKeyPtr->allocInfoIndex;
+        tailFreeAllocationInfoPtr->nextAllocationInfoIndex = allocKeyPtr->allocInfoIndex;
+    }
+    else 
+    {
+        allocInfoPtr->prevAllocationInfoIndex = allocInfoPtr->nextAllocationInfoIndex =
+            allocKeyPtr->allocInfoIndex;
+    }
+
+    memoryPtr->pagesRegionFreeAllocationInfoByteOffsetList = sizeof(struct memory_allocation_info)*
+        allocKeyPtr->allocInfoIndex;
+    ++memoryPtr->pagesRegionFreeAllocationInfoCount;
+
+    memory_get_null_allocation_key(allocKeyPtr);
+
+    return MEMORY_OK;
 }
 
 memory_error_code
