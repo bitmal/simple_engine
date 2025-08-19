@@ -2155,7 +2155,99 @@ memory_error_code
 memory_set_alloc_offset_width(const struct memory_allocation_key *allocationKeyPtr, p64 byteOffset, 
     u64 byteWidth, u8 value)
 {
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
+    if ((MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr)))
+    {
+        utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): 'allocationKeyPtr' argument " 
+            "cannot be NULL.",
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
+
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    struct memory_context *memoryPtr;
+    {
+        memory_error_code resultCode = _memory_get_context_key_is_ok(&allocationKeyPtr->contextKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): Context key " 
+                "is not valid. Cannot get intended context.",
+                __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
+
+            return resultCode;
+        }
+
+        resultCode = _memory_get_context((void *)&allocationKeyPtr->contextKey, &memoryPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): Context key " 
+                "is not valid. Cannot get intended context.",
+                __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
+
+            return resultCode;
+        }
+    }
+
+    struct memory_allocation_info *allocInfoPtr = &((struct memory_allocation_info *)((p64)memoryPtr->heap +
+        memoryPtr->allocationInfoRegionByteOffset))[allocationKeyPtr->allocInfoIndex];
+
+    if (!allocInfoPtr->isActive)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): Allocation " 
+            "is not active.",
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION);
+
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    struct memory_page_info *pageInfoPtr = &memoryPtr->pagesRegionInfoArr[allocInfoPtr->pageId - 1];
+
+    if (pageInfoPtr->status == MEMORY_PAGE_STATUS_LOCKED)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): Page " 
+            "is locked. Cannot set allocation value.",
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
+
+        return MEMORY_ERROR_NOT_AN_ACTIVE_PAGE;
+    }
+
+    struct memory_page_header *pagePtr = (void *)((p64)memoryPtr->heap + memoryPtr->pagesRegionByteOffset +
+        pageInfoPtr->pageHeaderByteOffset);
+
+    struct memory_allocator *allocatorPtr = (void *)((p64)pagePtr + allocInfoPtr->allocatorByteOffset);
+
+    if (byteWidth > allocatorPtr->byteSize)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): Bytewidth " 
+            "of value is too large for allocation.",
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE);
+
+        return MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE;
+    }
+
+    if (byteOffset >= allocatorPtr->byteSize)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): Offset " 
+            "of value is too large for allocation.",
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE);
+
+        return MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE;
+    }
+
+    if ((allocatorPtr->byteSize - byteOffset) < byteWidth)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d; Error Code: %u): Bytewidth " 
+            "with offset of value is too large for allocation.",
+            __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE);
+        
+        return MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_LARGE;
+    }
+
+    memset((void *)((p64)allocatorPtr + sizeof(struct memory_allocator) + byteOffset), value,
+        byteWidth);
+
+    return MEMORY_OK;
 }
 
 b32
