@@ -16,12 +16,16 @@
 
 #define MEMORY_HEADER_ID ((u16)0xDEAD)
 
-struct memory_raw_allocation_header
+struct memory_raw_allocator
 {
     u16 identifier;
-    memory_short_id rawAllocationId;
-    u16 rawAllocationInfoBranchIndex;
+    const struct memory_raw_allocation_key allocKey;
     u64 byteSize;
+};
+
+struct memory_raw_allocation
+{
+    struct memory_raw_allocator *allocatorPtr;
     u16 prevAllocationIndex;
     u16 nextAllocationIndex;
 };
@@ -147,7 +151,7 @@ struct memory_event
     };
 };
 
-static void **g_MEMORY_RAW_ALLOCATION_ARR;
+static struct memory_raw_allocation *g_MEMORY_RAW_ALLOCATION_ARR;
 static u16 g_MEMORY_RAW_ALLOCATION_CAPACITY;
 static u16 g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX;
 static u16 g_MEMORY_RAW_ALLOCATION_ACTIVE_LIST_COUNT;
@@ -333,7 +337,7 @@ _memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
                 }
                 else 
                 {
-                    fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate debug context array. "
+                    utils_fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate debug context array. "
                             "Cannot allocate new debug context.\n", __LINE__);
 
                     return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -366,7 +370,7 @@ _memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
                 }
                 else 
                 {
-                    fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate context array. "
+                    utils_fprintf(stderr, "_memory_alloc_context(%d): Failure to reallocate context array. "
                             "Cannot allocate new context.\n", __LINE__);
 
                     return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -382,7 +386,7 @@ _memory_alloc_context(struct memory_context **outMemoryContext, b32 isDebug)
                 }
                 else 
                 {
-                    fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate context array. "
+                    utils_fprintf(stderr, "_memory_alloc_context(%d): Failure to allocate context array. "
                             "Cannot allocate new context.\n", __LINE__);
 
                     return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -402,7 +406,7 @@ _memory_get_context(struct memory_context_key *contextKeyPtr, struct memory_cont
 {
     if (!contextKeyPtr)
     {
-        fprintf(stderr, "_memory_get_context(%d): 'memoryContextKeyPtr' parameter is NULL. "
+        utils_fprintf(stderr, "_memory_get_context(%d): 'memoryContextKeyPtr' parameter is NULL. "
                 "Cannot find context.\n", __LINE__);
 
         if (outContextPtr)
@@ -415,7 +419,7 @@ _memory_get_context(struct memory_context_key *contextKeyPtr, struct memory_cont
     
     if (!outContextPtr)
     {
-        fprintf(stderr, "_memory_get_context(%d): Output parameter is NULL. "
+        utils_fprintf(stderr, "_memory_get_context(%d): Output parameter is NULL. "
                 "Cannot get context.\n", __LINE__);
                 
         return MEMORY_ERROR_NULL_ARGUMENT;
@@ -472,7 +476,7 @@ _memory_get_context(struct memory_context_key *contextKeyPtr, struct memory_cont
         {
             *outContextPtr = NULL;
             
-            fprintf(stderr, "memory_alloc_page(%d): Failure to identiy memory context from key. "
+            utils_fprintf(stderr, "memory_alloc_page(%d): Failure to identiy memory context from key. "
                     "Cannot allocate a page.\n", __LINE__);
                     
             return contextSearchResultCode;
@@ -567,21 +571,24 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
 
             if (!isOutNull)
             {
-                fprintf(stderr, "memory_alloc_raw_heap(%d): 'outRawAllocId' parameter cannot be NULL.\n", __LINE__);
+                utils_fprintf(stderr, "memory_alloc_raw_heap(%d): 'outRawAllocId' "
+                    "parameter cannot be NULL.\n", __LINE__);
 
                 resultCode = MEMORY_ERROR_NULL_ARGUMENT;
             }
             
             if (byteSize < 1)
             {
-                fprintf(stderr, "memory_alloc_raw_heap(%d): ByteSize < 1. Failure to allocate.\n", __LINE__);
+                utils_fprintf(stderr, "memory_alloc_raw_heap(%d): ByteSize less than 1. "
+                    "Failure to allocate.\n", __LINE__);
                 
                 resultCode = MEMORY_ERROR_ZERO_PARAMETER;
             }
 
             if (!isRawAllocsUnderMaxCount)
             {
-                fprintf(stderr, "memory_alloc_raw_heap(%d): Too many raw allocations. Cannot reserve memory.\n", __LINE__);
+                utils_fprintf(stderr, "memory_alloc_raw_heap(%d): Too many raw allocations. "
+                    "Cannot reserve memory.\n", __LINE__);
 
                 resultCode = MEMORY_ERROR_FAILED_ALLOCATION;
             }
@@ -597,8 +604,8 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
         {
             memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
             
-            fprintf(stderr, "%s(Line: %d; Error Code: %u): Cannot raw allocate!\n", __FUNCTION__, __LINE__, 
-                (u32)MEMORY_ERROR_FAILED_ALLOCATION);
+            utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Cannot raw allocate!\n", 
+                __FUNCTION__, __LINE__, (u32)errorCode);
             
             return errorCode;
         }
@@ -612,7 +619,7 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
         {
             memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
-            fprintf(stderr, 
+            utils_fprintf(stderr, 
                 "%s(Line: %d; Error Code: %u): Could not alloc raw allocation.\n", 
                 __FUNCTION__, __LINE__, (u32)errorCode);
 
@@ -651,8 +658,8 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
             {
                 memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
-                fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc raw allocation.\n", __FUNCTION__,
-                    __LINE__, (u32)errorCode);
+                utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc "
+                    "raw allocation.\n", __FUNCTION__, __LINE__, (u32)errorCode);
 
                 return errorCode;
             }
@@ -667,8 +674,8 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
         {
             memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
-            fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc raw allocation.\n", __FUNCTION__,
-                __LINE__, (u32)errorCode);
+            utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc "
+                "raw allocation.\n", __FUNCTION__, __LINE__, (u32)errorCode);
 
             return errorCode;
         }
@@ -681,39 +688,33 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
 
 #define MEMORY_RAW_ALLOC_ALLOCATION_MULTIPLIER 2
 
-    u16 rawAllocationIndex;
     u16 freeAllocationCount = g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT;
 
-    struct memory_raw_allocation_header *freeRawAllocationHeaderPtr;
+    struct memory_raw_allocation *freeRawAllocationPtr;
+
     if (g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT > 0)
     {
-        freeRawAllocationHeaderPtr = ((struct memory_raw_allocation_header *)
-            g_MEMORY_RAW_ALLOCATION_ARR[g_MEMORY_RAW_ALLOCATION_ARR_FREE_LIST_HEAD_INDEX]);
-            
-        do
-        {
-            if (freeRawAllocationHeaderPtr->byteSize >= byteSize)
-            {
-                break;
-            }
-            else if (freeRawAllocationHeaderPtr->nextAllocationIndex == g_MEMORY_RAW_ALLOCATION_ARR_FREE_LIST_HEAD_INDEX)
-            {
-                freeRawAllocationHeaderPtr = NULL;
-                
-                break;
-            }
-
-            freeRawAllocationHeaderPtr = (struct memory_raw_allocation_header *)
-                g_MEMORY_RAW_ALLOCATION_ARR[freeRawAllocationHeaderPtr->nextAllocationIndex];
-        } while(B32_TRUE);
+        freeRawAllocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[g_MEMORY_RAW_ALLOCATION_ARR_FREE_LIST_HEAD_INDEX];
+    }
+    else 
+    {
+        freeRawAllocationPtr = NULL;
     }
 
-    if (!freeRawAllocationHeaderPtr && (rawAllocationCount == g_MEMORY_RAW_ALLOCATION_CAPACITY))
+    struct memory_raw_allocation *rawAllocationPtr;
+    u16 rawAllocationIndex;
+
+    if (freeRawAllocationPtr)
+    {
+        rawAllocationPtr = freeRawAllocationPtr;
+        rawAllocationIndex = g_MEMORY_RAW_ALLOCATION_ARR_FREE_LIST_HEAD_INDEX;
+    }
+    else if (!freeRawAllocationPtr && (rawAllocationCount == g_MEMORY_RAW_ALLOCATION_CAPACITY))
     {
         if (g_MEMORY_RAW_ALLOCATION_CAPACITY > 0)
         {
-            void **tempPtr = realloc(g_MEMORY_RAW_ALLOCATION_ARR, sizeof(void *)*
-                g_MEMORY_RAW_ALLOCATION_CAPACITY*
+            struct memory_raw_allocation *tempPtr = realloc(g_MEMORY_RAW_ALLOCATION_ARR, 
+                sizeof(struct memory_raw_allocation)*g_MEMORY_RAW_ALLOCATION_CAPACITY*
                 MEMORY_RAW_ALLOC_ALLOCATION_MULTIPLIER);
 
             if (tempPtr)
@@ -721,14 +722,17 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
                 g_MEMORY_RAW_ALLOCATION_ARR = tempPtr;
 
                 rawAllocationIndex = g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT;
+                rawAllocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[rawAllocationIndex];
                 
-                ++g_MEMORY_RAW_ALLOCATION_CAPACITY;
+                g_MEMORY_RAW_ALLOCATION_CAPACITY = g_MEMORY_RAW_ALLOCATION_CAPACITY*
+                    MEMORY_RAW_ALLOC_ALLOCATION_MULTIPLIER;
             }
             else 
             {
                 memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
-                fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc raw allocation.\n", __FUNCTION__,
+                utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc "
+                    "raw allocation.\n", __FUNCTION__,
                     __LINE__, (u32)errorCode);
 
                 return errorCode;
@@ -736,62 +740,85 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
         }
         else 
         {
-            void **tempPtr = malloc(sizeof(void *));
+            struct memory_raw_allocation *tempPtr = malloc(sizeof(struct memory_raw_allocation));
 
             if (tempPtr)
             {
                 g_MEMORY_RAW_ALLOCATION_ARR = tempPtr;
+                rawAllocationIndex = 0;
+                rawAllocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[rawAllocationIndex];
                 ++g_MEMORY_RAW_ALLOCATION_CAPACITY;
             }
             else 
             {
                 memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
-                fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc raw allocation.\n", __FUNCTION__,
+                utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc "
+                    "raw allocation.\n", __FUNCTION__,
                     __LINE__, (u32)errorCode);
 
                 return errorCode;
             }
         }
     }
-    else if (freeRawAllocationHeaderPtr)
-    {
-        --freeAllocationCount;
-    }
-    else 
+    else if (!freeRawAllocationPtr)
     {
         memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
         return errorCode;
     }
 
-    struct memory_raw_allocation_header *rawAllocationHeaderPtr = malloc(sizeof(struct memory_raw_allocation_header) +
+    struct memory_raw_allocator *rawAllocatorPtr = malloc(sizeof(struct memory_raw_allocator) +
         byteSize);
-    if (!rawAllocationHeaderPtr)
+
+    if (!rawAllocatorPtr)
     {
         memory_error_code errorCode = MEMORY_ERROR_FAILED_ALLOCATION;
 
-        fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc raw allocation.\n", __FUNCTION__,
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Failure to alloc raw allocation.\n", __FUNCTION__,
             __LINE__, (u32)errorCode);
 
         return errorCode;
     }
 
-    rawAllocationHeaderPtr->identifier = MEMORY_HEADER_ID;
-    rawAllocationHeaderPtr->rawAllocationId = rawAllocationId;
-    rawAllocationHeaderPtr->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
-    rawAllocationHeaderPtr->byteSize = byteSize;
+    freeRawAllocationPtr->allocatorPtr = rawAllocatorPtr;
+
+    rawAllocatorPtr->identifier = MEMORY_HEADER_ID;
+    rawAllocatorPtr->byteSize = byteSize;
+    ((struct memory_raw_allocation_key *)&(rawAllocatorPtr->allocKey))->rawAllocationId = rawAllocationId;
+    ((struct memory_raw_allocation_key *)&(rawAllocatorPtr->allocKey))->rawAllocationInfoBranchIndex = 
+        rawAllocationInfoMapBranchIndex;
+
+    if (freeRawAllocationPtr)
+    {
+        if (g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT > 1)
+        {
+            struct memory_raw_allocation *nextPtr = &g_MEMORY_RAW_ALLOCATION_ARR[rawAllocationPtr->nextAllocationIndex];
+            struct memory_raw_allocation *tailPtr = &g_MEMORY_RAW_ALLOCATION_ARR[rawAllocationPtr->prevAllocationIndex];
+
+            nextPtr->prevAllocationIndex = rawAllocationPtr->prevAllocationIndex;
+            tailPtr->nextAllocationIndex = rawAllocationPtr->nextAllocationIndex;
+
+            g_MEMORY_RAW_ALLOCATION_ARR_FREE_LIST_HEAD_INDEX = freeRawAllocationPtr->nextAllocationIndex;
+        }
+
+        --g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT;
+    }
 
     if (g_MEMORY_RAW_ALLOCATION_ACTIVE_LIST_COUNT > 0)
     {
-        rawAllocationHeaderPtr->prevAllocationIndex = ((struct memory_raw_allocation_header *)
-            g_MEMORY_RAW_ALLOCATION_ARR[g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX])->prevAllocationIndex;
+        struct memory_raw_allocation *headPtr = &g_MEMORY_RAW_ALLOCATION_ARR[
+            g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX];
+        struct memory_raw_allocation *tailPtr = &g_MEMORY_RAW_ALLOCATION_ARR[headPtr->prevAllocationIndex];
 
-        rawAllocationHeaderPtr->nextAllocationIndex = g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX;
+        rawAllocationPtr->prevAllocationIndex = headPtr->prevAllocationIndex;
+        rawAllocationPtr->nextAllocationIndex = g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX;
+        headPtr->prevAllocationIndex = rawAllocationIndex;
+        tailPtr->nextAllocationIndex = rawAllocationIndex;
     }
     else 
     {
-        rawAllocationHeaderPtr->prevAllocationIndex = rawAllocationHeaderPtr->nextAllocationIndex = rawAllocationIndex;
+        rawAllocationPtr->prevAllocationIndex = rawAllocationPtr->nextAllocationIndex = rawAllocationIndex;
     }
 
     g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX = rawAllocationIndex;
@@ -803,19 +830,64 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
     ++g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_BRANCH_INFO_TABLE[rawAllocationInfoMapBucketIndex].branchCount;
     g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT = freeAllocationCount;
 
-    rawAllocationHeaderPtr->rawAllocationId = rawAllocationId;
-    rawAllocationHeaderPtr->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
-
     ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationId = rawAllocationId;
     ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
 
     return MEMORY_OK;
 }
 
-
 memory_error_code
-memory_raw_free(const struct memory_raw_allocation_key *outRawAllocKeyPtr)
+memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
 {
+    if (!rawAllocKeyPtr)
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): 'rawAllocKeyPtr' argument "
+            "cannot be NULL. Cannot free allocation." , __func__, __LINE__);
+
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    if ((rawAllocKeyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL))
+    {
+        utils_fprintfln(stderr, "%s(Line: %d): 'rawAllocKeyPtr' argument "
+            "cannot be a NULL ID. Cannot free allocation." , __func__, __LINE__);
+
+        return MEMORY_ERROR_NULL_ID;
+    }
+    
+    {
+        memory_error_code resultCode = _memory_get_is_raw_allocation_operation_ok();
+
+        if (resultCode != MEMORY_OK)
+        {
+            utils_fprintfln(stderr, "%s(Line: %d): Raw Allocation functionality "
+                "is not availble. Cannot free raw allocation."
+                "in page, for new allocation. Aborting.", __func__, __LINE__);
+            
+            return resultCode;
+        }
+    }
+
+    u16 rawAllocationInfoMapBucketIndex = (u16)((real64)rawAllocKeyPtr->rawAllocationId/
+        MEMORY_MAX_RAW_ALLOCS*g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_COUNT) - 1;
+
+    struct memory_raw_allocation_info *rawAllocInfoPtr = &g_MEMORY_RAW_ALLOCATION_INFO_MAP[
+        rawAllocationInfoMapBucketIndex][rawAllocKeyPtr->rawAllocationInfoBranchIndex];
+
+    if (!rawAllocInfoPtr->isActive)
+    {
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Cannot free an "
+            "inactive raw allocation.\n", __FUNCTION__,
+            __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION);
+
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    void *dataPtr = g_MEMORY_RAW_ALLOCATION_ARR[rawAllocInfoPtr->rawAllocationIndex];
+
+    free(dataPtr);
+    g_MEMORY_RAW_ALLOCATION_ARR[rawAllocInfoPtr->rawAllocationIndex] = NULL;
+
     return MEMORY_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -846,7 +918,7 @@ memory_create_debug_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegio
 
         if ((errorCode = _memory_get_context_key_is_ok(outputMemoryDebugContextKeyPtr)) != MEMORY_OK)
         {
-            fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextKeyPtr' parameter is NULL.\n", 
+            utils_fprintf(stderr, "memory_create_debug_context(%d): 'outputMemoryDebugContextKeyPtr' parameter is NULL.\n", 
                 __LINE__);
             
             return MEMORY_ERROR_NULL_ARGUMENT;
@@ -866,7 +938,7 @@ memory_create_debug_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegio
             {
                 case MEMORY_ERROR_NULL_ID:
                 {
-                    fprintf(stderr, "memory_create_debug_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
+                    utils_fprintf(stderr, "memory_create_debug_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
                          __LINE__);
 
                     return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -874,7 +946,7 @@ memory_create_debug_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegio
 
                 default:
                 {
-                    fprintf(stderr, "memory_create_debug_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
+                    utils_fprintf(stderr, "memory_create_debug_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
                          __LINE__);
 
                     return MEMORY_ERROR_UNKNOWN;
@@ -931,7 +1003,7 @@ memory_create_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteC
 {
     if (!outputMemoryContextKeyPtr)
     {
-        fprintf(stderr, "memory_create_context(%d): 'outputMemoryContextKeyPtr' parameter is NULL.\n", __LINE__);
+        utils_fprintf(stderr, "memory_create_context(%d): 'outputMemoryContextKeyPtr' parameter is NULL.\n", __LINE__);
 
         return MEMORY_ERROR_NULL_ARGUMENT;
     }
@@ -949,7 +1021,7 @@ memory_create_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteC
             {
                 case MEMORY_ERROR_NULL_ID:
                 {
-                    fprintf(stderr, "memory_create_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
+                    utils_fprintf(stderr, "memory_create_context(%d): Output parameter is NULL for internal '_memory_alloc_context' function result.\n",
                          __LINE__);
                     
                     memset((struct memory_context_key *)outputMemoryContextKeyPtr, '\0', sizeof(struct memory_context_key));
@@ -959,7 +1031,7 @@ memory_create_context(u64 allocationInfoRegionByteCapacity, u64 pagesRegionByteC
 
                 default:
                 {
-                    fprintf(stderr, "memory_create_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
+                    utils_fprintf(stderr, "memory_create_context(%d): Unknown error for internal '_memory_alloc_context' function result.\n",
                          __LINE__);
                     
                     memset((struct memory_context_key *)outputMemoryContextKeyPtr, '\0', sizeof(struct memory_context_key));
@@ -1006,14 +1078,14 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
 {
     if ((_memory_get_context_key_is_ok(memoryContextKeyPtr)) != MEMORY_OK)
     {
-        fprintf(stderr, "%s(%d): Cannot allocate page, context key is not valid!\n", 
+        utils_fprintf(stderr, "%s(%d): Cannot allocate page, context key is not valid!\n", 
                 __FUNCTION__, __LINE__);
         
         return MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT;
     }
     else if (!outPageKeyPtr)
     {
-        fprintf(stderr, "%s(%d): Cannot allocate page, 'cause 'outPageKeyPtr' argument is NULL!\n", 
+        utils_fprintf(stderr, "%s(%d): Cannot allocate page, 'cause 'outPageKeyPtr' argument is NULL!\n", 
                 __FUNCTION__, __LINE__);
         
         return MEMORY_ERROR_NULL_ARGUMENT;
@@ -1061,7 +1133,7 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
             ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
             ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
             
-            fprintf(stderr, "memory_alloc_page(%d): Failure to locate page large enough. "
+            utils_fprintf(stderr, "memory_alloc_page(%d): Failure to locate page large enough. "
                     "Cannot allocate a page.\n", __LINE__);
 
             return resultCode;
@@ -1085,7 +1157,7 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
         ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
         ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
 
-        fprintf(stderr, "memory_alloc_page(%d): Out of space. "
+        utils_fprintf(stderr, "memory_alloc_page(%d): Out of space. "
                 "Cannot allocate a page.\n", __LINE__);
 
         return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -1185,7 +1257,7 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
                 ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
                 ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
 
-                fprintf(stderr, "memory_alloc_page(%d): Could not reallocate the pages info array. "
+                utils_fprintf(stderr, "memory_alloc_page(%d): Could not reallocate the pages info array. "
                         "Cannot allocate a page.\n", __LINE__);
                         
                 return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -1207,7 +1279,7 @@ memory_alloc_page(const struct memory_context_key *memoryContextKeyPtr, u64 byte
                 ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->contextId = MEMORY_SHORT_ID_NULL;
                 ((struct memory_context_key *)&((struct memory_page_key *)outPageKeyPtr)->contextKey)->isDebug = B32_FALSE;
 
-                fprintf(stderr, "memory_alloc_page(%d): Could not allocate the pages info array. "
+                utils_fprintf(stderr, "memory_alloc_page(%d): Could not allocate the pages info array. "
                         "Cannot allocate a page.\n", __LINE__);
                         
                 return MEMORY_ERROR_FAILED_ALLOCATION;
@@ -1260,7 +1332,7 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
         }
         else 
         {
-            fprintf(stderr, "memory_free_page(%d): 'pageId' produced pageInfo index out of range. "
+            utils_fprintf(stderr, "memory_free_page(%d): 'pageId' produced pageInfo index out of range. "
                     "Cannot free a non-existent page.\n", __LINE__);
 
             return MEMORY_ERROR_INDEX_OUT_OF_RANGE;
@@ -1269,7 +1341,7 @@ memory_free_page(const struct memory_page_key *pageKeyPtr)
 
     if (pageInfoPtr->status == MEMORY_PAGE_STATUS_FREED)
     {
-        fprintf(stderr, "memory_free_page(%d): Page is already freed.\n", __LINE__);
+        utils_fprintf(stderr, "memory_free_page(%d): Page is already freed.\n", __LINE__);
 
         return MEMORY_ERROR_NOT_AN_ACTIVE_PAGE;
     }
@@ -1721,7 +1793,7 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
 {
     if ((MEMORY_IS_ALLOCATION_NULL(allocKeyPtr)))
     {
-        fprintf(stderr, "%s(Line: %d; Error Code: %u): 'allocKeyPtr' "
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): 'allocKeyPtr' "
             "argument cannot be NULL.\n", 
             __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NULL_ARGUMENT);
 
@@ -1735,7 +1807,7 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
 
     if (!outAllocKeyPtr)
     {
-        fprintf(stderr, "%s(Line: %d; Error Code: %u): 'outAllocKeyPtr' "
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): 'outAllocKeyPtr' "
             "argument cannot be NULL.\n", 
             __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NULL_ARGUMENT);
 
@@ -1753,7 +1825,7 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
 
             if (resultCode != MEMORY_OK)
             {
-                fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
+                utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
                     "find the intended context.\n", 
                     __FUNCTION__, __LINE__, (u32)resultCode);
 
@@ -1764,7 +1836,7 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
         }
         else 
         {
-            fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
+            utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
                 "find the intended context.\n", 
                 __FUNCTION__, __LINE__, (u32)resultCode);
             
@@ -1788,7 +1860,7 @@ memory_realloc(const struct memory_allocation_key *allocKeyPtr, u64 byteSize,
         }
         else 
         {
-            fprintf(stderr, "%s(Line: %d; Error Code: %u): The page "
+            utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): The page "
                 "is currently locked.\n", 
                 __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
             
@@ -1991,7 +2063,7 @@ memory_free(const struct memory_allocation_key *allocKeyPtr)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(allocKeyPtr)))
     {
-        fprintf(stderr, "%s(Line: %d; Error Code: %u): 'allocKeyPtr' argument "
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): 'allocKeyPtr' argument "
             "cannot be NULL.\n", 
             __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NULL_ARGUMENT);
     
@@ -2000,7 +2072,7 @@ memory_free(const struct memory_allocation_key *allocKeyPtr)
 
     if ((MEMORY_IS_CONTEXT_NULL(&allocKeyPtr->contextKey)))
     {
-        fprintf(stderr, "%s(Line: %d; Error Code: %u): Not an "
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Not an "
             "active memory context.\n", 
             __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_CONTEXT);
 
@@ -2013,7 +2085,7 @@ memory_free(const struct memory_allocation_key *allocKeyPtr)
 
         if (resultCode != MEMORY_OK)
         {
-            fprintf(stderr, "%s(Line: %d; Error Code: %u): Context key "
+            utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Context key "
                 "is not valid.\n", 
                 __FUNCTION__, __LINE__, (u32)resultCode);
 
@@ -2025,7 +2097,7 @@ memory_free(const struct memory_allocation_key *allocKeyPtr)
 
         if (resultCode != MEMORY_OK)
         {
-            fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
+            utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
                 "get the context using the provided key.\n", 
                 __FUNCTION__, __LINE__, (u32)resultCode);
 
@@ -2038,7 +2110,7 @@ memory_free(const struct memory_allocation_key *allocKeyPtr)
 
     if (!allocInfoPtr->isActive)
     {
-        fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Could not "
             "get the context using the provided key.\n", 
             __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION);
 
@@ -2049,7 +2121,7 @@ memory_free(const struct memory_allocation_key *allocKeyPtr)
 
     if (pageInfoPtr->status == MEMORY_PAGE_STATUS_LOCKED)
     {
-        fprintf(stderr, "%s(Line: %d; Error Code: %u): Page is locked. "
+        utils_fprintf(stderr, "%s(Line: %d; Error Code: %u): Page is locked. "
             "Cannot free allocation..\n", 
             __FUNCTION__, __LINE__, (u32)MEMORY_ERROR_NOT_AN_ACTIVE_PAGE);
 
