@@ -127,7 +127,8 @@ memory_error_code
 memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
-memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr, u64 byteSize);
+memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr,
+    const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
 memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr);

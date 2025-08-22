@@ -837,6 +837,45 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
 }
 
 memory_error_code
+memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr,
+    const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize)
+{
+    if (rawAllocKeyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL)
+    {
+        return MEMORY_ERROR_NULL_ID;
+    }
+
+    u16 rawAllocBranchInfoIndex = (u16)((real64)rawAllocKeyPtr->rawAllocationId/MEMORY_MAX_RAW_ALLOCS*
+        g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_COUNT);
+
+    struct memory_raw_allocation_info_map_branch_info *branchInfoPtr = 
+        &g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_BRANCH_INFO_TABLE[rawAllocBranchInfoIndex];
+
+    struct memory_raw_allocation_info *allocInfoPtr = &g_MEMORY_RAW_ALLOCATION_INFO_MAP[
+        rawAllocBranchInfoIndex][rawAllocKeyPtr->rawAllocationInfoBranchIndex];
+
+    if (!allocInfoPtr->isActive)
+    {
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    struct memory_raw_allocation *allocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[allocInfoPtr->rawAllocationIndex];
+
+    void *resultPtr = realloc(allocationPtr->allocatorPtr, sizeof(struct memory_raw_allocator) + 
+        byteSize);
+
+    if (!resultPtr)
+    {
+        return MEMORY_ERROR_FAILED_ALLOCATION;
+    }
+
+    allocationPtr->allocatorPtr = resultPtr;
+    allocationPtr->allocatorPtr->byteSize = byteSize;
+
+    return MEMORY_OK;
+}
+
+memory_error_code
 memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
 {
     if (!rawAllocKeyPtr)
@@ -854,14 +893,14 @@ memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
 
         return MEMORY_ERROR_NULL_ID;
     }
-    
+
     {
         memory_error_code resultCode = _memory_get_is_raw_allocation_operation_ok();
 
         if (resultCode != MEMORY_OK)
         {
             utils_fprintfln(stderr, "%s(Line: %d): Raw Allocation functionality "
-                "is not availble. Cannot free raw allocation."
+                "is not available. Cannot free raw allocation."
                 "in page, for new allocation. Aborting.", __func__, __LINE__);
             
             return resultCode;
@@ -883,12 +922,48 @@ memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
         return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
     }
 
-    void *dataPtr = g_MEMORY_RAW_ALLOCATION_ARR[rawAllocInfoPtr->rawAllocationIndex];
+    struct memory_raw_allocation *allocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[
+        rawAllocInfoPtr->rawAllocationIndex];
 
-    free(dataPtr);
-    g_MEMORY_RAW_ALLOCATION_ARR[rawAllocInfoPtr->rawAllocationIndex] = NULL;
+    free(allocationPtr->allocatorPtr);
 
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
+    if (g_MEMORY_RAW_ALLOCATION_ACTIVE_LIST_COUNT > 1)
+    {
+        struct memory_raw_allocation *prevPtr = &g_MEMORY_RAW_ALLOCATION_ARR[
+            allocationPtr->prevAllocationIndex];
+        struct memory_raw_allocation *nextPtr = &g_MEMORY_RAW_ALLOCATION_ARR[
+            allocationPtr->nextAllocationIndex];
+
+        prevPtr->nextAllocationIndex = allocationPtr->nextAllocationIndex;
+        nextPtr->prevAllocationIndex = allocationPtr->prevAllocationIndex;
+
+        if (rawAllocInfoPtr->rawAllocationIndex == g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX)
+        {
+            g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX = allocationPtr->nextAllocationIndex;
+        }
+    }
+
+    if (g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT > 0)
+    {
+        struct memory_raw_allocation *headAllocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[
+            g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX];
+
+        struct memory_raw_allocation *tailAllocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[
+            headAllocationPtr->prevAllocationIndex];
+    }
+    else 
+    {
+        allocationPtr->prevAllocationIndex = allocationPtr->nextAllocationIndex = 
+            rawAllocInfoPtr->rawAllocationIndex;
+    }
+
+    g_MEMORY_RAW_ALLOCATION_ARR_ACTIVE_LIST_HEAD_INDEX = rawAllocInfoPtr->rawAllocationIndex;
+
+    rawAllocInfoPtr->isActive = B32_TRUE;
+
+    *(memory_short_id*)&(rawAllocKeyPtr->rawAllocationId) = MEMORY_SHORT_ID_NULL;
+
+    return MEMORY_OK;
 }
 
 memory_error_code
