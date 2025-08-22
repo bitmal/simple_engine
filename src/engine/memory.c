@@ -969,13 +969,58 @@ memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
 memory_error_code
 memory_map_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr)
 {
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
+    if (rawAllocKeyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL)
+    {
+        return MEMORY_ERROR_NULL_ID;
+    }
+
+    if (!outDataPtr)
+    {
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    u16 rawAllocBranchInfoIndex = (u16)((real64)rawAllocKeyPtr->rawAllocationId/MEMORY_MAX_RAW_ALLOCS*
+        g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_COUNT);
+
+    struct memory_raw_allocation_info_map_branch_info *branchInfoPtr = 
+        &g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_BRANCH_INFO_TABLE[rawAllocBranchInfoIndex];
+
+    struct memory_raw_allocation_info *allocInfoPtr = &g_MEMORY_RAW_ALLOCATION_INFO_MAP[
+        rawAllocBranchInfoIndex][rawAllocKeyPtr->rawAllocationInfoBranchIndex];
+
+    if (!allocInfoPtr->isActive)
+    {
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    struct memory_raw_allocation *allocationPtr = &g_MEMORY_RAW_ALLOCATION_ARR[allocInfoPtr->rawAllocationIndex];
+
+    *outDataPtr = allocationPtr->allocatorPtr + 1;
+
+    return MEMORY_OK;
 }
 
 memory_error_code
 memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr)
 {
-    return MEMORY_ERROR_NOT_IMPLEMENTED;
+    if (!outDataPtr)
+    {
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    struct memory_raw_allocator *allocatorPtr = (struct memory_raw_allocator *)(*outDataPtr) - 1;
+
+    if (allocatorPtr->identifier != MEMORY_HEADER_ID)
+    {
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    *outDataPtr = NULL;
+
+    // TODO: make mappings matter, and there can only be one active mapped raw allocation.
+    // same with normal allocations as well.
+
+    return MEMORY_OK;
 }
 
 memory_error_code
