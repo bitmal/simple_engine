@@ -2442,6 +2442,41 @@ memory_set_alloc_offset_width(const struct memory_allocation_key *allocationKeyP
     return MEMORY_OK;
 }
 
+u64
+memory_sizeof(const struct memory_allocation_key *allocKeyPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(allocKeyPtr)))
+    {
+        return 0;
+    }
+
+    struct memory_context *memoryPtr;
+    {
+        memory_error_code resultCode = _memory_get_context((void *)&allocKeyPtr->contextKey, 
+        &memoryPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return 0;
+        }
+    }
+
+    struct memory_allocation_info *allocInfoPtr = &((struct memory_allocation_info *)((p64)memoryPtr->heap + 
+        memoryPtr->allocationInfoRegionByteOffset))[allocKeyPtr->allocInfoIndex];
+
+    struct memory_page_info *pageInfoPtr = &memoryPtr->pagesRegionInfoArr[allocInfoPtr->pageId - 1];
+
+    struct memory_page_header *pagePtr = (void *)((p64)memoryPtr->heap + memoryPtr->pagesRegionByteOffset + 
+        pageInfoPtr->pageHeaderByteOffset);
+
+    struct memory_allocator *allocatorPtr = (void *)((p64)pagePtr + allocInfoPtr->allocatorByteOffset);
+
+    return allocatorPtr->byteSize;
+}
+
+u64
+memory_raw_sizeof(const struct memory_raw_allocation_key *rawAllocKeyPtr);
+
 b32
 memory_get_null_allocation_key(const struct memory_allocation_key *outAllocationKeyPtr)
 {

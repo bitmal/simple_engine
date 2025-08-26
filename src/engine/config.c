@@ -9,6 +9,26 @@
 #include <assert.h>
 #include <ctype.h>
 
+struct config_var_header
+{
+    const struct memory_raw_allocation_key rawNameKey;
+    enum config_var_type type;
+    u64 byteSize;
+    u64 byteOffset;
+    u64 byteCapacity;
+};
+
+struct config
+{
+    const struct memory_context_key memoryKey;
+    const struct memory_page_key configContextPage;
+    const struct memory_page_key configVarPage;
+    i32 varCount;
+    const struct memory_allocation_key varArrKey;
+    const struct memory_allocation_key varDictKey;
+    u64 varWriteByteOffset;
+};
+
 i32
 _config_get_type_size(enum config_var_type type)
 {
@@ -60,7 +80,8 @@ _config_get_type_size(enum config_var_type type)
 }
 
 b32
-config_init(const struct memory_context_key *memKeyPtr, u64 varMemoryByteSize, const struct memory_allocation_key *outAllocationKeyPtr)
+config_init(const struct memory_context_key *memKeyPtr, u64 varMemoryByteSize, 
+    const struct memory_allocation_key *outAllocationKeyPtr)
 {
     assert(memKeyPtr);
     assert(outAllocationKeyPtr);
@@ -80,7 +101,7 @@ config_init(const struct memory_context_key *memKeyPtr, u64 varMemoryByteSize, c
         }
 
         if ((resultCode = memory_alloc(&configPageKey, 
-            sizeof(struct config), outAllocationKeyPtr)) != MEMORY_OK)
+            sizeof(struct config), NULL, outAllocationKeyPtr)) != MEMORY_OK)
         {
             fprintf(stderr, "config_init(%d): Failure to allocate config context.\n", __LINE__);
             
@@ -89,6 +110,7 @@ config_init(const struct memory_context_key *memKeyPtr, u64 varMemoryByteSize, c
             return B32_FALSE;
         }
 
+        memset(configPtr, '\0', sizeof(struct config));
 
         if ((resultCode = memory_alloc_page(memKeyPtr, varMemoryByteSize, &varPageKey)) != MEMORY_OK)
         {
@@ -110,36 +132,38 @@ config_init(const struct memory_context_key *memKeyPtr, u64 varMemoryByteSize, c
         }
     }
 
-    configPtr->arenaOffset = 0;
-    configPtr->arenaSize = 0;
-    configPtr->varCount = 0;
-    configPtr->memKeyPtr = memKeyPtr;
-    configPtr->varDictKeyPtr = DICTIONARY(memKeyPtr, NULL, NULL);
+    memcpy((void *)&configPtr->memoryKey, memKeyPtr, sizeof(struct memory_context_key));
 
-    memory_unmap_alloc(outAllocationKeyPtr, (void **)&configPtr);
+    basic_dict_create(&configPtr->configVarPage, NULL, NULL, 
+        utils_generate_next_prime_number(100), NULL, NULL, 
+        &configPtr->varDictKey);
+
+    memory_unmap_alloc((void **)&configPtr);
 
     return B32_TRUE;
 }
 
 b32
-config_load_config(const struct memory_allocation_key *configKeyPtr, const char *fileName)
+config_load(const struct memory_allocation_key *configKeyPtr, const char *fileName)
 {
     assert(configKeyPtr);
     assert(fileName);
 
-    struct config *configContextPtr;
+    struct config *configPtr;
     {
         memory_error_code resultCode;
         
-        if ((resultCode = memory_map_alloc(configKeyPtr, (void **)configContextPtr)) !=
+        if ((resultCode = memory_map_alloc(configKeyPtr, (void **)configPtr)) !=
             MEMORY_OK)
         {
-
+            return B32_FALSE;
         }
     }
 
     const u32 nameLength = strlen(fileName);
-    char *filePath = memory_alloc(context->_mem, (sizeof("resources/configs/") - 1) + nameLength + sizeof(".conf"));
+
+    char filePath[256];
+    
     strcpy(filePath, "resources/configs/");
     strcat(filePath, fileName);
     strcat(filePath, ".conf");
@@ -152,8 +176,6 @@ config_load_config(const struct memory_allocation_key *configKeyPtr, const char 
         return B32_FALSE;
     }
     
-    memory_free(context->_mem, filePath);
-
     const char *delims = ":=\r\n";
 
     char lineBuffer[256];
@@ -405,10 +427,25 @@ config_save_var_config(struct config *context, const char *fileName, const char 
 }
 
 b32
-config_set_var(struct config *context, const char *name, enum config_var_type type, 
-    i32 arrLength, const void *valueArr)
+config_set_var(const struct memory_allocation_key *configKeyPtr, const char *name, 
+    enum config_var_type type, u32 arrLength, void *valueArr)
 {
+    if ((MEMORY_IS_ALLOCATION_NULL(configKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
     assert(arrLength > 0);
+
+    struct config *configPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(configKeyPtr, (void **)&configPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
 
     i32 arrLengthClamped = (arrLength > 0) ? arrLength : 1;
 
@@ -438,68 +475,180 @@ config_set_var(struct config *context, const char *name, enum config_var_type ty
         }
     }
     
-    struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, (char *)name);
-    
+    const struct memory_allocation_key varDataKey;
+    struct config_var_header *varArrPtr;
+    u8 *varDataPtr;
+
+    b32 isResult = basic_dict_map_data(&configPtr->varDictKey, 
+    (void *)name, (void **)&varDataPtr);
+
     i32 typeSize = _config_get_type_size(type);
 
-    if (!varPtr)
+    if (!isResult)
     {
-        u32 diff = context->_arenaSize - context->_arenaOffset;
+        u64 diff = memory_sizeof(&configPtr->varArrKey) - configPtr->varWriteByteOffset;
 
-        u32 size = sizeof(struct config_var_header) + typeSize*arrLengthClamped;
+        u64 size = sizeof(struct config_var_header) + typeSize*arrLengthClamped;
 
         if (diff < size)
         {
             assert(size);
 
-            if (context->_arenaSize > 0)
+#define CONFIG_ARENA_REALLOC_MULTIPLIER 2
+
+            if (configPtr->varCount > 0)
             {
-                context->_var = memory_realloc(context->_mem, context->_var, (context->_arenaSize += size));
+                const struct memory_allocation_key tempKey;
+
+                memory_error_code resultCode = memory_realloc(&configPtr->varArrKey, 
+                    memory_sizeof(&configPtr->varArrKey)*CONFIG_ARENA_REALLOC_MULTIPLIER + size, 
+                    &tempKey);
+
+                if (resultCode != MEMORY_OK)
+                {
+                    memory_unmap_alloc((void **)&configPtr);
+
+                    return B32_FALSE;
+                }
+
+                memcpy((void *)&configPtr->varArrKey, &tempKey, sizeof(struct memory_allocation_key));
+                
+                resultCode = memory_map_alloc(&configPtr->varArrKey, (void **)&varArrPtr);
+
+                if (resultCode != MEMORY_OK)
+                {
+                    memory_unmap_alloc((void **)&configPtr);
+
+                    return B32_FALSE;
+                }
             }
-            else
+            else 
             {
-                context->_var = memory_alloc(context->_mem, (context->_arenaSize += size));
+                memory_error_code resultCode = memory_alloc(&configPtr->configVarPage, size*
+                    CONFIG_ARENA_REALLOC_MULTIPLIER, NULL, &configPtr->varArrKey);
+
+                if (resultCode != MEMORY_OK)
+                {
+                    memory_unmap_alloc((void **)&configPtr);
+
+                    return B32_FALSE;
+                }
+
+                resultCode = memory_map_alloc(&configPtr->varArrKey, (void **)&varArrPtr);
+                
+                if (resultCode != MEMORY_OK)
+                {
+                    memory_unmap_alloc((void **)&configPtr);
+
+                    return B32_FALSE;
+                }
             }
         }
+        else 
+        {
+            memory_error_code resultCode = memory_map_alloc(&configPtr->varArrKey, 
+            (void **)&varArrPtr);
+        }
 
-        varPtr = (struct config_var_header *)((u8 *)context->_var + context->_arenaOffset);
-        u32 nameLength = strlen(name) + 1;
-        varPtr->name = memory_alloc(context->_mem, nameLength);
-        memcpy(UTILS_MUTABLE_CAST(char *, varPtr->name), name, nameLength);
-        varPtr->memoryCapacity = typeSize*arrLengthClamped + sizeof(struct config_var_header);
-        varPtr->memoryOffset = context->_arenaOffset;
-        varPtr->arrLength = arrLengthClamped;
+        varDataPtr = (void *)((p64)varArrPtr + configPtr->varWriteByteOffset);
 
-        context->_arenaOffset += size;
-        ++context->_varCount;
+        u32 nameByteSize = strlen(name) + 1;
+
+        char *rawNamePtr;
+        {
+            memory_error_code resultCode = memory_raw_alloc(&((struct config_var_header *)
+                varDataPtr)->rawNameKey, nameByteSize);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&configPtr->varArrKey);
+                memory_unmap_alloc((void **)&configPtr);
+
+                return B32_FALSE;
+            }
+
+
+            resultCode = memory_map_raw_allocation(&((struct config_var_header *)varDataPtr)->rawNameKey,
+            (void **)&rawNamePtr);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_raw_free(&((struct config_var_header *)varDataPtr)->rawNameKey);
+                memory_unmap_alloc((void **)&varArrPtr);
+                memory_unmap_alloc((void **)&configPtr);
+
+                return B32_FALSE;
+            }
+            
+            memcpy((void *)&varArrPtr->rawNameKey, &((struct config_var_header *)varDataPtr)->rawNameKey,
+                sizeof(struct memory_raw_allocation_key));
+        }
+
+        memcpy(rawNamePtr, name, nameByteSize);
+
+        memory_unmap_raw_allocation(&((struct config_var_header *)varDataPtr)->rawNameKey, (void **)&rawNamePtr);
+
+        ((struct config_var_header *)varDataPtr)->byteOffset = configPtr->varWriteByteOffset;
+        ((struct config_var_header *)varDataPtr)->byteCapacity = typeSize*arrLengthClamped + sizeof(struct config_var_header);
+        ((struct config_var_header *)varDataPtr)->byteSize = ((struct config_var_header *)varDataPtr)->byteCapacity;
+
+        configPtr->varWriteByteOffset += size;
+        ++configPtr->varCount;
     }
     else
     {
-        if (varPtr->memoryCapacity < (typeSize*arrLengthClamped + sizeof(struct config_var_header)))
+        if (((struct config_var_header *)varDataPtr)->byteCapacity < (typeSize*arrLengthClamped + sizeof(struct config_var_header)))
         {
-            context->_var = memory_realloc(context->_mem, context->_var, (context->_arenaSize += typeSize*arrLengthClamped + sizeof(struct config_var_header)));
+            const struct memory_allocation_key tempKey;
 
-            memcpy((u8 *)context->_var + context->_arenaOffset, varPtr, sizeof(struct config_var_header));
+            memory_error_code resultCode = memory_realloc(&configPtr->varArrKey, 
+                (memory_sizeof(&configPtr->varArrKey)*CONFIG_ARENA_REALLOC_MULTIPLIER 
+                + typeSize*arrLengthClamped + sizeof(struct config_var_header)),
+                &tempKey);
 
-            varPtr = (struct config_var_header *)((u8 *)context->_var + context->_arenaOffset);
-            varPtr->memoryOffset = context->_arenaOffset;
-            varPtr->memoryCapacity = sizeof(struct config_var_header) + typeSize*arrLengthClamped;
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&configPtr);
 
-            context->_arenaOffset = context->_arenaSize;
-            context->_arenaOffset = context->_arenaSize;
+                return B32_FALSE;
+            }
+
+            resultCode = memory_map_alloc(&configPtr->varArrKey, (void **)&varDataPtr);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)configPtr);
+
+                return B32_FALSE;
+            }
+
+            ((struct config_var_header *)varDataPtr)->byteCapacity = typeSize*arrLengthClamped;
         }
 
-        varPtr->arrLength = arrLengthClamped;
+        memcpy((u8 *)varDataPtr + sizeof(struct config_var_header), valueArr, 
+            typeSize*arrLengthClamped);
+        
+        ((struct config_var_header *)varDataPtr)->byteSize = typeSize*arrLengthClamped;
+        ((struct config_var_header *)varDataPtr)->byteOffset = configPtr->varWriteByteOffset;
     }
+    
+    ((struct config_var_header *)varDataPtr)->type = type;
 
-    varPtr->type = type;
+    memcpy((u8 *)varDataPtr + sizeof(struct config_var_header), valueArr, 
+        typeSize*arrLengthClamped);
 
-    if (valueArr)
+    p64 dataOffset = 0;
+    u64 dataSize = typeSize*arrLengthClamped;
+
+    basic_dict_push_data(&configPtr->varDictKey, (void *)name, &dataOffset, &dataSize, &varDataKey);
+
+    if (!isResult)
     {
-        memcpy((u8 *)context->_var + varPtr->memoryOffset + sizeof(struct config_var_header), valueArr, typeSize*arrLengthClamped);
+        basic_dict_unmap_data(&configPtr->varDictKey, (void *)name, (void **)&varDataPtr);
     }
 
-    basic_dict_set(context->_varMap, context->_mem, context->_var, (char *)name, strlen(name) + 1, varPtr);
+    memory_unmap_alloc((void **)&varArrPtr);
+    memory_unmap_alloc((void **)&configPtr);
 
     return B32_TRUE;
 }
