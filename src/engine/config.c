@@ -16,6 +16,8 @@ struct config_var_header
     u64 byteSize;
     u64 byteOffset;
     u64 byteCapacity;
+    p64 prevHeaderByteOffset;
+    p64 nextHeaderByteOffset;
 };
 
 struct config
@@ -23,8 +25,11 @@ struct config
     const struct memory_context_key memoryKey;
     const struct memory_page_key configContextPage;
     const struct memory_page_key configVarPage;
-    i32 varCount;
     const struct memory_allocation_key varArrKey;
+    u32 freeVarCount;
+    p64 freeVarByteOffsetList;
+    u32 activeVarCount;
+    p64 activeVarByteOffsetList;
     const struct memory_allocation_key varDictKey;
     u64 varWriteByteOffset;
 };
@@ -496,7 +501,7 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
 
 #define CONFIG_ARENA_REALLOC_MULTIPLIER 2
 
-            if (configPtr->varCount > 0)
+            if (configPtr->activeVarCount > 0)
             {
                 const struct memory_allocation_key tempKey;
 
@@ -567,7 +572,6 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
                 return B32_FALSE;
             }
 
-
             resultCode = memory_map_raw_allocation(&((struct config_var_header *)varDataPtr)->rawNameKey,
             (void **)&rawNamePtr);
 
@@ -579,26 +583,58 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
 
                 return B32_FALSE;
             }
-            
-            memcpy((void *)&varArrPtr->rawNameKey, &((struct config_var_header *)varDataPtr)->rawNameKey,
-                sizeof(struct memory_raw_allocation_key));
+
+            memcpy(rawNamePtr, name, nameByteSize);
+
+            memory_unmap_raw_allocation(&((struct config_var_header *)varDataPtr)->rawNameKey, (void **)&rawNamePtr);
         }
 
-        memcpy(rawNamePtr, name, nameByteSize);
-
-        memory_unmap_raw_allocation(&((struct config_var_header *)varDataPtr)->rawNameKey, (void **)&rawNamePtr);
-
         ((struct config_var_header *)varDataPtr)->byteOffset = configPtr->varWriteByteOffset;
-        ((struct config_var_header *)varDataPtr)->byteCapacity = typeSize*arrLengthClamped + sizeof(struct config_var_header);
+        ((struct config_var_header *)varDataPtr)->byteCapacity = typeSize*arrLengthClamped;
         ((struct config_var_header *)varDataPtr)->byteSize = ((struct config_var_header *)varDataPtr)->byteCapacity;
 
         configPtr->varWriteByteOffset += size;
-        ++configPtr->varCount;
+        ++configPtr->activeVarCount;
     }
-    else
+    else if (((struct config_var_header *)varDataPtr)->byteCapacity < (typeSize*arrLengthClamped))
     {
-        if (((struct config_var_header *)varDataPtr)->byteCapacity < (typeSize*arrLengthClamped + sizeof(struct config_var_header)))
+        memory_error_code resultCode = memory_map_alloc(&configPtr->varArrKey, (void **)&varArrPtr);
+
+        if (resultCode != MEMORY_OK)
         {
+            memory_unmap_alloc((void **)&configPtr);
+
+            return B32_FALSE;
+        }
+
+        struct config_var_header *freeVarPtr = NULL;
+
+        if (configPtr->freeVarCount > 0)
+        {
+            freeVarPtr  = (void *)((u8 *)varArrPtr + configPtr->freeVarByteOffsetList);
+
+            do 
+            {
+                if (freeVarPtr->byteCapacity >= (typeSize*arrLengthClamped))
+                {
+                    break;
+                }
+
+                if (freeVarPtr->nextHeaderByteOffset != configPtr->freeVarByteOffsetList)
+                {
+                    freeVarPtr = (void *)((u8 *)varArrPtr + freeVarPtr->nextHeaderByteOffset);
+                }
+                else 
+                {
+                    freeVarPtr = NULL;
+                }
+            } while (freeVarPtr);
+        }
+
+        if (!freeVarPtr)
+        {
+            memory_unmap_alloc((void **)&varArrPtr);
+
             const struct memory_allocation_key tempKey;
 
             memory_error_code resultCode = memory_realloc(&configPtr->varArrKey, 
@@ -613,7 +649,7 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
                 return B32_FALSE;
             }
 
-            resultCode = memory_map_alloc(&configPtr->varArrKey, (void **)&varDataPtr);
+            resultCode = memory_map_alloc(&configPtr->varArrKey, (void **)&varArrPtr);
 
             if (resultCode != MEMORY_OK)
             {
@@ -622,19 +658,61 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
                 return B32_FALSE;
             }
 
-            ((struct config_var_header *)varDataPtr)->byteCapacity = typeSize*arrLengthClamped;
-        }
+            varDataPtr += configPtr->varWriteByteOffset;
 
-        memcpy((u8 *)varDataPtr + sizeof(struct config_var_header), valueArr, 
-            typeSize*arrLengthClamped);
-        
-        ((struct config_var_header *)varDataPtr)->byteSize = typeSize*arrLengthClamped;
-        ((struct config_var_header *)varDataPtr)->byteOffset = configPtr->varWriteByteOffset;
+            configPtr->varWriteByteOffset += typeSize*arrLengthClamped + sizeof(struct config_var_header);
+        }
+        else 
+        {
+            struct config_var_header *prevFreeHeaderPtr = (void *)((u8 *)varArrPtr + ((struct config_var_header *)
+                freeVarPtr)->prevHeaderByteOffset);
+            struct config_var_header *nextFreeHeaderPtr = (void *)((u8 *)varArrPtr + ((struct config_var_header *)
+                freeVarPtr)->nextHeaderByteOffset);
+
+            if (configPtr->freeVarCount > 1)
+            {
+                prevFreeHeaderPtr->nextHeaderByteOffset = ((struct config_var_header *)freeVarPtr)->nextHeaderByteOffset;
+                nextFreeHeaderPtr->prevHeaderByteOffset = ((struct config_var_header *)freeVarPtr)->prevHeaderByteOffset;
+            }
+            else 
+
+            if (configPtr->freeVarByteOffsetList == ((struct config_var_header *)freeVarPtr)->byteOffset)
+            {
+                if (configPtr->freeVarCount > 1)
+                {
+                    configPtr->freeVarByteOffsetList = nextFreeHeaderPtr->byteOffset;
+                }
+            }
+
+            --configPtr->freeVarCount;
+
+            if (configPtr->activeVarCount > 0)
+            {
+                struct config_var_header *headActiveHeaderPtr = (void *)((p64)varArrPtr + configPtr->activeVarByteOffsetList);
+                struct config_var_header *tailActiveHeaderPtr = (void *)((p64)varArrPtr + headActiveHeaderPtr->prevHeaderByteOffset);
+
+                headActiveHeaderPtr->prevHeaderByteOffset = freeVarPtr->byteOffset;
+                tailActiveHeaderPtr->nextHeaderByteOffset = freeVarPtr->byteOffset;
+
+                freeVarPtr->prevHeaderByteOffset = tailActiveHeaderPtr->byteOffset;
+                freeVarPtr->nextHeaderByteOffset = headActiveHeaderPtr->byteOffset;
+            }
+            else 
+            {
+                freeVarPtr->prevHeaderByteOffset = freeVarPtr->nextHeaderByteOffset = freeVarPtr->byteOffset;
+            }
+
+            configPtr->activeVarByteOffsetList = freeVarPtr->byteOffset;
+            ++configPtr->activeVarCount;
+
+            varDataPtr = (u8 *)freeVarPtr;
+        }
     }
     
     ((struct config_var_header *)varDataPtr)->type = type;
+    ((struct config_var_header *)varDataPtr)->byteSize = typeSize*arrLengthClamped;
 
-    memcpy((u8 *)varDataPtr + sizeof(struct config_var_header), valueArr, 
+    memcpy(varDataPtr + sizeof(struct config_var_header), valueArr, 
         typeSize*arrLengthClamped);
 
     p64 dataOffset = 0;
