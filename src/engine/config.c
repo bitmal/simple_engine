@@ -480,7 +480,6 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
         }
     }
     
-    const struct memory_allocation_key varDataKey;
     struct config_var_header *varArrPtr;
     u8 *varDataPtr;
 
@@ -715,10 +714,11 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
     memcpy(varDataPtr + sizeof(struct config_var_header), valueArr, 
         typeSize*arrLengthClamped);
 
-    p64 dataOffset = 0;
-    u64 dataSize = typeSize*arrLengthClamped;
+    p64 dataOffset = ((struct config_var_header *)varDataPtr)->byteOffset;
+    u64 dataSize = typeSize*arrLengthClamped + sizeof(struct config_var_header);
 
-    basic_dict_push_data(&configPtr->varDictKey, (void *)name, &dataOffset, &dataSize, &varDataKey);
+    basic_dict_push_data(&configPtr->varDictKey, (void *)name, 
+    &dataOffset, &dataSize, &configPtr->varArrKey);
 
     if (!isResult)
     {
