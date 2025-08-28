@@ -44,16 +44,16 @@ b32
 config_load(const struct memory_allocation_key *configKeyPtr, const char *fileName);
 
 b32
-config_save_var(const struct config *context, const char *fileName, const char *varName);
+config_save(const struct memory_allocation_key *configKeyPtr, const char *fileName);
 
 b32
 config_set_var(const struct memory_allocation_key *configKeyPtr, const char *name, 
     enum config_var_type type, u32 arrLength, void *valueArr);
 
-const struct config_var_header *
-config_get_var_header(const struct config *context, const char *name);
+b32
+config_map_var(const struct memory_allocation_key *configKeyPtr, const char *name, void **outMapPtr);
 
-const void *
-config_get_var(const struct config *context, const char *name, i32 arrIndex);
+b32
+config_unmap_var(const struct memory_allocation_key *configKeyPtr, void **outMapPtr);
 
 #endif

@@ -154,17 +154,6 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
     assert(configKeyPtr);
     assert(fileName);
 
-    struct config *configPtr;
-    {
-        memory_error_code resultCode;
-        
-        if ((resultCode = memory_map_alloc(configKeyPtr, (void **)configPtr)) !=
-            MEMORY_OK)
-        {
-            return B32_FALSE;
-        }
-    }
-
     const u32 nameLength = strlen(fileName);
 
     char filePath[256];
@@ -299,7 +288,7 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
 
                 if (sscanf(value, "%f", &num) > 0)
                 {
-                    config_set_var(context, name, CONFIG_VAR_REAL32, 1, &num);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_REAL32, 1, &num);
                 }
                 else
                 {
@@ -313,7 +302,7 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
 
                 if (sscanf(value, "%d", &num) > 0)
                 {
-                    config_set_var(context, name, CONFIG_VAR_I32, 1, &num);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_I32, 1, &num);
                 }
                 else
                 {
@@ -327,7 +316,7 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
 
                 if (sscanf(value, "%ld", &num) > 0)
                 {
-                    config_set_var(context, name, CONFIG_VAR_I64, 1, &num);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_I64, 1, &num);
                 }
                 else
                 {
@@ -341,7 +330,7 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
 
                 if (sscanf(value, "%lu", &num) > 0)
                 {
-                    config_set_var(context, name, CONFIG_VAR_U64, 1, &num);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_U64, 1, &num);
                 }
                 else
                 {
@@ -355,7 +344,7 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
 
                 if (sscanf(value, "%lf", &num) > 0)
                 {
-                    config_set_var(context, name, CONFIG_VAR_REAL64, 1, &num);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_REAL64, 1, &num);
                 }
                 else
                 {
@@ -369,7 +358,7 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
 
                 if (sscanf(value, "%f", &num) > 0)
                 {
-                    config_set_var(context, name, CONFIG_VAR_REAL32, 1, &num);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_REAL32, 1, &num);
                 }
                 else
                 {
@@ -382,12 +371,12 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
                 if (!strcmp(value, "NULL"))
                 {
                     char value1[] = "\0";
-                    config_set_var(context, name, CONFIG_VAR_STRING, 1, value1);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_STRING, 1, value1);
                 }
                 else if (value[0] == '\"' && value[valueLength - 1] == '\"')
                 {
                     value[valueLength - 1] = '\0';
-                    config_set_var(context, name, CONFIG_VAR_STRING, 1, value + 1);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_STRING, 1, value + 1);
                 }
                 else
                 {
@@ -400,12 +389,12 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
                 if (!strcmp(value, "false"))
                 {
                     b32 value = B32_FALSE;
-                    config_set_var(context, name, CONFIG_VAR_BOOL, 1, &value);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_BOOL, 1, &value);
                 }
                 else if (!strcmp(value, "true"))
                 {
                     b32 value = B32_TRUE;
-                    config_set_var(context, name, CONFIG_VAR_BOOL, 1, &value);
+                    config_set_var(configKeyPtr, name, CONFIG_VAR_BOOL, 1, &value);
                 }
                 else
                 {
@@ -425,10 +414,11 @@ config_load(const struct memory_allocation_key *configKeyPtr, const char *fileNa
 }
 
 b32
-config_save_var_config(struct config *context, const char *fileName, const char *varName)
+config_save(const struct memory_allocation_key *configKeyPtr, const char *fileName)
 {
-    // TODO
-    return B32_FALSE;
+    // TODO:
+
+    return B32_TRUE;
 }
 
 b32
@@ -731,34 +721,105 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
     return B32_TRUE;
 }
 
-const struct config_var_header *
-config_get_var_header(struct config *context, const char *name)
+b32
+config_map_var(const struct memory_allocation_key *configKeyPtr, const char *name, void **outMapPtr)
 {
-    return basic_dict_get(context->_varMap, context->_var, (char *)name);
-}
-
-const void *
-config_get_var(struct config *context, const char *name, i32 arrIndex)
-{
-    struct config_var_header *varPtr = basic_dict_get(context->_varMap, context->_var, (char *)name);
-
-    if (varPtr)
+    if ((MEMORY_IS_ALLOCATION_NULL(configKeyPtr)))
     {
-        if (arrIndex >= varPtr->arrLength)
+        if (outMapPtr)
         {
-            fprintf(stderr, "config_get_var('%d'): Error for var ('%s'), arrIndex out of range('%d').", 
-                __LINE__, name, arrIndex);
-
-            return NULL;
+            *outMapPtr = NULL;
         }
 
-        i32 typeSize = _config_get_type_size(varPtr->type);
-
-        return &((u8 *)context->_var + varPtr->memoryOffset + sizeof(struct config_var_header))[typeSize*arrIndex];
+        return B32_FALSE;
     }
 
-    fprintf(stderr, "config_get_var('%d'): Error for var ('%s'), var was not found.", 
-        __LINE__, name);
+    if (!name)
+    {
+        if (outMapPtr)
+        {
+            *outMapPtr = NULL;
+        }
 
-    return NULL;
+        return B32_FALSE;
+    }
+
+    if (!outMapPtr)
+    {
+        return B32_FALSE;
+    }
+
+    struct config *configPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(configKeyPtr, (void **)&configPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+    
+    void *resultPtr;
+
+    b32 isResult = basic_dict_map_data(&configPtr->varDictKey, (void *)name, &resultPtr);
+
+    *outMapPtr = (void *)((p64)resultPtr + sizeof(struct config_var_header));
+
+    memory_unmap_alloc((void **)&configPtr);
+
+    return isResult;
+}
+
+b32
+config_unmap_var(const struct memory_allocation_key *configKeyPtr, void **outMapPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(configKeyPtr)))
+    {
+        if (outMapPtr)
+        {
+            *outMapPtr = NULL;
+        }
+
+        return B32_FALSE;
+    }
+    
+    if (!outMapPtr)
+    {
+        return B32_FALSE;
+    }
+    
+    struct config *configPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(configKeyPtr, (void **)&configPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    struct config_var_header *varHeaderPtr = (void *)((p64)(*outMapPtr) - sizeof(struct config_var_header));
+
+    char *namePtr;
+    {
+        memory_error_code resultCode = memory_map_raw_allocation(&varHeaderPtr->rawNameKey, (void **)&namePtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&configPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    void *resultPtr = (void *)((p64)(*outMapPtr) - sizeof(struct config_var_header));
+
+    b32 isResult = basic_dict_unmap_data(&configPtr->varDictKey, (void *)namePtr, &resultPtr);
+
+    *outMapPtr = resultPtr;
+
+    memory_unmap_raw_allocation(&varHeaderPtr->rawNameKey, (void **)&namePtr);
+    memory_unmap_alloc((void **)&configPtr);
+
+    return B32_TRUE;
 }
