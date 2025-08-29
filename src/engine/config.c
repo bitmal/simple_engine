@@ -12,6 +12,7 @@
 struct config_var_header
 {
     const struct memory_raw_allocation_key rawNameKey;
+    const struct memory_raw_allocation_key rawFileNameKey;
     enum config_var_type type;
     u64 byteSize;
     u64 byteOffset;
@@ -580,7 +581,6 @@ config_set_var(const struct memory_allocation_key *configKeyPtr, const char *nam
 
         ((struct config_var_header *)varDataPtr)->byteOffset = configPtr->varWriteByteOffset;
         ((struct config_var_header *)varDataPtr)->byteCapacity = typeSize*arrLengthClamped;
-        ((struct config_var_header *)varDataPtr)->byteSize = ((struct config_var_header *)varDataPtr)->byteCapacity;
 
         configPtr->varWriteByteOffset += size;
         ++configPtr->activeVarCount;

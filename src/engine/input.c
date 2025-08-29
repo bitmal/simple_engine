@@ -8,19 +8,19 @@
 
 struct input_key
 {
-    const char *key;
+    const struct memory_raw_allocation_key rawKeyKey;
     b32 isDown;
 };
 
 struct input_keybind
 {
-    const char *key;
+    const struct memory_raw_allocation_key rawKeyKey;
     input_key_callback callback;
 };
 
 struct input
 {
-    const struct memory_context_key memoryContext;
+    const struct memory_context_key memoryKey;
     const struct memory_page_key pageKey;
     const struct memory_allocation_key keyArr;
     i32 keyCount;
@@ -30,12 +30,12 @@ struct input
     i32 keybindCount;
     i32 keybindCapacity;
     const struct memory_allocation_key keybindDict;
-    void *userPtr;
+    const struct memory_allocation_key userKey;
 };
 
 b32
-input_init(const struct memory_context_key *memoryContextKeyPtr, void *userPtr,
-    const struct memory_allocation_key *outInputKeyPtr)
+input_init(const struct memory_context_key *memoryContextKeyPtr, 
+    const struct memory_allocation_key *userKeyPtr, const struct memory_allocation_key *outInputKeyPtr)
 {
     const struct memory_page_key pageKey;
     {
@@ -73,12 +73,12 @@ input_init(const struct memory_context_key *memoryContextKeyPtr, void *userPtr,
     }
 
     memory_set_alloc_offset_width(&inputKey, 0, sizeof(struct input), '\0');
-    
-    inputPtr->userPtr = userPtr;
 
+    memcpy((void *)&inputPtr->userKey, userKeyPtr, sizeof(struct memory_allocation_key));
+    
     if (!(basic_dict_create(&pageKey, NULL, NULL, 
         utils_generate_next_prime_number(100), NULL, 
-        userPtr, &inputPtr->keybindDict)))
+        userKeyPtr, &inputPtr->keybindDict)))
     {
         memory_unmap_alloc((void **)&inputPtr);
         memory_free_page(&pageKey);
@@ -88,7 +88,7 @@ input_init(const struct memory_context_key *memoryContextKeyPtr, void *userPtr,
     
     if (!(basic_dict_create(&pageKey, NULL, NULL, 
         utils_generate_next_prime_number(100), NULL, 
-        userPtr, &inputPtr->keyDict)))
+        userKeyPtr, &inputPtr->keyDict)))
     {
         memory_unmap_alloc((void **)&inputPtr);
         memory_free_page(&pageKey);
@@ -97,7 +97,7 @@ input_init(const struct memory_context_key *memoryContextKeyPtr, void *userPtr,
     }
 
     memcpy((void *)&inputPtr->pageKey, &pageKey, sizeof(struct memory_page_key));
-    memcpy((void *)&inputPtr->memoryContext, memoryContextKeyPtr, 
+    memcpy((void *)&inputPtr->memoryKey, memoryContextKeyPtr, 
     sizeof(struct memory_context_key));
 
     memory_unmap_alloc((void **)&inputPtr);

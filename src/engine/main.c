@@ -82,17 +82,17 @@ main(int argc, char **argv)
         return -1;
     }
     
-    if (!config_load_config(&app.configKey, "system"))
+    if (!config_load(&app.configKey, "system"))
     {
         return -1;
     }
     
-    if (!config_load_config(&app.configKey, "game"))
+    if (!config_load(&app.configKey, "game"))
     {
         return -1;
     }
     
-    if (!config_load_config(&app.configKey, "physics"))
+    if (!config_load(&app.configKey, "physics"))
     {
         return -1;
     }
@@ -145,8 +145,8 @@ main(int argc, char **argv)
         memory_error_code resultCode;
 
         if ((resultCode = memory_create_debug_context(MEMORY_SAFE_PTR_REGION_SIZE, 
-            GRAPHICS_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "graphics", &graphicsMemoryKey))
-            != MEMORY_OK)
+            GRAPHICS_MEMORY_SIZE, MEMORY_LABEL_REGION_SIZE, "graphics", 
+            &graphicsMemoryKey)) != MEMORY_OK)
         {
             return -1;
         }
@@ -195,7 +195,7 @@ main(int argc, char **argv)
     app.inputKey; input_init(&app.inputKey, NULL);
     app.isRunning = B32_TRUE;
     app.msSinceStart = SDL_GetTicks();
-    app.physics = physics_init(&physicsMemoryKey);
+    app.physicsKey = physics_init(&physicsMemoryKey);
     app.renderContext = renderer_create_context(&graphicsMemoryKey);
 
     struct game *gameContext = game_init(&app);

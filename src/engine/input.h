@@ -4,14 +4,11 @@
 #include "types.h"
 #include "memory.h"
 
-struct basic_dict;
-struct memory;
-
 typedef void(*input_key_callback)(const char *key, const char *action, void *dataPtr);
 
 b32
-input_init(const struct memory_context_key *memoryContextKeyPtr, void *userPtr,
-    const struct memory_allocation_key *outInputKeyPtr);
+input_init(const struct memory_context_key *memoryContextKeyPtr, 
+    const struct memory_allocation_key *userKeyPtr, const struct memory_allocation_key *outInputKeyPtr);
 
 b32
 input_add_keys(const struct memory_allocation_key *inputContextKeyPtr, 
