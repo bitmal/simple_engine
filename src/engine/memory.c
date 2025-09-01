@@ -1597,14 +1597,6 @@ memory_alloc(const struct memory_page_key *pageKeyPtr, u64 byteSize, const char 
         return MEMORY_ERROR_NULL_ID;
     }
 
-    if (byteSize < 1)
-    {
-        utils_fprintfln(stderr, "%s(Line: %d): 'ByteSize' argument must be greater than '0'.", 
-            __func__, __LINE__);
-
-        return MEMORY_ERROR_REQUESTED_HEAP_REGION_SIZE_TOO_SMALL;
-    }
-
     if (!outAllocKeyPtr)
     {
         utils_fprintfln(stderr, "%s(Line: %d): 'outAllocKeyPtr' argument cannot be NULL.");

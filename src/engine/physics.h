@@ -125,31 +125,6 @@ struct physics_log_message
     physics_log_message_cb_t outputCallback;
 };
 
-struct physics_log_message_id
-{
-    physics_id id;
-    b32 isActive;
-    real32 allocationTimestamp;
-    real32 startTimestamp;
-    real32 currentTimestamp;
-    u64 cycleCount;
-    u64 maxCycles;
-    struct physics_log_message_id *prev;
-    struct physics_log_message_id *next;
-};
-
-struct physics_log
-{
-    char *outputFilename;
-    struct physics_log_message *messageArr;
-    i32 messageCapacity;
-    struct physics_log_message_id *activeMessageIdQueue;
-    i32 activeMessageCount;
-    struct physics_log_message_id *freeMessageIds;
-    i32 freeMessageCount;
-    struct physics_log_message_id *activeMessagePeekPtr;
-};
-
 b32
 physics_init(const struct memory_context_key *memoryKeyPtr, 
     const struct memory_allocation_key *outPhysicsKeyPtr);
