@@ -3,17 +3,16 @@
 
 #include "memory.h"
 #include "types.h"
+#include "utils.h"
 
 #include <stdio.h>
 
 typedef u32 basic_dict_id;
 
-struct utils_string_hash;
-
 struct basic_dict;
 
 typedef b32 (*basic_dict_hash_func)(struct basic_dict *dictPtr, void *key, 
-    struct utils_string_hash *outHashPtr);
+    utils_hash *outHashPtr);
 
 typedef b32 (*basic_dict_create_key_copy_func)(struct basic_dict *dictPtr, void *keyPtr, 
     const struct memory_raw_allocation_key *outRawKeyKeyPtr);

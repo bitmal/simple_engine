@@ -223,4 +223,10 @@ memory_raw_sizeof(const struct memory_raw_allocation_key *rawAllocKeyPtr);
 b32
 memory_get_null_allocation_key(const struct memory_allocation_key *outAllocationKeyPtr);
 
+u64
+memory_get_size_of_page_header();
+
+u64
+memory_get_size_of_allocator();
+
 #endif

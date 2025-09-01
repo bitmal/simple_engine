@@ -31,16 +31,16 @@ struct basic_dict
 
 static b32 
 _default_hash_func(struct basic_dict *dictPtr, void *key, 
-    struct utils_string_hash *outHashPtr)
+    utils_hash *outHashPtr)
 {
-    struct utils_string_hash resultHash;
+    utils_hash resultHash;
 
     if (!(utils_generate_hash_from_string(key, &resultHash)))
     {
         return B32_FALSE;
     }
 
-    memcpy(outHashPtr, &resultHash, sizeof(struct utils_string_hash));
+    *outHashPtr = resultHash;
 
     return B32_TRUE;
 }
@@ -187,7 +187,7 @@ _basic_dict_get_node_by_key(const struct memory_allocation_key *dictKeyPtr,
         }
     }
 
-    struct utils_string_hash dictHash;
+    utils_hash dictHash;
 
     if (!(dictPtr->hashFunc(dictPtr, keyPtr, &dictHash)))
     {
@@ -212,7 +212,7 @@ _basic_dict_get_node_by_key(const struct memory_allocation_key *dictKeyPtr,
     }
     
     const struct memory_allocation_key *listKeyPtr = &bucketTablePtr[
-        dictPtr->tableBucketCount%dictHash.hash];
+        dictPtr->tableBucketCount%(u64)dictHash];
 
     const struct memory_allocation_key headNodeKey;
 
@@ -622,7 +622,7 @@ basic_dict_push_data(const struct memory_allocation_key *dictKeyPtr,
             return B32_FALSE;
         }
 
-        struct utils_string_hash dictHash;
+        utils_hash dictHash;
 
         if (!(dictPtr->hashFunc(dictPtr, keyPtr, &dictHash)))
         {
@@ -643,7 +643,7 @@ basic_dict_push_data(const struct memory_allocation_key *dictKeyPtr,
         }
 
         const struct memory_allocation_key *bucketKeyPtr = &bucketTablePtr[dictPtr->tableBucketCount%
-            dictHash.hash];
+            (u64)dictHash];
 
         if (!(basic_list_get_next_node(&dictPtr->freeNodeList, 
         NULL, &foundNodeKey)))

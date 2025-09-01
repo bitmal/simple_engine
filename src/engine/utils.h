@@ -16,12 +16,6 @@ typedef i32 (*utils_sort_compare_func)(void *database, void *lhs, void *rhs, u32
 typedef void (*utils_sort_replace_func)(void *database, void *lhsPtr, void *rhsPtr, u32 elementSize, 
     void *userPtr);
 
-struct utils_string_hash
-{
-    u64 stringByteSize;
-    u64 hash;
-};
-
 typedef u64 utils_hash_u64;
 typedef utils_hash_u64 utils_hash;
 
@@ -38,10 +32,7 @@ i32
 utils_printfln(const char *formatStrPtr, ...);
 
 b32 
-utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult);
-
-b32 
-utils_generate_string_from_hash(struct utils_string_hash *hashPtr, char *outStr);
+utils_generate_hash_from_string(const char *k, utils_hash *outResult);
 
 void
 utils_set_elapsed_time_ns_ptr(u64 *ptr);

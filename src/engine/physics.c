@@ -1,8 +1,10 @@
 #include "physics.h"
+#include "constants.h"
 #include "physics_helpers.h"
 #include "memory.h"
 #include "basic_dict.h"
 #include "types.h"
+#include "utils.h"
 #include "vec4.h"
 
 #include <stdio.h>
@@ -12,17 +14,40 @@
 #include <stdint.h>
 #include <assert.h>
 
+struct physics
+{
+    const struct memory_context_key memoryContextKey;
+    const struct memory_page_key memoryContextPageKey;
+    const struct memory_page_key memoryHeapPageKey;
+    real32 timeSinceStart;
+    real32 airDensity;
+    real32 gravity[3];
+    b32 isGravity;
+    u32 materialCapacity;
+    u32 materialCount;
+    const struct memory_allocation_key materialArrKey;
+    u32 colliderCapacity;
+    u32 colliderCount;
+    const struct memory_allocation_key colliderArrKey;
+    u32 collisionArenaCapacity;
+    u32 collisionArenaFreeAllocationIndex;
+    const struct memory_allocation_key collisionArenaKey;
+    const struct memory_allocation_key collisionDictKey;
+    u32 rigidbodyCapacity;
+    u32 rigidbodyCount;
+    const struct memory_allocation_key rigidbodyArrKey;
+    struct physics_log *log;
+};
+
 static i64 g_COLLISION_ID_COUNTER = 0;
 static i64 g_FORCE_ALLOCATION_ID_COUNTER = 0;
 static i64 g_FORCE_ID_ALLOCATION_ID_COUNTER = 0;
 
-u64
-_physics_collision_hash_func(struct basic_dict *dict, void *key)
+b32
+_physics_collision_hash_func(const struct memory_allocation_key *dictKeyPtr, void *key,
+    utils_hash *outHashPtr)
 {
-    assert(dict);
-    assert(key);
-
-    const i64 *keyPtr = key;
+    const u64 *keyPtr = key;
 
     physics_id lhsId = *((physics_id *)keyPtr);
     physics_id rhsId = *((physics_id *)keyPtr + 1);
@@ -33,7 +58,40 @@ _physics_collision_hash_func(struct basic_dict *dict, void *key)
     ((physics_id *)&resultHash)[0] = (lhsId > rhsId) ? lhsId : rhsId;
     ((physics_id *)&resultHash)[1] = (lhsId > rhsId) ? rhsId : lhsId;
 
-    return resultHash;
+    *outHashPtr = (utils_hash)resultHash;
+
+    return B32_TRUE;
+}
+
+b32
+_physics_create_key_copy_func(struct basic_dict *dictPtr, void *keyPtr, 
+    const struct memory_raw_allocation_key *outRawKeyKeyPtr)
+{
+    const struct memory_raw_allocation_key rawKeyKey;
+    u64 *dataPtr;
+    {
+        memory_error_code resultCode = memory_raw_alloc(&rawKeyKey, sizeof(u64));
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_raw_allocation(&rawKeyKey, (void **)&dataPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_raw_free(&rawKeyKey);
+        }
+    }
+
+    memcpy(dataPtr, keyPtr, sizeof(u64));
+
+    memory_unmap_raw_allocation(&rawKeyKey, (void **)&dataPtr);
+
+    memcpy((void *)outRawKeyKeyPtr, &rawKeyKey, sizeof(struct memory_raw_allocation_key));
+
+    return B32_TRUE;
 }
 
 static u64
@@ -266,32 +324,111 @@ _physics_log_message_default_callback(struct physics *context, const struct phys
     fclose(logFile);
 }
 
-struct physics *
-physics_init(struct memory *mem)
+b32
+physics_init(const struct memory_context_key *memoryKeyPtr, 
+    const struct memory_allocation_key *outPhysicsKeyPtr)
 {
-    assert(mem);
+    const struct memory_page_key contextPage;
+    const struct memory_page_key heapPage;
+    {
+        memory_error_code resultCode = memory_alloc_page(memoryKeyPtr, 
+        sizeof(struct physics) + (memory_get_size_of_allocator()), &contextPage);
 
-    struct physics *p = memory_alloc(mem, sizeof(struct physics));
-    memset(p, 0, sizeof(struct physics));
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
 
-    p->memoryContext = mem;
-    p->collisionArenaCapacity = PHYSICS_COLLISION_ARENA_BASE_LENGTH;
-    p->collisionArena = (p->collisionArenaCapacity > 0) ? (memory_alloc(mem, sizeof(struct physics_collision)*
-        p->collisionArenaCapacity)) : NULL;
-    p->collisionDict = basic_dict_create(mem, _physics_collision_hash_func, 113, NULL);
-    p->airDensity = PHYSICS_DEFAULT_AIR_DENSITY;
-    p->gravity[0] = PHYSICS_DEFAULT_GRAVITY_X;
-    p->gravity[1] = PHYSICS_DEFAULT_GRAVITY_Y;
-    p->gravity[2] = PHYSICS_DEFAULT_GRAVITY_Z;
+        resultCode = memory_alloc_page(memoryKeyPtr, 
+            PHYSICS_MEMORY_SIZE - sizeof(struct physics) - (memory_get_size_of_allocator())
+            - (memory_get_size_of_page_header())*2, &heapPage);
 
-    p->log = (struct physics_log *)memory_alloc(p->memoryContext, sizeof(struct physics_log));
-    memset(p->log, 0, sizeof(struct physics_log));
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free_page(&contextPage);
 
-    p->log->outputFilename = (char *)memory_alloc(p->memoryContext, sizeof("physics.log") + 1);
-    
-    sprintf(p->log->outputFilename, "physics.log");
+            return B32_FALSE;
+        }
+    }
 
-    return p;
+    const struct memory_allocation_key physicsKey;
+    {
+        memory_error_code resultCode = memory_alloc(&contextPage, 
+        sizeof(struct physics), NULL, &physicsKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free_page(&heapPage);
+            memory_free_page(&contextPage);
+
+            return B32_FALSE;
+        }
+    }
+
+    memory_set_alloc_offset_width(&physicsKey, 0, 
+    sizeof(struct physics), '\0');
+
+    struct physics *physicsPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(&physicsKey, 
+        (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free_page(&heapPage);
+            memory_free_page(&contextPage);
+
+            return B32_FALSE;
+        }
+    }
+
+    memcpy((void *)&physicsPtr->memoryContextPageKey, &contextPage, sizeof(struct memory_page_key));
+    memcpy((void *)&physicsPtr->memoryHeapPageKey, &heapPage, sizeof(struct memory_page_key));
+    memcpy((void *)&physicsPtr->memoryContextKey, memoryKeyPtr, sizeof(struct memory_context_key));
+
+    physicsPtr->airDensity = PHYSICS_DEFAULT_AIR_DENSITY;
+    physicsPtr->collisionArenaCapacity = PHYSICS_COLLISION_ARENA_BASE_LENGTH;
+
+    {
+        memory_error_code resultCode = memory_alloc(&heapPage, 
+        physicsPtr->collisionArenaCapacity*sizeof(struct physics_collision), NULL, 
+        &physicsPtr->collisionArenaKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            memory_free_page(&heapPage);
+            memory_free_page(&contextPage);
+
+            return B32_FALSE;
+        }
+    }
+
+    u64 keySize = sizeof(u64);
+
+    if (!(basic_dict_create(&heapPage, &_physics_collision_hash_func, &_physics_create_key_copy_func, 
+        utils_generate_next_prime_number(100), &keySize, &physicsKey, 
+        &physicsPtr->collisionDictKey)))
+
+    // p->memoryContext = mem;
+    // p->collisionArenaCapacity = PHYSICS_COLLISION_ARENA_BASE_LENGTH;
+    // p->collisionArena = (p->collisionArenaCapacity > 0) ? (memory_alloc(mem, sizeof(struct physics_collision)*
+    //     p->collisionArenaCapacity)) : NULL;
+    // p->collisionDict = basic_dict_create(mem, _physics_collision_hash_func, 113, NULL);
+    // p->airDensity = PHYSICS_DEFAULT_AIR_DENSITY;
+    // p->gravity[0] = PHYSICS_DEFAULT_GRAVITY_X;
+    // p->gravity[1] = PHYSICS_DEFAULT_GRAVITY_Y;
+    // p->gravity[2] = PHYSICS_DEFAULT_GRAVITY_Z;
+
+    // p->log = (struct physics_log *)memory_alloc(p->memoryContext, sizeof(struct physics_log));
+    // memset(p->log, 0, sizeof(struct physics_log));
+
+    // p->log->outputFilename = (char *)memory_alloc(p->memoryContext, sizeof("physics.log") + 1);
+    // 
+    // sprintf(p->log->outputFilename, "physics.log");
+
+    return B32_TRUE;
 }
 
 physics_id

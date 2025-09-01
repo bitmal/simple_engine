@@ -2,16 +2,12 @@
 #define __PHYSICS_H
 
 #include "types.h"
-#include "renderer.h"
-
-#include <stdio.h>
+#include "memory.h"
+#include "basic_dict.h"
 
 typedef i32 physics_id;
 typedef i64 physics_wide_id;
 #define PHYSICS_NULL_ID -1
-
-struct memory;
-struct basic_dict;
 
 #define PHYSICS_DEFAULT_MASS 1.f
 #define PHYSICS_DEFAULT_AIR_DENSITY 0.02f
@@ -35,8 +31,6 @@ struct physics_collider
     physics_id id;
     struct physics_collider_bounds bounds;
     //b32 isTrigger; // TODO: implement triggers vs solid objects rigidbody collisions
-    renderer_id displayBoundsRenderId;
-    b32 isDisplayBounds;
 };
 
 struct physics_collision
@@ -156,30 +150,9 @@ struct physics_log
     struct physics_log_message_id *activeMessagePeekPtr;
 };
 
-struct physics
-{
-    struct memory *memoryContext;
-    real32 timeSinceStart;
-    real32 airDensity;
-    real32 gravity[3];
-    b32 isGravity;
-    i32 materialCount;
-    struct physics_material *materials;
-    i32 colliderCount;
-    struct physics_collider *colliders;
-    i32 collisionArenaCapacity;
-    u32 collisionArenaFreeAllocationIndex;
-    struct physics_collision *collisionArena;
-    struct basic_dict *collisionDict;
-    i32 rigidbodyCount;
-    struct physics_rigidbody *rigidbodies;
-    i32 collisionCapacity;
-    i32 collisionCount;
-    struct physics_log *log;
-};
-
-struct physics *
-physics_init(struct memory *mem);
+b32
+physics_init(const struct memory_context_key *memoryKeyPtr, 
+    const struct memory_allocation_key *outPhysicsKeyPtr);
 
 physics_id
 physics_create_rigidbody(struct physics *context);

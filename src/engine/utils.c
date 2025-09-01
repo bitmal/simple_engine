@@ -68,7 +68,7 @@ utils_printfln(const char *formatStrPtr, ...)
 }
 
 b32 
-utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResult)
+utils_generate_hash_from_string(const char *k, utils_hash *outResult)
 {
     if (!outResult || !k)
     {
@@ -90,37 +90,9 @@ utils_generate_hash_from_string(const char *k, struct utils_string_hash *outResu
         pPow = (pPow*p)%m;
     }
 
-    outResult->hash = hash;
-    outResult->stringByteSize = strlen(k) + 1;
+    *outResult = hash;
 
     return B32_TRUE;
-}
-
-b32 
-utils_generate_string_from_hash(struct utils_string_hash *hashPtr, char *outStr)
-{
-    if (outStr)
-    {
-        const i32 p = 59;
-        const i32 m = 1e9 + 9;
-        u64 hash = hashPtr->hash;
-        u64 pPow = (pPow*p)*(hashPtr->stringByteSize - 1)%m;
-
-        u64 lastCharNumber = hashPtr->stringByteSize;
-
-        for (u64 charIndex = lastCharNumber - 1; charIndex >= 0; --charIndex)
-        {
-            //outStr[charIndex] = ;
-            hash = (hash - (outStr[charIndex] - 'a' + 1)*pPow%m)%m;
-            pPow -= (pPow*p)%m;
-        }
-
-        outStr[lastCharNumber] = '\0';
-
-        return B32_FALSE;
-    }
-
-    return B32_FALSE;
 }
 
 void

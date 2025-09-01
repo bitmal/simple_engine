@@ -2489,3 +2489,15 @@ memory_get_null_allocation_key(const struct memory_allocation_key *outAllocation
 
     return B32_TRUE;
 }
+
+u64
+memory_get_size_of_page_header()
+{
+    return sizeof(struct memory_page_header);
+}
+
+u64
+memory_get_size_of_allocator()
+{
+    return sizeof(struct memory_allocator);
+}
