@@ -18,56 +18,17 @@ typedef i64 physics_wide_id;
 #define PHYSICS_COLLISION_ARENA_BASE_LENGTH 0
 #define PHYSICS_COLLISION_ARENA_LENGTH_REALLOC_MULTIPLIER 2
 
+#define PHYSICS_MESSAGE_ARENA_BASE_CAPACITY 100
+#define PHYSICS_COLLISION_ARENA_BASE_CAPACITY 512
+
+#define PHYSICS_RB_MAX_ACTIVE_FORCES 200
+
 struct physics_collider_bounds
 {
     real32 right;
     real32 top;
     real32 left;
     real32 bottom;
-};
-
-struct physics_collider
-{
-    physics_id id;
-    struct physics_collider_bounds bounds;
-    //b32 isTrigger; // TODO: implement triggers vs solid objects rigidbody collisions
-};
-
-struct physics_collision
-{
-    physics_wide_id wideId;
-    physics_id rbLhsId;
-    physics_id rbRhsId;
-    b32 isActive;
-};
-
-struct physics_material
-{
-    physics_id id;
-    real32 dragCoefficient;
-    real32 frictionCoefficient;
-};
-
-struct physics_force
-{
-    physics_wide_id allocationId;
-    physics_id id;
-    real32 direction[3];
-    real32 magnitude;
-    real32 allocationTimestamp;
-    real32 startTimestamp;
-    real32 currentTimestamp;
-    real32 duration;
-    b32 isActive;
-};
-
-struct physics_force_id
-{
-    physics_wide_id allocationId;
-    physics_id id;
-    b32 isActive;
-    struct physics_force_id *prev;
-    struct physics_force_id *next;
 };
 
 typedef enum physics_rigidbody_constraint_type
@@ -77,39 +38,7 @@ typedef enum physics_rigidbody_constraint_type
     PHYSICS_RB_CONSTRAINT_TYPE_COUNT
 } physics_rigidbody_constraint_t;
 
-struct physics_rigidbody_constraint
-{
-    physics_rigidbody_constraint_t type;
-    void *data;
-    b32 isActive;
-};
-
-struct physics_rigidbody
-{
-    physics_id id;
-    physics_id material;
-    physics_id collider;
-    real32 position[3];
-    real32 velocity[3];
-    real32 rotation[3];
-    real32 rotationVelocity[3];
-    real32 mass;
-    b32 isGravity;
-    b32 isKinematic;
-    struct physics_force *forceArr;
-    i32 forceCapacity;
-    struct physics_force_id *forceIdArr;
-    i32 forceIdCapacity;
-    struct physics_force_id *activeForceIds;
-    i32 activeForceIdCount;
-    struct physics_force_id *freeForceIds;
-    i32 freeForceIdCount;
-    struct physics_rigidbody_constraint constraintArr[PHYSICS_RB_CONSTRAINT_TYPE_COUNT];
-};
-
-struct physics;
 struct physics_log_message;
-struct physics_log_message_id;
 
 typedef void(*physics_log_message_callback)(struct physics *context, 
     const struct physics_log_message *messagePtr);
@@ -118,10 +47,9 @@ typedef physics_log_message_callback physics_log_message_cb_t;
 struct physics_log_message
 {
     physics_id id;
-    char *message;
-    void *data;
+    const struct memory_raw_allocation_key rawMessageKey;
+    const struct memory_allocation_key dataKey;
     real32 allocationTimestamp;
-    real32 startTimestamp;
     physics_log_message_cb_t outputCallback;
 };
 
@@ -129,8 +57,8 @@ b32
 physics_init(const struct memory_context_key *memoryKeyPtr, 
     const struct memory_allocation_key *outPhysicsKeyPtr);
 
-physics_id
-physics_create_rigidbody(struct physics *context);
+b32
+physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, physics_id *outRbId);
 
 void
 physics_rigidbody_set_constraint(struct physics *context, physics_id rigidbody,

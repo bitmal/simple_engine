@@ -27,6 +27,7 @@
 #include "mat44.c"
 #include "mat44_func.c"
 #include "basic_dict.c"
+#include "circular_buffer.c"
 #include "input.c"
 #include "physics_helpers.c"
 #include "physics.c"
