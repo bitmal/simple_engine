@@ -36,7 +36,7 @@ circular_buffer_read_bytes(const struct memory_allocation_key *bufKeyPtr, u64 re
     u8 *outBytesPtr, u64 *outBytesReadPtr);
 
 b32
-circular_buffer_empty(const struct memory_allocation_key *bufKeyPtr);
+circular_buffer_reset(const struct memory_allocation_key *bufKeyPtr);
 
 b32
 circular_buffer_shrink(const struct memory_allocation_key *bufKeyPtr, u64 byteSize);

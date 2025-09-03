@@ -498,7 +498,7 @@ circular_buffer_read_bytes(const struct memory_allocation_key *bufKeyPtr, u64 re
 }
 
 b32
-circular_buffer_empty(const struct memory_allocation_key *bufKeyPtr)
+circular_buffer_reset(const struct memory_allocation_key *bufKeyPtr)
 {
     if ((MEMORY_IS_ALLOCATION_NULL(bufKeyPtr)))
     {

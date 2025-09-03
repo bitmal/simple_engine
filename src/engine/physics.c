@@ -121,6 +121,7 @@ static i64 g_COLLISION_ID_COUNTER = 0;
 static i64 g_FORCE_ALLOCATION_ID_COUNTER = 0;
 static u32 g_MATERIAL_ALLOCATION_ID_COUNTER = 0;
 static u32 g_COLLIDER_ALLOCATION_ID_COUNTER = 0;
+static u32 g_RIGIDBODY_ALLOCATION_ID_COUNTER = 0;
 
 b32
 _physics_collision_hash_func(struct basic_dict *dictPtr, void *key,
@@ -1095,7 +1096,7 @@ physics_init(const struct memory_context_key *memoryKeyPtr,
     physicsPtr->isGravity = B32_TRUE;
 
     if (!(circular_buffer_create(&heapPage, sizeof(struct physics_collision)*
-        PHYSICS_COLLISION_ARENA_BASE_LENGTH + 1, &physicsPtr->collisionArenaKey)))
+        PHYSICS_COLLISION_ARENA_BASE_LENGTH, &physicsPtr->collisionArenaKey)))
     {
         memory_unmap_alloc((void **)&physicsPtr);
 
@@ -1137,7 +1138,7 @@ physics_init(const struct memory_context_key *memoryKeyPtr,
         }
 
         if (!(circular_buffer_create(&heapPage, sizeof(struct physics_log_message)*
-            PHYSICS_MESSAGE_ARENA_BASE_CAPACITY + 1, &logPtr->messageArenaKey)))
+            PHYSICS_MESSAGE_ARENA_BASE_CAPACITY, &logPtr->messageArenaKey)))
         {
             memory_unmap_alloc((void **)&logPtr);
             memory_unmap_alloc((void **)&physicsPtr);
@@ -1198,12 +1199,14 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         return B32_FALSE;
     }
 
+    struct physics *physicsPtr;
+
     physics_id materialId;
     u32 materialIndex;
 
     if (_physics_get_free_material_index(physicsKeyPtr, &materialIndex))
     {
-        materialId = materialIndex - 1;
+        materialId = materialIndex + 1;
 
         if (!_physics_activate_material(physicsKeyPtr, materialId))
         {
@@ -1232,6 +1235,12 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
                 return B32_FALSE;
             }
+            
+            u32 allocatedCount = physicsPtr->materialCapacity;
+
+            memory_set_alloc_offset_width(&physicsPtr->materialArrKey, 
+            physicsPtr->materialCapacity*sizeof(struct physics_material), sizeof(struct physics_material)*
+                allocatedCount, '\0');
 
             memcpy((void *)&physicsPtr->materialArrKey, &tempKey, sizeof(struct memory_allocation_key));
 
@@ -1245,8 +1254,6 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
                 return B32_FALSE;
             }
-
-            u32 allocatedCount = physicsPtr->materialCapacity;
 
             for (u32 i = 0; i < allocatedCount; ++i)
             {
@@ -1271,7 +1278,7 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
                 materialArrPtr[physicsPtr->materialCapacity].prevMaterialIndex = materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex;
                 materialArrPtr[physicsPtr->materialCapacity + allocatedCount - 1].nextMaterialIndex = physicsPtr->freeMaterialHeadIndex;
 
-                materialArrPtr[materialArrPtr[physicsPtr->freeColliderHeadIndex].prevMaterialIndex].nextMaterialIndex = physicsPtr->materialCapacity;
+                materialArrPtr[materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex].nextMaterialIndex = physicsPtr->materialCapacity;
                 materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex = physicsPtr->materialCapacity;
             }
             else 
@@ -1300,8 +1307,8 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         else 
         {
             memory_error_code resultCode = memory_alloc(&physicsPtr->memoryHeapPageKey, 
-            sizeof(struct physics_material)*(physicsPtr->materialCapacity + 1), NULL, 
-            &physicsPtr->materialArrKey);
+                sizeof(struct physics_material)*(physicsPtr->materialCapacity + 1), NULL, 
+                &physicsPtr->materialArrKey);
 
             if (resultCode != MEMORY_OK)
             {
@@ -1309,6 +1316,9 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
                 return B32_FALSE;
             }
+
+            memory_set_alloc_offset_width(&physicsPtr->materialArrKey, 0, 
+            sizeof(struct physics_material), '\0');
 
             struct physics_material *materialPtr;
 
@@ -1341,12 +1351,26 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         }
     }
 
-    memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
 
-    memory_set_alloc_offset_width(&physicsPtr->materialArrKey, sizeof(struct physics_material)*materialIndex, 
-        sizeof(struct physics_material), '\0');
+        if (resultCode != MEMORY_OK)
+        {
+            _physics_free_material(physicsKeyPtr, materialId);
 
-    memory_unmap_alloc((void **)&physicsPtr);
+            return B32_FALSE;
+        }
+
+        struct physics_material *materialArrPtr;
+
+        resultCode = memory_map_alloc(&physicsPtr->materialArrKey, (void **)&materialArrPtr);
+
+        materialArrPtr[materialIndex].dragCoefficient = 0.2f;
+        materialArrPtr[materialIndex].frictionCoefficient = 0.2f;
+
+        memory_unmap_alloc((void **)&materialArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+    }
 
     physics_id colliderId;
     u32 colliderIndex;
@@ -1390,6 +1414,10 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
             }
             
             u32 allocatedCount = physicsPtr->colliderCapacity;
+            
+            memory_set_alloc_offset_width(&tempKey, 
+            sizeof(struct physics_collider)*physicsPtr->colliderCapacity, 
+            sizeof(struct physics_collider)*allocatedCount, '\0');
 
             for (u32 i = 0; i < allocatedCount; ++i)
             {
@@ -1437,6 +1465,8 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
             
             if (!(_physics_activate_collider(physicsKeyPtr, materialId)))
             {
+                _physics_free_material(physicsKeyPtr, materialId);
+
                 return B32_FALSE;
             }
 
@@ -1459,6 +1489,9 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
                 return B32_FALSE;
             }
+
+            memory_set_alloc_offset_width(&physicsPtr->colliderArrKey, 0, 
+            sizeof(struct physics_collider), '\0');
             
             ++physicsPtr->colliderCapacity;
 
@@ -1466,7 +1499,10 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
             
             if (!(_physics_activate_collider(physicsKeyPtr, materialId)))
             {
-                _physics_free_collider(physicsKeyPtr, colliderId);
+                --physicsPtr->colliderCapacity;
+
+                memory_free(&physicsPtr->colliderArrKey);
+
                 _physics_free_material(physicsKeyPtr, materialId);
 
                 return B32_FALSE;
@@ -1507,15 +1543,212 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
     }
 
     struct physics_collider *colliderPtr = &colliderArrPtr[colliderId - 1];
-    colliderPtr->id = colliderId;
     colliderPtr->bounds.right = 1.f;
     colliderPtr->bounds.top = 1.f;
     colliderPtr->bounds.left = 0.f;
     colliderPtr->bounds.bottom = 0.f;
-    colliderPtr->isActive = B32_TRUE;
     //colliderPtr->isTrigger = B32_TRUE;
 
     memory_unmap_alloc((void **)&colliderArrPtr);
+
+    physics_id rigidbodyId;
+    u32 rigidbodyIndex;
+    
+    if ((_physics_get_free_rigidbody_index(physicsKeyPtr, &rigidbodyIndex)))
+    {
+        rigidbodyId = rigidbodyIndex + 1;
+
+        if (!_physics_activate_rigidbody(physicsKeyPtr, rigidbodyId))
+        {
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
+
+            return B32_FALSE;
+        }
+    }
+    else
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (physicsPtr->rigidbodyCapacity > 0)
+        {
+            const struct memory_allocation_key tempKey;
+
+            memory_error_code resultCode = memory_realloc(&physicsPtr->rigidbodyArrKey, sizeof(struct physics_rigidbody)*
+                (physicsPtr->rigidbodyCapacity * 2), &tempKey);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&physicsPtr);
+
+                return B32_FALSE;
+            }
+            
+            u32 allocatedCount = physicsPtr->rigidbodyCapacity;
+            
+            memory_set_alloc_offset_width(&tempKey, physicsPtr->rigidbodyCapacity*
+                sizeof(struct physics_rigidbody), sizeof(struct physics_rigidbody)*allocatedCount, '\0');
+
+            memcpy((void *)&physicsPtr->rigidbodyArrKey, &tempKey, sizeof(struct memory_allocation_key));
+
+            struct physics_rigidbody *rigidbodyArrPtr;
+
+            resultCode = memory_map_alloc(&tempKey, (void **)&rigidbodyArrPtr);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&physicsPtr);
+                
+                _physics_free_collider(physicsKeyPtr, colliderId);
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
+            
+            for (u32 i = 0; i < allocatedCount; ++i)
+            {
+                u32 rigidbodyIndex = physicsPtr->rigidbodyCapacity + i;
+
+                rigidbodyArrPtr[rigidbodyIndex].id = ++g_RIGIDBODY_ALLOCATION_ID_COUNTER;
+                rigidbodyArrPtr[rigidbodyIndex].isActive = B32_FALSE;
+
+                if (i > 0)
+                {
+                    rigidbodyArrPtr[rigidbodyIndex].prevRigidbodyIndex = rigidbodyIndex - 1;
+                }
+
+                if (i < (allocatedCount - 1))
+                {
+                    rigidbodyArrPtr[rigidbodyIndex].nextRigidbodyIndex = rigidbodyIndex + 1;
+                }
+            }
+
+            if (physicsPtr->freeRigidbodyCount > 0)
+            {
+                rigidbodyArrPtr[physicsPtr->rigidbodyCapacity].prevRigidbodyIndex = rigidbodyArrPtr[physicsPtr->freeRigidbodyHeadIndex].prevRigidbodyIndex;
+                rigidbodyArrPtr[physicsPtr->rigidbodyCapacity + allocatedCount - 1].nextRigidbodyIndex = physicsPtr->freeRigidbodyHeadIndex;
+
+                rigidbodyArrPtr[rigidbodyArrPtr[physicsPtr->freeRigidbodyHeadIndex].prevRigidbodyIndex].nextRigidbodyIndex = physicsPtr->rigidbodyCapacity;
+                rigidbodyArrPtr[physicsPtr->freeRigidbodyHeadIndex].prevRigidbodyIndex = physicsPtr->rigidbodyCapacity;
+            }
+            else 
+            {
+                rigidbodyArrPtr[physicsPtr->rigidbodyCapacity].prevRigidbodyIndex = physicsPtr->rigidbodyCapacity + allocatedCount - 1;
+                rigidbodyArrPtr[physicsPtr->rigidbodyCapacity].nextRigidbodyIndex = physicsPtr->rigidbodyCapacity;
+            }
+
+            memory_unmap_alloc((void **)&rigidbodyArrPtr);
+
+            physicsPtr->freeRigidbodyHeadIndex = physicsPtr->rigidbodyCapacity;
+
+            rigidbodyId = physicsPtr->rigidbodyCapacity + 1;
+            rigidbodyIndex = rigidbodyId - 1;
+
+            physicsPtr->freeMaterialCount += allocatedCount - 1;
+            physicsPtr->materialCapacity *= 2;
+
+            if (!(circular_buffer_create(&physicsPtr->memoryHeapPageKey, 
+                sizeof(struct physics_force)*PHYSICS_RB_MAX_ACTIVE_FORCES, &rbPtr->forcesArenaKey)))
+            {
+                memory_unmap_alloc((void **)&physicsPtr);
+
+                _physics_free_collider(physicsKeyPtr, colliderId);
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
+
+            memory_unmap_alloc((void **)&physicsPtr);
+            
+            if (!(_physics_activate_rigidbody(physicsKeyPtr, rigidbodyId)))
+            {
+                _physics_free_collider(physicsKeyPtr, colliderId);
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
+        }
+        else 
+        {
+            memory_error_code resultCode = memory_alloc(&physicsPtr->memoryHeapPageKey, 
+            sizeof(struct physics_rigidbody)*(physicsPtr->rigidbodyCapacity + 1), NULL, 
+            &physicsPtr->rigidbodyArrKey);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&physicsPtr);
+                
+                _physics_free_collider(physicsKeyPtr, colliderId);
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
+
+            memory_set_alloc_offset_width(&physicsPtr->rigidbodyArrKey, 0, 
+            sizeof(struct physics_rigidbody), '\0');
+
+            struct physics_rigidbody *rigidbodyPtr;
+
+            resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, (void **)&rigidbodyPtr);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_free(&physicsPtr->rigidbodyArrKey);
+
+                memory_unmap_alloc((void **)&physicsPtr);
+
+                _physics_free_collider(physicsKeyPtr, colliderId);
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
+
+            rigidbodyPtr->id = ++g_MATERIAL_ALLOCATION_ID_COUNTER;
+            
+            rigidbodyId = rigidbodyPtr->id;
+            rigidbodyIndex = rigidbodyPtr->id - 1;
+            
+            if (!(circular_buffer_create(&physicsPtr->memoryHeapPageKey, 
+                sizeof(struct physics_force)*PHYSICS_RB_MAX_ACTIVE_FORCES, &rbPtr->forcesArenaKey)))
+            {
+                memory_unmap_alloc((void **)&physicsPtr);
+
+                _physics_free_collider(physicsKeyPtr, colliderId);
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
+            
+            memory_unmap_alloc((void **)&rigidbodyPtr);
+            
+            ++physicsPtr->materialCapacity;
+
+            memory_unmap_alloc((void **)&physicsPtr);
+            
+            if (!(_physics_activate_material(physicsKeyPtr, materialId)))
+            {
+                return B32_FALSE;
+            }
+        }
+    }
+
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            _physics_free_rigidbody(physicsKeyPtr, rigidbodyId);
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
+
+            return B32_FALSE;
+        }
+    }
 
     struct physics_rigidbody *rbArrPtr;
     {
@@ -1523,68 +1756,68 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
         if (resultCode != MEMORY_OK)
         {
-            --physicsPtr->colliderCount;
-            --physicsPtr->materialCount;
-
             memory_unmap_alloc((void **)&physicsPtr);
+
+            _physics_free_rigidbody(physicsKeyPtr, rigidbodyId);
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
 
             return B32_FALSE;
         }
     }
 
-    struct physics_rigidbody *rbPtr = &rbArrPtr[rbId - 1];
-    memset(rbPtr, '\0', sizeof(struct physics_rigidbody));
+    struct physics_rigidbody *rigidbodyPtr = &rbArrPtr[rigidbodyId - 1];
 
-    rbPtr->id = rbId;
-    rbPtr->mass = PHYSICS_DEFAULT_MASS;
-    rbPtr->isGravity = B32_FALSE;
-    rbPtr->material = materialId;
-    rbPtr->collider = colliderId;
-    rbPtr->isKinematic = B32_FALSE;
+    rigidbodyPtr->mass = PHYSICS_DEFAULT_MASS;
+    rigidbodyPtr->isGravity = B32_FALSE;
+    rigidbodyPtr->collider = colliderId;
+    rigidbodyPtr->material = materialId;
+    rigidbodyPtr->isKinematic = B32_FALSE;
+    rigidbodyPtr->position[0] = 0.f;
+    rigidbodyPtr->position[1] = 0.f;
+    rigidbodyPtr->position[2] = 0.f;
+    rigidbodyPtr->rotation[0] = 0.f;
+    rigidbodyPtr->rotation[1] = 0.f;
+    rigidbodyPtr->rotation[2] = 0.f;
+    rigidbodyPtr->rotationVelocity[0] = 0.f;
+    rigidbodyPtr->rotationVelocity[1] = 0.f;
+    rigidbodyPtr->rotationVelocity[2] = 0.f;
 
-    if (!(circular_buffer_create(&physicsPtr->memoryHeapPageKey, 
-        sizeof(struct physics_force)*PHYSICS_RB_MAX_ACTIVE_FORCES + 1, &rbPtr->forcesArenaKey)))
-    {
-        --physicsPtr->colliderCount;
-        --physicsPtr->materialCount;
+    circular_buffer_reset(&rigidbodyPtr->forcesArenaKey);
 
-        memory_unmap_alloc((void **)&rbArrPtr);
-        memory_unmap_alloc((void **)&physicsPtr);
-
-        return B32_FALSE;
-    }
-    
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].type = PHYSICS_RB_CONSTRAINT_MAX_SPEED;
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_FALSE;
+    rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].type = PHYSICS_RB_CONSTRAINT_MAX_SPEED;
+    rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].isActive = B32_FALSE;
 
     real32 *maxSpeedConstraintPtr;
     {
-        memory_error_code resultCode = memory_raw_alloc(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey, 
+        memory_error_code resultCode = memory_raw_alloc(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey, 
         sizeof(real32));
 
         if (resultCode != MEMORY_OK)
         {
-            --physicsPtr->colliderCount;
-            --physicsPtr->materialCount;
-
             memory_unmap_alloc((void **)&rbArrPtr);
             memory_unmap_alloc((void **)&physicsPtr);
+
+            _physics_free_rigidbody(physicsKeyPtr, rigidbodyId);
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
 
             return B32_FALSE;
         }
 
-        resultCode = memory_map_raw_allocation(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey, 
+        resultCode = memory_map_raw_allocation(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey, 
         (void **)&maxSpeedConstraintPtr);
 
         if (resultCode != MEMORY_OK)
         {
-            --physicsPtr->colliderCount;
-            --physicsPtr->materialCount;
-
-            memory_raw_free(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey);
+            memory_raw_free(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey);
 
             memory_unmap_alloc((void **)&rbArrPtr);
             memory_unmap_alloc((void **)&physicsPtr);
+            
+            _physics_free_rigidbody(physicsKeyPtr, rigidbodyId);
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
 
             return B32_FALSE;
         }
@@ -1592,40 +1825,38 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
     *maxSpeedConstraintPtr = 0.f;
 
-    memory_unmap_raw_allocation(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey, 
+    memory_unmap_raw_allocation(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey, 
     (void **)&maxSpeedConstraintPtr);
     
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].type = PHYSICS_RB_CONSTRAINT_MAX_ROTATION;
-    rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].isActive = B32_FALSE;
+    rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].type = PHYSICS_RB_CONSTRAINT_MAX_ROTATION;
+    rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].isActive = B32_FALSE;
 
     real32 *maxRotationConstraintPtr;
     {
-        memory_error_code resultCode = memory_raw_alloc(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey, 
+        memory_error_code resultCode = memory_raw_alloc(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey, 
         sizeof(real32));
 
         if (resultCode != MEMORY_OK)
         {
-            --physicsPtr->colliderCount;
-            --physicsPtr->materialCount;
-            
-            memory_raw_free(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey);
+            memory_raw_free(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey);
 
             memory_unmap_alloc((void **)&rbArrPtr);
             memory_unmap_alloc((void **)&physicsPtr);
+            
+            _physics_free_rigidbody(physicsKeyPtr, rigidbodyId);
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
 
             return B32_FALSE;
         }
 
-        resultCode = memory_map_raw_allocation(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey, 
+        resultCode = memory_map_raw_allocation(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey, 
         (void **)&maxRotationConstraintPtr);
 
         if (resultCode != MEMORY_OK)
         {
-            --physicsPtr->colliderCount;
-            --physicsPtr->materialCount;
-
-            memory_raw_free(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey);
-            memory_raw_free(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey);
+            memory_raw_free(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_SPEED].rawDataKey);
+            memory_raw_free(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey);
 
             memory_unmap_alloc((void **)&rbArrPtr);
             memory_unmap_alloc((void **)&physicsPtr);
@@ -1636,14 +1867,13 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
     *maxRotationConstraintPtr = 0.f;
     
-    memory_unmap_raw_allocation(&rbPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey, 
+    memory_unmap_raw_allocation(&rigidbodyPtr->constraintArr[PHYSICS_RB_CONSTRAINT_MAX_ROTATION].rawDataKey, 
     (void **)&maxRotationConstraintPtr);
 
     memory_unmap_alloc((void **)&rbArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
 
-    ++physicsPtr->rigidbodyCount;
-
-    return rbId;
+    return B32_TRUE;
 }
 
 void
