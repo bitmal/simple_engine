@@ -76,60 +76,37 @@ b32
 physics_rigidbody_get_constraint_active(const struct memory_allocation_key *physicsKeyPtr, 
     physics_id rigidbodyId, physics_rigidbody_constraint_t type, b32 *outIsActive);
 
-const struct physics_force_id *
-physics_rigidbody_add_force(struct physics *context, physics_id rigidbody, 
-                            real32 direction[3], real32 magnitude, 
-                            real32 duration);
-
-void
-physics_rigidbody_force_set_active(struct physics *context, physics_id rigidbodyId, 
-    struct physics_force_id *forceIdPtr, b32 isActive);
-
-const struct physics_force *
-physics_rigidbody_get_force(struct physics *context, physics_id rigidbodyId, 
-    struct physics_force_id *forceIdPtr);
-
-void
-physics_update(struct physics *context, real32 timestep);
-
-struct physics_rigidbody *
-physics_get_rigidbody(struct physics *context, physics_id rb);
-
-struct physics_material *
-physics_get_material(struct physics *context, physics_id material);
-
-struct physics_collider *
-physics_get_collider(struct physics *context, physics_id collider);
-
-struct physics_log_message_id *
-physics_log_queue_message(struct physics *context, const char *message, u64 cycleCount);
-
-void
-physics_log_overwrite_message(struct physics *context, 
-    struct physics_log_message_id *messageIdPtr, const char *message);
-
-const struct physics_log_message *
-physics_log_get_message(struct physics *context, struct physics_log_message_id *messageIdPtr);
-
-struct physics_log_message_id *
-physics_log_peek_message(struct physics *context);
+// TODO: customizable force functions with a default applied
+b32
+physics_rigidbody_apply_force(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id rigidbodyId, real32 direction[3], real32 magnitude, real32 duration);
 
 b32
-physics_log_pop_message(struct physics *context, const struct physics_log_message_id **outputMessageIdPtr);
+physics_rigidbody_toggle_force(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id rigidbodyId, physics_id forceId, b32 isMuted);
 
 b32
-physics_log_free_message(struct physics *context, struct physics_log_message_id *messageIdPtr);
+physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timestep);
 
-struct physics_log_message_id *
-physics_log_message_pointer_increment(struct physics *context);
+b32
+physics_log_write_message(const struct memory_allocation_key *physicsKeyPtr, 
+    const char *messageFmt, void *dataPtr, p64 dataByteOffset, u64 cycleCount, 
+    physics_id *outMessageId);
 
-struct physics_log_message_id *
-physics_log_message_pointer_decrement(struct physics *context);
+void
+physics_log_overwrite_message(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id messageId, const char *messageFmt, void *dataPtr, p64 dataByteOffset);
 
-struct physics_log_message_id *
-physics_log_message_pointer_reset_position(struct physics *context);
+b32
+physics_log_map_message(const struct memory_allocation_key *physicsKeyPtr,
+    physics_id messageId, const struct physics_log_message **outMessagePtr);
 
-struct physics_log_message_id *
-physics_log_message_pointer_set_position(struct physics *context, struct physics_log_message_id *rhsPtr);
+b32
+physics_log_unmap_message(const struct memory_allocation_key *physicsKeyPtr,
+    const struct physics_log_message **messagePtr);
+
+b32
+physics_log_read_message(const struct memory_allocation_key *physicsKeyPtr,
+    struct physics_log_message *messagePtr);
 
 #endif

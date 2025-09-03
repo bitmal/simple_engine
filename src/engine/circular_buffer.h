@@ -44,4 +44,12 @@ circular_buffer_shrink(const struct memory_allocation_key *bufKeyPtr, u64 byteSi
 b32
 circular_buffer_grow(const struct memory_allocation_key *bufKeyPtr, u64 byteSize);
 
+b32
+circular_buffer_map_byte_offset(const struct memory_allocation_key *bufKeyPtr, p64 byteOffset, 
+    u8 **outBytesPtr);
+
+b32
+circular_buffer_unmap_byte_offset(const struct memory_allocation_key *bufKeyPtr, p64 byteOffset, 
+    u8 **outBytesPtr);
+
 #endif

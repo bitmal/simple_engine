@@ -622,3 +622,79 @@ circular_buffer_grow(const struct memory_allocation_key *bufKeyPtr, u64 byteSize
 
     return B32_TRUE;
 }
+
+b32
+circular_buffer_map_byte_offset(const struct memory_allocation_key *bufKeyPtr, p64 byteOffset, 
+    u8 **outBytesPtr)
+{
+    struct circular_buffer *bufPtr;
+    u8 *bufferPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(bufKeyPtr, 
+        (void **)&bufPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&bufPtr->bufferKey, 
+        (void **)&bufferPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&bufPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    if (byteOffset >= (bufPtr->bufferByteCapacity - bufPtr->bufferByteReadIndex - 1))
+    {
+        memory_unmap_alloc((void **)&bufferPtr);
+        memory_unmap_alloc((void **)&bufPtr);
+
+        return B32_FALSE;
+    }
+
+    *outBytesPtr = (u8 *)((p64)bufferPtr + bufPtr->bufferByteReadIndex + byteOffset);
+    
+    memory_unmap_alloc((void **)&bufPtr);
+
+    return B32_TRUE;
+}
+
+b32
+circular_buffer_unmap_byte_offset(const struct memory_allocation_key *bufKeyPtr, p64 byteOffset, 
+    u8 **outBytesPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(bufKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (!outBytesPtr)
+    {
+        return B32_FALSE;
+    }
+
+    struct circular_buffer *bufPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(bufKeyPtr, 
+        (void **)&bufPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    u8 *bufferPtr = (u8 *)((p64)(*outBytesPtr) - byteOffset - bufPtr->bufferByteReadIndex);
+
+    memory_unmap_alloc((void **)&bufferPtr);
+    memory_unmap_alloc((void **)&bufPtr);
+
+    *outBytesPtr = NULL;
+
+    return B32_TRUE;
+}

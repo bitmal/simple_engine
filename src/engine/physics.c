@@ -47,9 +47,7 @@ struct physics_force
     physics_id id;
     real32 direction[3];
     real32 magnitude;
-    real32 allocationTimestamp;
     real32 startTimestamp;
-    real32 currentTimestamp;
     real32 duration;
 };
 
@@ -2167,30 +2165,55 @@ physics_rigidbody_get_constraint_active(const struct memory_allocation_key *phys
     return B32_TRUE;
 }
 
-const struct physics_force_id *
-physics_rigidbody_add_force(struct physics *context, physics_id rigidbodyId, 
-                            real32 direction[3], real32 magnitude, 
-                            real32 duration)
+b32
+physics_rigidbody_apply_force(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id rigidbodyId, real32 direction[3], real32 magnitude, real32 duration)
 {
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[rigidbodyId];
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
 
-    struct physics_force_id *forceIdPtr = _physics_rigidbody_alloc_force_id(context, rigidbodyId);
-
-    assert(forceIdPtr);
-
-    struct physics_force *forcePtr = &rbPtr->forceArr[forceIdPtr->id];
+    if (rigidbodyId < 1)
+    {
+        return B32_FALSE;
+    }
     
-    forcePtr->isActive = B32_TRUE;
-    forcePtr->startTimestamp = forcePtr->currentTimestamp = context->timeSinceStart;
-    forcePtr->direction[0] = direction[0];
-    forcePtr->direction[1] = direction[1];
-    forcePtr->direction[2] = direction[2];
-    forcePtr->magnitude = fabsf(magnitude);
-    forcePtr->duration = fabsf(duration);
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
 
-    forceIdPtr->isActive = B32_TRUE;
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE:
+        }
 
-    return forceIdPtr;
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+        (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    if (rigidbodyId > physicsPtr->rigidbodyCapacity)
+    {
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_FALSE;
+    }
+
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
+
+    struct physics_force force;
+
+    return B32_TRUE;
 }
 
 void
