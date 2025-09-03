@@ -1876,64 +1876,295 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
     return B32_TRUE;
 }
 
-void
-physics_rigidbody_set_constraint(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, const void *data)
+b32
+physics_rigidbody_set_constraint(const struct memory_allocation_key *physicsKeyPtr, physics_id rigidbodyId,
+    physics_rigidbody_constraint_t type, void *dataPtr)
 {
-    assert(data);
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
 
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[rigidbody];
+    if (rigidbodyId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    if (!dataPtr)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE:
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+        (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    if (rigidbodyId > physicsPtr->rigidbodyCapacity)
+    {
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_FALSE;
+    }
+
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
+
+    void *constraintPtr;
+    {
+        memory_error_code resultCode = memory_map_raw_allocation(&rigidbodyPtr->
+            constraintArr[type].rawDataKey, &constraintPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
 
     switch(type)
     {
         case PHYSICS_RB_CONSTRAINT_MAX_SPEED:
         {
-            *((real32 *)rbPtr->constraintArr[type].data) = *((real32 *)data);
+            memcpy(constraintPtr, dataPtr, sizeof(real32));
         } break;
         
         case PHYSICS_RB_CONSTRAINT_MAX_ROTATION:
         {
-            *((real32 *)rbPtr->constraintArr[type].data) = *((real32 *)data);
+            memcpy(constraintPtr, dataPtr, sizeof(real32));
         } break;
 
-        default: break;
-    }
-}
-
-void
-physics_rigidbody_get_constraint(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, void *outData)
-{
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[rigidbody];
-
-    switch(type)
-    {
-        case PHYSICS_RB_CONSTRAINT_MAX_SPEED:
+        default: 
         {
-            *((real32 *)outData) = *((real32 *)rbPtr->constraintArr[type].data);
-        } break;
-        
-        case PHYSICS_RB_CONSTRAINT_MAX_ROTATION:
-        {
-            *((real32 *)outData) = *((real32 *)rbPtr->constraintArr[type].data);
-        } break;
+            memory_unmap_alloc((void **)&rigidbodyArrPtr);
+            memory_unmap_alloc((void **)&physicsPtr);
 
-        default: break;
+            return B32_FALSE;
+        } break;
     }
-}
 
-void
-physics_rigidbody_set_constraint_active(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, b32 isActive)
-{
-    context->rigidbodies[rigidbody].constraintArr[type].isActive = isActive;
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
 }
 
 b32
-physics_rigidbody_get_constraint_active(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type)
+physics_rigidbody_get_constraint(const struct memory_allocation_key *physicsKeyPtr, physics_id rigidbodyId,
+    physics_rigidbody_constraint_t type, void *outDataPtr)
 {
-    return context->rigidbodies[rigidbody].constraintArr[type].isActive;
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (rigidbodyId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    if (!outDataPtr)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE:
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+        (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    if (rigidbodyId > physicsPtr->rigidbodyCapacity)
+    {
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_FALSE;
+    }
+
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
+
+    void *constraintPtr;
+    {
+        memory_error_code resultCode = memory_map_raw_allocation(&rigidbodyPtr->
+            constraintArr[type].rawDataKey, &constraintPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    switch(type)
+    {
+        case PHYSICS_RB_CONSTRAINT_MAX_SPEED:
+        {
+            memcpy(outDataPtr, constraintPtr, sizeof(real32));
+        } break;
+        
+        case PHYSICS_RB_CONSTRAINT_MAX_ROTATION:
+        {
+            memcpy(outDataPtr, constraintPtr, sizeof(real32));
+        } break;
+
+        default: 
+        {
+            memory_unmap_alloc((void **)&rigidbodyArrPtr);
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        } break;
+    }
+
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+b32
+physics_rigidbody_set_constraint_active(const struct memory_allocation_key physicsKeyPtr, 
+    physics_id rigidbodyId, physics_rigidbody_constraint_t type, b32 isActive)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (rigidbodyId < 1)
+    {
+        return B32_FALSE;
+    }
+    
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE:
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+        (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    if (rigidbodyId > physicsPtr->rigidbodyCapacity)
+    {
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_FALSE;
+    }
+
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
+
+    rigidbodyPtr->constraintArr[type].isActive = isActive;
+
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+b32
+physics_rigidbody_get_constraint_active(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id rigidbodyId, physics_rigidbody_constraint_t type, b32 *outIsActive)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (rigidbodyId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    if (!outIsActive)
+    {
+        return B32_FALSE:
+    }
+    
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE:
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+        (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    if (rigidbodyId > physicsPtr->rigidbodyCapacity)
+    {
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_FALSE;
+    }
+
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
+
+    *outIsActive = rigidbodyPtr->constraintArr[type].isActive;
+
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
 }
 
 const struct physics_force_id *

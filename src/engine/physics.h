@@ -60,21 +60,21 @@ physics_init(const struct memory_context_key *memoryKeyPtr,
 b32
 physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, physics_id *outRbId);
 
-void
-physics_rigidbody_set_constraint(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, const void *data);
-
-void
-physics_rigidbody_get_constraint(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, void *outData);
-
-void
-physics_rigidbody_set_constraint_active(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type, b32 isActive);
+b32
+physics_rigidbody_set_constraint(const struct memory_allocation_key *physicsKeyPtr, physics_id rigidbodyId,
+    physics_rigidbody_constraint_t type, void *dataPtr);
 
 b32
-physics_rigidbody_get_constraint_active(struct physics *context, physics_id rigidbody,
-    physics_rigidbody_constraint_t type);
+physics_rigidbody_get_constraint(const struct memory_allocation_key *physicsKeyPtr, physics_id rigidbodyId,
+    physics_rigidbody_constraint_t type, void *outDataPtr);
+
+b32
+physics_rigidbody_set_constraint_active(const struct memory_allocation_key physicsKeyPtr, 
+    physics_id rigidbodyId, physics_rigidbody_constraint_t type, b32 isActive);
+
+b32
+physics_rigidbody_get_constraint_active(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id rigidbodyId, physics_rigidbody_constraint_t type, b32 *outIsActive);
 
 const struct physics_force_id *
 physics_rigidbody_add_force(struct physics *context, physics_id rigidbody, 
