@@ -52,7 +52,7 @@ circular_buffer_create(const struct memory_page_key *pageKeyPtr, u64 initByteSiz
             return B32_FALSE;
         }
 
-        resultCode = memory_alloc(pageKeyPtr, initByteSize, NULL, 
+        resultCode = memory_alloc(pageKeyPtr, initByteSize + 1, NULL, 
         &circularBufferPtr->bufferKey);
 
         if (resultCode != MEMORY_OK)
@@ -65,7 +65,7 @@ circular_buffer_create(const struct memory_page_key *pageKeyPtr, u64 initByteSiz
         }
     }
 
-    circularBufferPtr->bufferByteCapacity = initByteSize;
+    circularBufferPtr->bufferByteCapacity = initByteSize + 1;
     circularBufferPtr->bufferByteReadIndex = circularBufferPtr->bufferByteWriteIndex = 0;
 
     memory_unmap_alloc((void **)&circularBufferPtr);
@@ -480,7 +480,7 @@ circular_buffer_read_bytes(const struct memory_allocation_key *bufKeyPtr, u64 re
     if (remainderBytes > 0)
     {
         memcpy(&outBytesPtr[0], &rhsBytesPtr[bufPtr->bufferByteReadIndex], readByteCount - remainderBytes);
-        memcpy(&outBytesPtr[readByteCount - remainderBytes - 1], &rhsBytesPtr[0], readByteCount - remainderBytes);
+        memcpy(&outBytesPtr[readByteCount - remainderBytes - 1], &rhsBytesPtr[0], remainderBytes);
     }
     else 
     {
@@ -493,6 +493,132 @@ circular_buffer_read_bytes(const struct memory_allocation_key *bufKeyPtr, u64 re
     memory_unmap_alloc((void **)&bufPtr);
 
     *outBytesReadPtr = readByteCount;
+
+    return B32_TRUE;
+}
+
+b32
+circular_buffer_empty(const struct memory_allocation_key *bufKeyPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(bufKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    struct circular_buffer *bufPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(bufKeyPtr, (void **)&bufPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    bufPtr->bufferByteReadIndex = bufPtr->bufferByteWriteIndex = 0;
+
+    memory_unmap_alloc((void **)&bufPtr);
+
+    return B32_TRUE;
+}
+
+b32
+circular_buffer_shrink(const struct memory_allocation_key *bufKeyPtr, u64 byteSize)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(bufKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    // do not need to realloc, since the requested shrink size is 0
+    if (byteSize < 1)
+    {
+        return B32_TRUE;
+    }
+
+    struct circular_buffer *bufPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(bufKeyPtr, (void **)&bufPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (bufPtr->bufferByteCapacity <= byteSize)
+        {
+            memory_unmap_alloc((void **)&bufPtr);
+
+            return B32_FALSE;
+        }
+
+        const struct memory_allocation_key tempKey;
+
+        resultCode = memory_realloc(&bufPtr->bufferKey, memory_sizeof(&bufPtr->bufferKey) - 
+            byteSize, &tempKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&bufPtr);
+
+            return B32_FALSE;
+        }
+
+        memcpy((void *)&bufPtr->bufferKey, &tempKey, sizeof(struct memory_allocation_key));
+    }
+
+    bufPtr->bufferByteCapacity -= byteSize;
+    
+    bufPtr->bufferByteReadIndex = bufPtr->bufferByteWriteIndex = 0;
+
+    memory_unmap_alloc((void **)&bufPtr);
+
+    return B32_TRUE;
+}
+
+b32
+circular_buffer_grow(const struct memory_allocation_key *bufKeyPtr, u64 byteSize)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(bufKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    // do not need to realloc, since the requested shrink size is 0
+    if (byteSize < 1)
+    {
+        return B32_TRUE;
+    }
+
+    struct circular_buffer *bufPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(bufKeyPtr, (void **)&bufPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        const struct memory_allocation_key tempKey;
+
+        resultCode = memory_realloc(&bufPtr->bufferKey, memory_sizeof(&bufPtr->bufferKey) + 
+            byteSize, &tempKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&bufPtr);
+
+            return B32_FALSE;
+        }
+
+        memcpy((void *)&bufPtr->bufferKey, &tempKey, sizeof(struct memory_allocation_key));
+    }
+    
+    bufPtr->bufferByteCapacity += byteSize;
+
+    bufPtr->bufferByteReadIndex = bufPtr->bufferByteWriteIndex = 0;
+
+    memory_unmap_alloc((void **)&bufPtr);
 
     return B32_TRUE;
 }

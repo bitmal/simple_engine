@@ -74,8 +74,8 @@ struct physics_rigidbody
     b32 isKinematic;
     const struct memory_allocation_key forcesArenaKey;
     struct physics_rigidbody_constraint constraintArr[PHYSICS_RB_CONSTRAINT_TYPE_COUNT];
-    u64 prevRbIndex;
-    u64 nextRbIndex;
+    u64 prevRigidbodyIndex;
+    u64 nextRigidbodyIndex;
     b32 isActive;
 };
 
@@ -169,6 +169,616 @@ _physics_create_key_copy_func(struct basic_dict *dictPtr, void *keyPtr,
     memory_unmap_raw_allocation(&rawKeyKey, (void **)&dataPtr);
 
     memcpy((void *)outRawKeyKeyPtr, &rawKeyKey, sizeof(struct memory_raw_allocation_key));
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_free_material(const struct memory_allocation_key *physicsKeyPtr, physics_id materialId)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (materialId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_material *materialArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (materialId >= physicsPtr->materialCapacity)
+        {
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->materialArrKey, (void **)&materialArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    struct physics_material *materialPtr = &materialArrPtr[materialId - 1];
+
+    if (!materialPtr->isActive)
+    {
+        memory_unmap_alloc((void **)&materialArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_TRUE;
+    }
+
+    materialPtr->isActive = B32_FALSE;
+
+    if (physicsPtr->activeMaterialCount > 1)
+    {
+        materialArrPtr[materialPtr->prevMaterialIndex].nextMaterialIndex = materialPtr->nextMaterialIndex;
+        materialArrPtr[materialPtr->nextMaterialIndex].prevMaterialIndex = materialPtr->prevMaterialIndex;
+
+        if (materialId == (physicsPtr->activeMaterialHeadIndex + 1))
+        {
+            physicsPtr->activeMaterialHeadIndex = materialPtr->nextMaterialIndex;
+        }
+    }
+
+    --physicsPtr->activeMaterialCount;
+
+    if (physicsPtr->freeMaterialCount > 0)
+    {
+        materialPtr->prevMaterialIndex = materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex;
+        materialPtr->nextMaterialIndex = materialArrPtr[physicsPtr->freeMaterialHeadIndex].nextMaterialIndex;
+
+        materialArrPtr[materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex].nextMaterialIndex = materialId - 1;
+        materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex = materialId - 1;
+    }
+    else 
+    {
+        materialPtr->prevMaterialIndex = materialPtr->nextMaterialIndex = materialId - 1;
+    }
+
+    physicsPtr->freeMaterialHeadIndex = materialId - 1;
+
+    ++physicsPtr->freeMaterialCount;
+
+    memory_unmap_alloc((void **)&materialArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_activate_material(const struct memory_allocation_key *physicsKeyPtr, physics_id materialId)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (materialId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_material *materialArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (materialId > physicsPtr->materialCapacity)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->materialArrKey, (void **)&materialArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    struct physics_material *materialPtr = &materialArrPtr[materialId - 1];
+
+    if (materialPtr->isActive)
+    {
+        memory_unmap_alloc((void **)&materialArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_TRUE;
+    }
+
+    materialPtr->isActive = B32_TRUE;
+
+    if (physicsPtr->freeMaterialCount > 1)
+    {
+        materialArrPtr[materialPtr->prevMaterialIndex].nextMaterialIndex = materialPtr->nextMaterialIndex;
+        materialArrPtr[materialPtr->nextMaterialIndex].prevMaterialIndex = materialPtr->prevMaterialIndex;
+
+        if (materialId == (physicsPtr->freeMaterialHeadIndex + 1))
+        {
+            physicsPtr->freeMaterialHeadIndex = materialPtr->nextMaterialIndex;
+        }
+    }
+
+    --physicsPtr->freeMaterialCount;
+
+    if (physicsPtr->activeMaterialCount > 0)
+    {
+        materialPtr->prevMaterialIndex = materialArrPtr[physicsPtr->activeMaterialHeadIndex].prevMaterialIndex;
+        materialPtr->nextMaterialIndex = materialArrPtr[physicsPtr->activeMaterialHeadIndex].nextMaterialIndex;
+
+        materialArrPtr[materialArrPtr[physicsPtr->activeMaterialHeadIndex].prevMaterialIndex].nextMaterialIndex = materialId - 1;
+        materialArrPtr[physicsPtr->activeMaterialHeadIndex].prevMaterialIndex = materialId - 1;
+    }
+    else 
+    {
+        materialPtr->prevMaterialIndex = materialPtr->nextMaterialIndex = materialId - 1;
+    }
+
+    physicsPtr->activeMaterialHeadIndex = materialId - 1;
+
+    ++physicsPtr->activeMaterialCount;
+
+    memory_unmap_alloc((void **)&materialArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_get_free_material_index(const struct memory_allocation_key *physicsKeyPtr, u32 *outFreeMaterialIndex)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    if (physicsPtr->freeMaterialCount < 1)
+    {
+        return B32_FALSE;
+    }
+
+    *outFreeMaterialIndex = physicsPtr->freeMaterialHeadIndex;
+    
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_free_collider(const struct memory_allocation_key *physicsKeyPtr, physics_id colliderId)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (colliderId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_collider *colliderArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (colliderId > physicsPtr->colliderCapacity)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->colliderArrKey, (void **)&colliderArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    struct physics_collider *colliderPtr = &colliderArrPtr[colliderId - 1];
+
+    if (!colliderPtr->isActive)
+    {
+        memory_unmap_alloc((void **)&colliderArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_TRUE;
+    }
+
+    colliderPtr->isActive = B32_FALSE;
+
+    if (physicsPtr->activeMaterialCount > 1)
+    {
+        colliderArrPtr[colliderPtr->prevColliderIndex].nextColliderIndex = colliderPtr->nextColliderIndex;
+        colliderArrPtr[colliderPtr->nextColliderIndex].prevColliderIndex = colliderPtr->prevColliderIndex;
+
+        if (colliderId == (physicsPtr->activeColliderHeadIndex + 1))
+        {
+            physicsPtr->activeColliderHeadIndex = colliderPtr->nextColliderIndex;
+        }
+    }
+
+    --physicsPtr->activeColliderCount;
+
+    if (physicsPtr->freeColliderCount > 0)
+    {
+        colliderPtr->prevColliderIndex = colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex;
+        colliderPtr->nextColliderIndex = colliderArrPtr[physicsPtr->freeColliderHeadIndex].nextColliderIndex;
+
+        colliderArrPtr[colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex].nextColliderIndex = colliderId - 1;
+        colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex = colliderId - 1;
+    }
+    else 
+    {
+        colliderPtr->prevColliderIndex = colliderPtr->nextColliderIndex = colliderId - 1;
+    }
+
+    physicsPtr->freeColliderHeadIndex = colliderId - 1;
+
+    ++physicsPtr->freeColliderCount;
+
+    memory_unmap_alloc((void **)&colliderArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_activate_collider(const struct memory_allocation_key *physicsKeyPtr, physics_id colliderId)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (colliderId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_collider *colliderArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (colliderId > physicsPtr->colliderCapacity)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->colliderArrKey, (void **)&colliderArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    struct physics_collider *colliderPtr = &colliderArrPtr[colliderId - 1];
+
+    if (colliderPtr->isActive)
+    {
+        memory_unmap_alloc((void **)&colliderArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_TRUE;
+    }
+
+    colliderPtr->isActive = B32_TRUE;
+
+    if (physicsPtr->freeColliderCount > 1)
+    {
+        colliderArrPtr[colliderPtr->prevColliderIndex].nextColliderIndex = colliderPtr->nextColliderIndex;
+        colliderArrPtr[colliderPtr->nextColliderIndex].prevColliderIndex = colliderPtr->prevColliderIndex;
+
+        if (colliderId == (physicsPtr->freeColliderHeadIndex + 1))
+        {
+            physicsPtr->freeColliderHeadIndex = colliderPtr->nextColliderIndex;
+        }
+    }
+
+    --physicsPtr->freeColliderCount;
+
+    if (physicsPtr->activeColliderCount > 0)
+    {
+        colliderPtr->prevColliderIndex = colliderArrPtr[physicsPtr->activeColliderHeadIndex].prevColliderIndex;
+        colliderPtr->nextColliderIndex = colliderArrPtr[physicsPtr->activeColliderHeadIndex].nextColliderIndex;
+
+        colliderArrPtr[colliderArrPtr[physicsPtr->activeColliderHeadIndex].prevColliderIndex].nextColliderIndex = colliderId - 1;
+        colliderArrPtr[physicsPtr->activeColliderHeadIndex].prevColliderIndex = colliderId - 1;
+    }
+    else 
+    {
+        colliderPtr->prevColliderIndex = colliderPtr->nextColliderIndex = colliderId - 1;
+    }
+
+    physicsPtr->activeColliderHeadIndex = colliderId - 1;
+
+    ++physicsPtr->activeColliderCount;
+
+    memory_unmap_alloc((void **)&colliderArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_get_free_collider_index(const struct memory_allocation_key *physicsKeyPtr, u32 *outFreeColliderIndex)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    if (physicsPtr->freeColliderCount < 1)
+    {
+        return B32_FALSE;
+    }
+
+    *outFreeColliderIndex = physicsPtr->freeColliderHeadIndex;
+
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_free_rigidbody(const struct memory_allocation_key *physicsKeyPtr, physics_id rigidbodyId)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (rigidbodyId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (rigidbodyId > physicsPtr->rigidbodyCapacity)
+        {
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
+
+    if (!rigidbodyPtr->isActive)
+    {
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_TRUE;
+    }
+
+    rigidbodyPtr->isActive = B32_FALSE;
+
+    if (physicsPtr->activeRigidbodyCount > 1)
+    {
+        rigidbodyArrPtr[rigidbodyPtr->prevRigidbodyIndex].nextRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
+        rigidbodyArrPtr[rigidbodyPtr->nextRigidbodyIndex].prevRigidbodyIndex = rigidbodyPtr->prevRigidbodyIndex;
+
+        if (rigidbodyId == (physicsPtr->activeRigidbodyHeadIndex + 1))
+        {
+            physicsPtr->activeRigidbodyHeadIndex = rigidbodyPtr->nextRigidbodyIndex;
+        }
+    }
+
+    --physicsPtr->activeRigidbodyCount;
+
+    if (physicsPtr->freeRigidbodyCount > 0)
+    {
+        rigidbodyPtr->prevRigidbodyIndex = rigidbodyArrPtr[physicsPtr->freeRigidbodyHeadIndex].prevRigidbodyIndex;
+        rigidbodyPtr->nextRigidbodyIndex = rigidbodyArrPtr[physicsPtr->freeRigidbodyHeadIndex].nextRigidbodyIndex;
+
+        rigidbodyArrPtr[rigidbodyArrPtr[physicsPtr->freeRigidbodyHeadIndex].prevRigidbodyIndex].nextRigidbodyIndex = rigidbodyId - 1;
+        rigidbodyArrPtr[physicsPtr->freeRigidbodyHeadIndex].prevRigidbodyIndex = rigidbodyId - 1;
+    }
+    else 
+    {
+        rigidbodyPtr->prevRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex = rigidbodyId - 1;
+    }
+
+    physicsPtr->freeRigidbodyHeadIndex = rigidbodyId - 1;
+
+    ++physicsPtr->freeRigidbodyCount;
+
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_activate_rigidbody(const struct memory_allocation_key *physicsKeyPtr, physics_id rigidbodyId)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    if (rigidbodyId < 1)
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        if (rigidbodyId > physicsPtr->rigidbodyCapacity)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
+
+    if (rigidbodyPtr->isActive)
+    {
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_TRUE;
+    }
+
+    rigidbodyPtr->isActive = B32_TRUE;
+
+    if (physicsPtr->freeRigidbodyCount > 1)
+    {
+        rigidbodyArrPtr[rigidbodyPtr->prevRigidbodyIndex].nextRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
+        rigidbodyArrPtr[rigidbodyPtr->nextRigidbodyIndex].prevRigidbodyIndex = rigidbodyPtr->prevRigidbodyIndex;
+
+        if (rigidbodyId == (physicsPtr->freeRigidbodyHeadIndex + 1))
+        {
+            physicsPtr->freeRigidbodyHeadIndex = rigidbodyPtr->nextRigidbodyIndex;
+        }
+    }
+
+    --physicsPtr->freeColliderCount;
+
+    if (physicsPtr->activeColliderCount > 0)
+    {
+        rigidbodyPtr->prevRigidbodyIndex = rigidbodyArrPtr[physicsPtr->activeRigidbodyHeadIndex].prevRigidbodyIndex;
+        rigidbodyPtr->nextRigidbodyIndex = rigidbodyArrPtr[physicsPtr->activeRigidbodyHeadIndex].nextRigidbodyIndex;
+
+        rigidbodyArrPtr[rigidbodyArrPtr[physicsPtr->activeRigidbodyHeadIndex].prevRigidbodyIndex].nextRigidbodyIndex = rigidbodyId - 1;
+        rigidbodyArrPtr[physicsPtr->activeRigidbodyHeadIndex].prevRigidbodyIndex = rigidbodyId - 1;
+    }
+    else 
+    {
+        rigidbodyPtr->prevRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex = rigidbodyId - 1;
+    }
+
+    physicsPtr->activeRigidbodyHeadIndex = rigidbodyId - 1;
+
+    ++physicsPtr->activeRigidbodyCount;
+
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
+}
+
+static b32
+_physics_get_free_rigidbody_index(const struct memory_allocation_key *physicsKeyPtr, u32 *outFreeRigidbodyIndex)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    if (physicsPtr->freeRigidbodyCount < 1)
+    {
+        return B32_FALSE;
+    }
+
+    *outFreeRigidbodyIndex = physicsPtr->freeRigidbodyHeadIndex;
+
+    memory_unmap_alloc((void **)&physicsPtr);
 
     return B32_TRUE;
 }
@@ -588,7 +1198,19 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         return B32_FALSE;
     }
 
-    struct physics *physicsPtr;
+    physics_id materialId;
+    u32 materialIndex;
+
+    if (_physics_get_free_material_index(physicsKeyPtr, &materialIndex))
+    {
+        materialId = materialIndex - 1;
+
+        if (!_physics_activate_material(physicsKeyPtr, materialId))
+        {
+            return B32_FALSE;
+        }
+    }
+    else
     {
         memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
 
@@ -596,43 +1218,7 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         {
             return B32_FALSE;
         }
-    }
 
-    physics_id materialId;
-
-    if (physicsPtr->freeMaterialCount > 0)
-    {
-        struct physics_material *materialArrPtr;
-
-        memory_error_code resultCode = memory_map_alloc(&physicsPtr->materialArrKey, 
-        (void **)&materialArrPtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            memory_unmap_alloc((void **)&physicsPtr);
-
-            return B32_FALSE;
-        }
-
-        if (physicsPtr->freeMaterialCount > 1)
-        {
-            struct physics_material *headMaterialPtr = &materialArrPtr[physicsPtr->freeMaterialHeadIndex];
-            struct physics_material *tailMaterialPtr = &materialArrPtr[headMaterialPtr->prevMaterialIndex];
-            struct physics_material *nextMaterialPtr = &materialArrPtr[headMaterialPtr->nextMaterialIndex];
-
-            tailMaterialPtr->nextMaterialIndex = headMaterialPtr->nextMaterialIndex;
-            nextMaterialPtr->prevMaterialIndex = headMaterialPtr->prevMaterialIndex;
-
-        }
-
-        --physicsPtr->freeMaterialCount;
-        
-        materialId = physicsPtr->freeMaterialHeadIndex + 1;
-
-        physicsPtr->freeMaterialHeadIndex = headMaterialPtr->nextMaterialIndex;
-    }
-    else
-    {
         if (physicsPtr->materialCapacity > 0)
         {
             const struct memory_allocation_key tempKey;
@@ -667,11 +1253,11 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
                 u32 materialIndex = physicsPtr->materialCapacity + i;
 
                 materialArrPtr[materialIndex].id = ++g_MATERIAL_ALLOCATION_ID_COUNTER;
+                materialArrPtr[materialIndex].isActive = B32_FALSE;
 
                 if (i > 0)
                 {
                     materialArrPtr[materialIndex].prevMaterialIndex = materialIndex - 1;
-                    materialArrPtr[materialIndex].isActive = B32_FALSE;
                 }
 
                 if (i < (allocatedCount - 1))
@@ -682,11 +1268,11 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
             if (physicsPtr->freeMaterialCount > 0)
             {
-                materialArrPtr[physicsPtr->materialCapacity + 1].prevMaterialIndex = materialArrPtr[physicsPtr->freeColliderHeadIndex].prevMaterialIndex;
-                materialArrPtr[physicsPtr->materialCapacity + allocatedCount - 1].nextMaterialIndex = physicsPtr->freeColliderHeadIndex;
+                materialArrPtr[physicsPtr->materialCapacity].prevMaterialIndex = materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex;
+                materialArrPtr[physicsPtr->materialCapacity + allocatedCount - 1].nextMaterialIndex = physicsPtr->freeMaterialHeadIndex;
 
-                materialArrPtr[materialArrPtr[physicsPtr->freeColliderHeadIndex].prevMaterialIndex].nextMaterialIndex = physicsPtr->materialCapacity + 1;
-                materialArrPtr[physicsPtr->freeColliderHeadIndex].prevMaterialIndex = physicsPtr->materialCapacity + 1;
+                materialArrPtr[materialArrPtr[physicsPtr->freeColliderHeadIndex].prevMaterialIndex].nextMaterialIndex = physicsPtr->materialCapacity;
+                materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex = physicsPtr->materialCapacity;
             }
             else 
             {
@@ -696,11 +1282,20 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
             memory_unmap_alloc((void **)&materialArrPtr);
 
-            physicsPtr->freeMaterialHeadIndex = physicsPtr->materialCapacity + 1;
+            physicsPtr->freeMaterialHeadIndex = physicsPtr->materialCapacity;
 
             materialId = physicsPtr->materialCapacity + 1;
+            materialIndex = materialId - 1;
+
             physicsPtr->freeMaterialCount += allocatedCount - 1;
             physicsPtr->materialCapacity *= 2;
+
+            memory_unmap_alloc((void **)&physicsPtr);
+            
+            if (!(_physics_activate_material(physicsKeyPtr, materialId)))
+            {
+                return B32_FALSE;
+            }
         }
         else 
         {
@@ -731,119 +1326,55 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
             materialPtr->id = ++g_MATERIAL_ALLOCATION_ID_COUNTER;
             
             materialId = materialPtr->id;
+            materialIndex = materialPtr->id - 1;
 
             memory_unmap_alloc((void **)&materialPtr);
 
             ++physicsPtr->materialCapacity;
-        }
-    }
 
-    struct physics_material *materialArrPtr;
-    {
-        memory_error_code resultCode = memory_map_alloc(&physicsPtr->materialArrKey, (void **)&materialArrPtr);
-
-        if (resultCode != MEMORY_OK)
-        {
             memory_unmap_alloc((void **)&physicsPtr);
-
-            return B32_FALSE;
-        }
-    }
-
-    struct physics_material *materialPtr = &materialArrPtr[materialId - 1];
-    materialPtr->dragCoefficient = 0.f;
-    materialPtr->frictionCoefficient = 0.f;
-    materialPtr->isActive = B32_TRUE;
-
-    if (physicsPtr->activeMaterialCount > 0)
-    {
-        materialPtr->prevMaterialIndex = materialArrPtr[physicsPtr->activeColliderHeadIndex].prevMaterialIndex;
-        materialPtr->nextMaterialIndex = physicsPtr->activeMaterialHeadIndex;
-
-        materialArrPtr[materialArrPtr[physicsPtr->activeMaterialHeadIndex].prevMaterialIndex].nextMaterialIndex = materialId - 1;
-        materialArrPtr[physicsPtr->activeMaterialHeadIndex].prevMaterialIndex = materialId - 1;
-    }
-    else 
-    {
-        materialPtr->prevMaterialIndex = materialPtr->nextMaterialIndex = materialId - 1;
-    }
-
-    physicsPtr->activeMaterialHeadIndex = materialId - 1;
-
-    ++physicsPtr->activeMaterialCount;
-
-    memory_unmap_alloc((void **)&materialArrPtr);
-    
-    physics_id colliderId;
-
-    if (physicsPtr->freeColliderCount > 0)
-    {
-        struct physics_collider *colliderArrPtr;
-
-        memory_error_code resultCode = memory_map_alloc(&physicsPtr->colliderArrKey, 
-        (void **)&colliderArrPtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            resultCode = memory_map_alloc(&physicsPtr->materialArrKey, (void **)&materialArrPtr);
-
-            if (resultCode != MEMORY_OK)
+            
+            if (!(_physics_activate_material(physicsKeyPtr, materialId)))
             {
-                memory_unmap_alloc((void **)&physicsPtr);
-
                 return B32_FALSE;
             }
+        }
+    }
 
-            if (physicsPtr->activeMaterialCount > 1)
-            {
-                materialArrPtr[materialArrPtr[materialId - 1].nextMaterialIndex].prevMaterialIndex = materialArrPtr[materialId - 1].prevMaterialIndex;
-                materialArrPtr[materialArrPtr[materialId - 1].prevMaterialIndex].nextMaterialIndex = materialArrPtr[materialId - 1].nextMaterialIndex;
+    memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
 
-                physicsPtr->activeMaterialHeadIndex = materialArrPtr[materialId - 1].nextMaterialIndex;
-            }
+    memory_set_alloc_offset_width(&physicsPtr->materialArrKey, sizeof(struct physics_material)*materialIndex, 
+        sizeof(struct physics_material), '\0');
 
-            --physicsPtr->activeMaterialCount;
+    memory_unmap_alloc((void **)&physicsPtr);
 
-            materialArrPtr[materialId - 1].isActive = B32_FALSE;
+    physics_id colliderId;
+    u32 colliderIndex;
 
-            if (physicsPtr->freeMaterialCount > 0)
-            {
-                materialArrPtr[materialId - 1].prevMaterialIndex = materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex;
-                materialArrPtr[materialId - 1].nexMaterialIndex = physicsPtr->freeMaterialHeadIndex;
+    if ((_physics_get_free_collider_index(physicsKeyPtr, &colliderIndex)))
+    {
+        colliderId = colliderIndex + 1;
 
-                materialArrPtr[materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialIndex].nextMaterialId = materialId - 1;
-                materialArrPtr[physicsPtr->freeMaterialHeadIndex].prevMaterialId = materialId - 1;
-            }
+        if (!(_physics_activate_collider(physicsKeyPtr, colliderId)))
+        {
+            _physics_free_material(physicsKeyPtr, materialId);
 
-            physicsPtr->freeMaterialHeadIndex = materialId - 1;
+            return B32_FALSE;
+        }
+    }
+    else 
+    {
+        struct physics *physicsPtr;
 
-            ++physicsPtr->freeMaterialCount;
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
 
-            memory_unmap_alloc((void **)&materialArrPtr);
-            memory_unmap_alloc((void **)&physicsPtr);
+        if (resultCode != MEMORY_OK)
+        {
+            _physics_free_material(physicsKeyPtr, materialId);
 
             return B32_FALSE;
         }
 
-        if (physicsPtr->freeColliderCount > 1)
-        {
-            colliderArrPtr[colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex].nextColliderIndex = 
-                colliderArrPtr[physicsPtr->freeColliderHeadIndex].nextColliderIndex;
-
-            colliderArrPtr[colliderArrPtr[physicsPtr->freeColliderHeadIndex].nextColliderIndex].prevColliderIndex =
-                colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex;
-        }
-
-        colliderId = physicsPtr->freeColliderHeadIndex + 1;
-        
-        physicsPtr->freeColliderHeadIndex = colliderArrPtr[physicsPtr->freeColliderHeadIndex].nextColliderIndex;
-        
-        memory_unmap_alloc((void **)&colliderArrPtr);
-        
-        --physicsPtr->freeColliderCount;
-    }
-    else 
-    {
         if (physicsPtr->colliderCapacity > 0)
         {
             const struct memory_allocation_key tempKey;
@@ -853,14 +1384,67 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
             if (resultCode != MEMORY_OK)
             {
-                memory_unmap_alloc((void **)&physicsPtr);
+                _physics_free_material(physicsKeyPtr, materialId);
 
+                return B32_FALSE;
+            }
+            
+            u32 allocatedCount = physicsPtr->colliderCapacity;
+
+            for (u32 i = 0; i < allocatedCount; ++i)
+            {
+                u32 colliderIndex = physicsPtr->colliderCapacity + i;
+
+                colliderArrPtr[colliderIndex].id = ++g_COLLIDER_ALLOCATION_ID_COUNTER;
+                colliderArrPtr[colliderIndex].isActive = B32_FALSE;
+
+                if (i > 0)
+                {
+                    colliderArrPtr[colliderIndex].prevColliderIndex = colliderIndex - 1;
+                }
+
+                if (i < (allocatedCount - 1))
+                {
+                    colliderArrPtr[colliderIndex].nextColliderIndex = colliderIndex + 1;
+                }
+            }
+
+            if (physicsPtr->freeColliderCount > 0)
+            {
+                colliderArrPtr[physicsPtr->colliderCapacity].prevColliderIndex = colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex;
+                colliderArrPtr[physicsPtr->colliderCapacity + allocatedCount - 1].nextColliderIndex = physicsPtr->freeColliderHeadIndex;
+
+                colliderArrPtr[colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex].nextColliderIndex = physicsPtr->colliderCapacity;
+                colliderArrPtr[physicsPtr->freeColliderHeadIndex].prevColliderIndex = physicsPtr->colliderCapacity;
+            }
+            else 
+            {
+                colliderArrPtr[physicsPtr->colliderCapacity].prevColliderIndex = physicsPtr->colliderCapacity + allocatedCount - 1;
+                colliderArrPtr[physicsPtr->colliderCapacity].nextColliderIndex = physicsPtr->colliderCapacity;
+            }
+
+            memory_unmap_alloc((void **)&colliderArrPtr);
+
+            physicsPtr->freeColliderHeadIndex = physicsPtr->colliderCapacity;
+
+            colliderId = physicsPtr->colliderCapacity + 1;
+            colliderIndex = colliderId - 1;
+
+            physicsPtr->freeMaterialCount += allocatedCount - 1;
+            physicsPtr->materialCapacity *= 2;
+
+            memory_unmap_alloc((void **)&physicsPtr);
+            
+            if (!(_physics_activate_collider(physicsKeyPtr, materialId)))
+            {
                 return B32_FALSE;
             }
 
             physicsPtr->colliderCapacity *= 2;
 
             memcpy((void *)&physicsPtr->colliderArrKey, &tempKey, sizeof(struct memory_allocation_key));
+
+            memory_unmap_alloc((void **)&physicsPtr);
         }
         else 
         {
@@ -870,16 +1454,40 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
             if (resultCode != MEMORY_OK)
             {
                 memory_unmap_alloc((void **)&physicsPtr);
-
-                --physicsPtr->materialCount;
+                
+                _physics_free_material(physicsKeyPtr, materialId);
 
                 return B32_FALSE;
             }
-
+            
             ++physicsPtr->colliderCapacity;
+
+            memory_unmap_alloc((void **)&physicsPtr);
+            
+            if (!(_physics_activate_collider(physicsKeyPtr, materialId)))
+            {
+                _physics_free_collider(physicsKeyPtr, colliderId);
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
         }
 
         colliderId = ++g_COLLIDER_ALLOCATION_ID_COUNTER;
+        colliderIndex = colliderId - 1;
+    }
+
+    struct physics *physicsPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
+
+            return B32_FALSE;
+        }
     }
 
     struct physics_collider *colliderArrPtr;
@@ -890,8 +1498,9 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         if (resultCode != MEMORY_OK)
         {
             memory_unmap_alloc((void **)&physicsPtr);
-
-            --physicsPtr->materialCount;
+            
+            _physics_free_collider(physicsKeyPtr, colliderId);
+            _physics_free_material(physicsKeyPtr, materialId);
 
             return B32_FALSE;
         }
@@ -906,66 +1515,7 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
     colliderPtr->isActive = B32_TRUE;
     //colliderPtr->isTrigger = B32_TRUE;
 
-    if (physicsPtr->activeColliderCount > 0)
-    {
-        colliderArrPtr[colliderId - 1].prevColliderIndex = colliderArrPtr[physicsPtr->activeColliderHeadIndex].prevColliderIndex;
-        colliderArrPtr[colliderId - 1].nextColliderIndex = physicsPtr->activeColliderHeadIndex;
-
-        colliderArrPtr[colliderArrPtr[physicsPtr->activeColliderHeadIndex].prevColliderIndex].nextColliderIndex = colliderId - 1;
-        colliderArrPtr[physicsPtr->activeColliderHeadIndex].prevColliderIndex = colliderId - 1;
-    }
-    else 
-    {
-        colliderPtr->prevColliderIndex = colliderPtr->nextColliderIndex = colliderId - 1;
-    }
-
-    physicsPtr->activeColliderHeadIndex = colliderId - 1;
-    
-    ++physicsPtr->activeColliderCount;
-
     memory_unmap_alloc((void **)&colliderArrPtr);
-    
-    physics_id rbId = physicsPtr->rigidbodyCount + 1;
-
-    if (physicsPtr->rigidbodyCapacity == physicsPtr->rigidbodyCount)
-    {
-        if (physicsPtr->rigidbodyCapacity > 0)
-        {
-            const struct memory_allocation_key tempKey;
-
-            memory_error_code resultCode = memory_realloc(&physicsPtr->rigidbodyArrKey, sizeof(struct physics_rigidbody)*
-                physicsPtr->rigidbodyCapacity*2, &tempKey);
-
-            if (resultCode != MEMORY_OK)
-            {
-                --physicsPtr->colliderCount;
-                --physicsPtr->materialCount;
-
-                memory_unmap_alloc((void **)&physicsPtr);
-
-                return B32_FALSE;
-            }
-
-            physicsPtr->rigidbodyCapacity *= 2;
-        }
-        else 
-        {
-            memory_error_code resultCode = memory_alloc(&physicsPtr->memoryHeapPageKey, 
-            sizeof(struct physics_rigidbody), NULL, &physicsPtr->rigidbodyArrKey);
-
-            if (resultCode != MEMORY_OK)
-            {
-                --physicsPtr->colliderCount;
-                --physicsPtr->materialCount;
-
-                memory_unmap_alloc((void **)&physicsPtr);
-
-                return B32_FALSE;
-            }
-
-            ++physicsPtr->rigidbodyCapacity;
-        }
-    }
 
     struct physics_rigidbody *rbArrPtr;
     {
