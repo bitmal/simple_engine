@@ -2397,8 +2397,6 @@ physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timeste
 
         if (physicsPtr->activeRigidbodyCount > 1)
         {
-            u32 rhsCounter = 0;
-
             for (u32 activeRhsRigidbodyIndex = activeHeadRigidbodyIndex;;)
             {
                 resultCode = memory_map_alloc(physicsKeyPtr, 
@@ -2460,6 +2458,15 @@ physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timeste
                         basic_dict_push_data(&physicsPtr->collisionDictKey, &key, NULL, 
                         NULL, NULL);
                     }
+
+                    struct physics_collision collData;
+
+                    collData.id = ++g_COLLISION_ID_COUNTER;
+                    collData.rbLhsId = rigidbodyId;
+                    collData.rbRhsId = rhsRigidbodyId;
+
+                    circular_buffer_write_bytes(&physicsPtr->collisionArenaKey, sizeof(struct physics_collision), 
+                    (void *)&collData);
 
                     memory_unmap_alloc((void **)&physicsPtr);
                 }
@@ -2529,12 +2536,14 @@ physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timeste
 
         circular_buffer_reset(&rigidbodyPtr->forcesArenaKey);
 
+        u32 nextRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
+
         memory_unmap_alloc((void **)&rigidbodyArrPtr);
         memory_unmap_alloc((void **)&physicsPtr);
 
-        if (rigidbodyPtr->nextRigidbodyIndex != physicsPtr->activeRigidbodyHeadIndex)
+        if (rigidbodyPtr->nextRigidbodyIndex != activeHeadRigidbodyIndex)
         {
-            activeRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
+            activeLhsRigidbodyIndex = nextRigidbodyIndex;
         }
     }
 
@@ -2543,8 +2552,6 @@ physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timeste
     // TODO: apply forces
 
     // TODO: apply friction and drag
-
-    memory_unmap_alloc((void **)&rigidbodyArrPtr);
     memory_unmap_alloc((void **)&physicsPtr);
 
     return B32_TRUE;
