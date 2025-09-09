@@ -5,6 +5,7 @@
 #include "basic_dict.h"
 #include "types.h"
 #include "utils.h"
+#include "basic_list.h"
 #include "vec4.h"
 #include "circular_buffer.h"
 
@@ -27,7 +28,7 @@ struct physics_collider
 
 struct physics_collision
 {
-    physics_wide_id wideId;
+    physics_id id;
     physics_id rbLhsId;
     physics_id rbRhsId;
 };
@@ -49,6 +50,13 @@ struct physics_force
     real32 magnitude;
     real32 startTimestamp;
     real32 duration;
+    b32 isMuted;
+};
+
+struct physics_force_object
+{
+    physics_id rigidbodyId;
+    struct physics_force forceData;
 };
 
 struct physics_rigidbody_constraint
@@ -112,6 +120,11 @@ struct physics
     u32 freeRigidbodyHeadIndex;
     u32 activeRigidbodyCount;
     u32 activeRigidbodyHeadIndex;
+    const struct memory_allocation_key activeForceListKey;
+    const struct memory_allocation_key freeForceListKey;
+    u32 activeForceCount;
+    u32 freeForceCount;
+    const struct memory_allocation_key forceDictKey;
     const struct memory_allocation_key physicsLogKey;
 };
 
@@ -164,6 +177,80 @@ _physics_create_key_copy_func(struct basic_dict *dictPtr, void *keyPtr,
     }
 
     memcpy(dataPtr, keyPtr, sizeof(u64));
+
+    memory_unmap_raw_allocation(&rawKeyKey, (void **)&dataPtr);
+
+    memcpy((void *)outRawKeyKeyPtr, &rawKeyKey, sizeof(struct memory_raw_allocation_key));
+
+    return B32_TRUE;
+}
+
+b32
+_physics_force_hash_func(struct basic_dict *dictPtr, void *keyPtr, utils_hash *outHashPtr)
+{
+    if (!dictPtr)
+    {
+        if (outHashPtr)
+        {
+            *outHashPtr = 0;
+        }
+
+        return B32_FALSE;
+    }
+
+    if (!keyPtr)
+    {
+        if (outHashPtr)
+        {
+            *outHashPtr = 0;
+        }
+
+        return B32_FALSE;
+    }
+
+    if (!outHashPtr)
+    {
+        return B32_FALSE;
+    }
+
+    i32 key = *(i32 *)keyPtr;
+
+    key = ~key + (key << 15); // key = (key << 15) - key - 1;
+    key = key ^ (key >> 12);
+    key = key + (key << 2);
+    key = key ^ (key >> 4);
+    key = key * 2057; // key = (key + (key << 3)) + (key << 11);
+    key = key ^ (key >> 16);
+
+    *outHashPtr = (u64)(((real64)key/INT32_MAX)*(real64)(UINT64_MAX - 1)) + 1;
+
+    return B32_TRUE;
+}
+
+b32
+_physics_force_key_copy_func(struct basic_dict *dictPtr, void *keyPtr, 
+    const struct memory_raw_allocation_key *outRawKeyKeyPtr)
+{
+    const struct memory_raw_allocation_key rawKeyKey;
+    u64 *dataPtr;
+    {
+        memory_error_code resultCode = memory_raw_alloc(&rawKeyKey, 
+        sizeof(physics_id));
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_raw_allocation(&rawKeyKey, (void **)&dataPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_raw_free(&rawKeyKey);
+        }
+    }
+
+    memcpy(dataPtr, keyPtr, sizeof(physics_id));
 
     memory_unmap_raw_allocation(&rawKeyKey, (void **)&dataPtr);
 
@@ -791,197 +878,175 @@ _physics_rigidbody_constraint_hash_func(const struct basic_dict *dict, const voi
 }
 
 static b32
-_physics_rigidbody_collider_is_overlap(struct physics *context, struct physics_rigidbody *lhs, struct physics_rigidbody *rhs)
+_physics_rigidbody_collider_is_overlap(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id lhsRigidbodyId, physics_id rhsRigidbodyId, b32 *outIsOverlap)
 {
-    assert(lhs->collider > PHYSICS_NULL_ID && lhs->collider < context->colliderCount);
-    assert(rhs->collider > PHYSICS_NULL_ID && rhs->collider < context->colliderCount);
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
 
-    struct physics_collider *lhsColl = &context->colliders[lhs->collider];
-    struct physics_collider *rhsColl = &context->colliders[rhs->collider];
+    if (!outIsOverlap)
+    {
+        return B32_FALSE;
+    }
 
-    b32 result = (
-        ((lhs->position[0]+lhsColl->bounds.left <= rhs->position[0]+rhsColl->bounds.right &&
-         lhs->position[1]+lhsColl->bounds.top >= rhs->position[1]+rhsColl->bounds.bottom) &&
-        (lhs->position[0]+lhsColl->bounds.left >= rhs->position[0]+rhsColl->bounds.left &&
-         lhs->position[1]+lhsColl->bounds.top <= rhs->position[1]+rhsColl->bounds.top)) ||
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
+    struct physics_collider *colliderArrPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
 
-        ((lhs->position[0]+lhsColl->bounds.left <= rhs->position[0]+rhsColl->bounds.right &&
-         lhs->position[1]+lhsColl->bounds.bottom <= rhs->position[1]+rhsColl->bounds.top) &&
-        (lhs->position[0]+lhsColl->bounds.left >= rhs->position[0]+rhsColl->bounds.left &&
-         lhs->position[1]+lhsColl->bounds.bottom >= rhs->position[1]+rhsColl->bounds.bottom)) ||
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
 
-        ((lhs->position[0]+lhsColl->bounds.right >= rhs->position[0]+rhsColl->bounds.left &&
-         lhs->position[1]+lhsColl->bounds.bottom <= rhs->position[1]+rhsColl->bounds.top) &&
-        (lhs->position[0]+lhsColl->bounds.right <= rhs->position[0]+rhsColl->bounds.right &&
-         lhs->position[1]+lhsColl->bounds.bottom >= rhs->position[1]+rhsColl->bounds.bottom)) ||
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+        (void **)&rigidbodyArrPtr);
 
-        ((lhs->position[0]+lhsColl->bounds.right >= rhs->position[0]+rhsColl->bounds.left &&
-         lhs->position[1]+lhsColl->bounds.top >= rhs->position[1]+rhsColl->bounds.bottom) &&
-        (lhs->position[0]+lhsColl->bounds.right <= rhs->position[0]+rhsColl->bounds.right &&
-         lhs->position[1]+lhsColl->bounds.top <= rhs->position[1]+rhsColl->bounds.top)) ||
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
         
-        (lhs->position[0]+lhsColl->bounds.left < rhs->position[0]+rhsColl->bounds.left &&
-         lhs->position[1]+lhsColl->bounds.top > rhs->position[1]+rhsColl->bounds.top &&
-         lhs->position[0]+lhsColl->bounds.right > rhs->position[0]+rhsColl->bounds.right &&
-         lhs->position[1]+lhsColl->bounds.bottom < rhs->position[1]+rhsColl->bounds.bottom));
+        resultCode = memory_map_alloc(&physicsPtr->colliderArrKey, 
+        (void **)&colliderArrPtr);
 
-         return result;
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&rigidbodyArrPtr);
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    struct physics_rigidbody *lhsRigidbodyPtr = &rigidbodyArrPtr[lhsRigidbodyId - 1];
+    struct physics_rigidbody *rhsRigidbodyPtr = &rigidbodyArrPtr[rhsRigidbodyId - 1];
+
+    struct physics_collider *lhsColliderPtr = &colliderArrPtr[lhsRigidbodyPtr->collider - 1];
+    struct physics_collider *rhsColliderPtr = &colliderArrPtr[rhsRigidbodyPtr->collider - 1];
+
+    *outIsOverlap = (
+        ((lhsRigidbodyPtr->position[0]+lhsColliderPtr->bounds.left <= rhsRigidbodyPtr->position[0]+
+        rhsColliderPtr->bounds.right && lhsRigidbodyPtr->position[1]+
+        lhsColliderPtr->bounds.top >= rhsRigidbodyPtr->position[1]+rhsColliderPtr->bounds.bottom) &&
+        (lhsRigidbodyPtr->position[0]+lhsColliderPtr->bounds.left >= rhsRigidbodyPtr->position[0]+
+        rhsColliderPtr->bounds.left && lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.top <= 
+        rhsRigidbodyPtr->position[1]+rhsColliderPtr->bounds.top)) ||
+
+        ((lhsRigidbodyPtr->position[0]+lhsColliderPtr->bounds.left <= rhsRigidbodyPtr->position[0]+
+        rhsColliderPtr->bounds.right && lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.bottom <= 
+        rhsRigidbodyPtr->position[1]+ rhsColliderPtr->bounds.top) && (lhsRigidbodyPtr->position[0]+
+        lhsColliderPtr->bounds.left >= rhsRigidbodyPtr->position[0]+rhsColliderPtr->bounds.left &&
+        lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.bottom >= rhsRigidbodyPtr->position[1]+
+        rhsColliderPtr->bounds.bottom)) ||
+
+        ((lhsRigidbodyPtr->position[0]+lhsColliderPtr->bounds.right >= rhsRigidbodyPtr->position[0]+
+        rhsColliderPtr->bounds.left &&
+         lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.bottom <= rhsRigidbodyPtr->position[1]+
+        rhsColliderPtr->bounds.top) &&
+        (lhsRigidbodyPtr->position[0]+lhsColliderPtr->bounds.right <= rhsRigidbodyPtr->position[0]+
+        rhsColliderPtr->bounds.right && lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.bottom >= 
+        rhsRigidbodyPtr->position[1]+ rhsColliderPtr->bounds.bottom)) ||
+
+        ((lhsRigidbodyPtr->position[0]+lhsColliderPtr->bounds.right >= rhsRigidbodyPtr->position[0]+
+        rhsColliderPtr->bounds.left && lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.top >= 
+        rhsRigidbodyPtr->position[1]+rhsColliderPtr->bounds.bottom) && (lhsRigidbodyPtr->position[0]+
+        lhsColliderPtr->bounds.right <= rhsRigidbodyPtr->position[0]+rhsColliderPtr->bounds.right &&
+         lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.top <= rhsRigidbodyPtr->position[1]+
+        rhsColliderPtr->bounds.top)) ||
+        
+        (lhsRigidbodyPtr->position[0]+lhsColliderPtr->bounds.left < rhsRigidbodyPtr->position[0]+
+        rhsColliderPtr->bounds.left && lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.top > 
+        rhsRigidbodyPtr->position[1]+rhsColliderPtr->bounds.top && lhsRigidbodyPtr->position[0]+
+        lhsColliderPtr->bounds.right > rhsRigidbodyPtr->position[0]+rhsColliderPtr->bounds.right && 
+        lhsRigidbodyPtr->position[1]+lhsColliderPtr->bounds.bottom < rhsRigidbodyPtr->position[1]+
+        rhsColliderPtr->bounds.bottom));
+
+    memory_unmap_alloc((void **)&colliderArrPtr);
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
 }
 
-static physics_id
-_physics_rigidbody_alloc_force(struct physics *context, physics_id rigidbodyId)
+static b32
+_physics_rigidbody_alloc_force(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id rigidbodyId, real32 direction[3], real32 magnitude, real32 duration)
 {
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[rigidbodyId];
-
-    i32 forceIndex = rbPtr->forceCapacity;
-
-    if (rbPtr->forceCapacity > 0)
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
     {
-        rbPtr->forceArr = (struct physics_force *)memory_realloc(context->memoryContext, rbPtr->forceArr, sizeof(struct physics_force)*
-            ++rbPtr->forceCapacity);
-    }
-    else 
-    {
-        rbPtr->forceArr = (struct physics_force *)memory_alloc(context->memoryContext, sizeof(struct physics_force)*
-            ++rbPtr->forceCapacity);
+        return B32_FALSE;
     }
 
-    printf("force attempted to allocate: %d\n", rigidbodyId);
-
-    if (!rbPtr->forceArr)
+    struct physics *physicsPtr;
+    struct physics_rigidbody *rigidbodyArrPtr;
     {
-        fprintf(stderr, "force failed to allocate: %d\n", rigidbodyId);
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
 
-        return PHYSICS_NULL_ID;
-    }
-
-    struct physics_force *forcePtr = &rbPtr->forceArr[forceIndex];
-    memset(forcePtr, (char)0, sizeof(struct physics_force));
-
-    forcePtr->id = (physics_id)forceIndex;
-    forcePtr->allocationTimestamp = context->timeSinceStart;
-
-    forcePtr->allocationId = g_FORCE_ALLOCATION_ID_COUNTER++;
-    
-    return forcePtr->id;
-}
-
-static void
-_physics_rigidbody_free_force_id(struct physics *context, physics_id rigidbodyId, struct physics_force_id *forceIdPtr)
-{
-    assert(rigidbodyId != PHYSICS_NULL_ID);
-    assert(forceIdPtr);
-
-    if (!forceIdPtr->isActive)
-    {
-        char messageBuffer[512];
-        sprintf(messageBuffer, "_physics_rigidbody_free_force_id: Error freeing force id '%d'. Id is already inactive.", (i32)forceIdPtr->id);
-        
-        physics_log_queue_message(context, messageBuffer, 1);
-
-        return;
-    }
-
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[(i32)rigidbodyId];
-    
-    forceIdPtr->isActive = B32_FALSE;
-
-    forceIdPtr->prev->next = forceIdPtr->next;
-    forceIdPtr->next->prev = forceIdPtr->prev;
-
-    if (forceIdPtr == rbPtr->activeForceIds)
-    {
-        if (rbPtr->activeForceIdCount > 1)
+        if (resultCode != MEMORY_OK)
         {
-            rbPtr->activeForceIds = rbPtr->activeForceIds->next;
+            return B32_FALSE;
         }
-        else 
+
+        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+        (void **)&rigidbodyArrPtr);
+
+        if (resultCode != MEMORY_OK)
         {
-            rbPtr->activeForceIds = NULL;
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
         }
     }
 
-    --rbPtr->activeForceIdCount;
+    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
 
-    if (rbPtr->freeForceIdCount > 0)
     {
-        rbPtr->freeForceIds->prev->next = forceIdPtr;
+        b32 isForcesArenaFull;
 
-        forceIdPtr->prev = rbPtr->freeForceIds->prev;
-        forceIdPtr->next = rbPtr->freeForceIds;
-    }
-    else 
-    {
-        forceIdPtr->prev = forceIdPtr->next = forceIdPtr;
-    }
-
-    rbPtr->freeForceIds = forceIdPtr;
-    ++rbPtr->freeForceIdCount;
-}
-
-static struct physics_force_id *
-_physics_rigidbody_alloc_force_id(struct physics *context, physics_id rigidbodyId)
-{
-    assert(rigidbodyId != PHYSICS_NULL_ID);
-    
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[rigidbodyId];
-
-    struct physics_force_id *forceIdPtr;
-
-    if (rbPtr->freeForceIdCount > 0)
-    {
-        forceIdPtr = rbPtr->freeForceIds;
-
-        assert(rbPtr->freeForceIds);
-
-        if (rbPtr->freeForceIds->next != rbPtr->freeForceIds)
+        if (!(circular_buffer_is_full(&rigidbodyPtr->forcesArenaKey, 
+        &isForcesArenaFull)))
         {
-            rbPtr->freeForceIds->next->prev = rbPtr->freeForceIds->prev;
-            rbPtr->freeForceIds->prev->next = rbPtr->freeForceIds->next;
-            rbPtr->freeForceIds = rbPtr->freeForceIds->next;
+            memory_unmap_alloc((void **)&rigidbodyArrPtr);
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
         }
 
-        forceIdPtr->isActive = B32_TRUE;
-
-        --rbPtr->freeForceIdCount;
-    }
-    else 
-    {
-        forceIdPtr = (struct physics_force_id *)memory_alloc(context->memoryContext, sizeof(struct physics_force_id));
-
-        assert(forceIdPtr);
-
-        if (!forceIdPtr)
+        if (isForcesArenaFull)
         {
-            return NULL;
+            memory_unmap_alloc((void **)&rigidbodyArrPtr);
+            memory_unmap_alloc((void **)&physicsPtr);
+
+            return B32_FALSE;
         }
-
-        forceIdPtr->id = (physics_id)_physics_rigidbody_alloc_force(context, rigidbodyId);
-
-        assert(forceIdPtr->id != PHYSICS_NULL_ID);
-        
-        forceIdPtr->isActive = B32_TRUE;
-        forceIdPtr->allocationId = g_FORCE_ID_ALLOCATION_ID_COUNTER++;
     }
 
-    if (rbPtr->activeForceIdCount > 0)
-    {
-        assert(rbPtr->activeForceIds);
+    struct physics_force force;
 
-        rbPtr->activeForceIds->prev->next = forceIdPtr;
+    force.direction[0] = direction[0];
+    force.direction[1] = direction[1];
+    force.direction[2] = direction[2];
 
-        forceIdPtr->prev = rbPtr->activeForceIds->prev;
-        forceIdPtr->next = rbPtr->activeForceIds;
-    }
-    else 
-    {
-        forceIdPtr->prev = forceIdPtr->next = forceIdPtr;
-    }
-    
-    rbPtr->activeForceIds = forceIdPtr;
-    ++rbPtr->activeForceIdCount;
+    force.magnitude = magnitude;
+    force.duration = duration;
+    force.id = ++g_FORCE_ALLOCATION_ID_COUNTER;
+    force.startTimestamp = (real32)utils_get_elapsed_ms()/1000.f;
 
-    return forceIdPtr;
+    circular_buffer_write_bytes(&rigidbodyPtr->forcesArenaKey, 
+    sizeof(struct physics_force), (void *)&force);
+
+    memory_unmap_alloc((void **)rigidbodyArrPtr);
+    memory_unmap_alloc((void **)physicsPtr);
+
+    return B32_TRUE;
 }
 
 static void
@@ -1092,6 +1157,41 @@ physics_init(const struct memory_context_key *memoryKeyPtr,
     physicsPtr->gravity[1] = PHYSICS_DEFAULT_GRAVITY_Y;
     physicsPtr->gravity[2] = PHYSICS_DEFAULT_GRAVITY_Z;
     physicsPtr->isGravity = B32_TRUE;
+
+    keySize = sizeof(physics_id);
+
+    if (!(basic_dict_create(&heapPage, &_physics_force_hash_func, 
+        &_physics_force_key_copy_func, (
+            utils_generate_next_prime_number(100)), &keySize, 
+        &physicsKey, &physicsPtr->forceDictKey)))
+    {
+        memory_unmap_alloc((void **)&physicsPtr);
+        
+        memory_free_page(&heapPage);
+        memory_free_page(&contextPage);
+
+        return B32_FALSE;
+    }
+
+    if (!(basic_list_create(&heapPage, &physicsPtr->activeForceListKey)))
+    {
+        memory_unmap_alloc((void **)&physicsPtr);
+        
+        memory_free_page(&heapPage);
+        memory_free_page(&contextPage);
+
+        return B32_FALSE;
+    }
+    
+    if (!(basic_list_create(&heapPage, &physicsPtr->freeForceListKey)))
+    {
+        memory_unmap_alloc((void **)&physicsPtr);
+        
+        memory_free_page(&heapPage);
+        memory_free_page(&contextPage);
+
+        return B32_FALSE;
+    }
 
     if (!(circular_buffer_create(&heapPage, sizeof(struct physics_collision)*
         PHYSICS_COLLISION_ARENA_BASE_LENGTH, &physicsPtr->collisionArenaKey)))
@@ -1370,6 +1470,7 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         memory_unmap_alloc((void **)&physicsPtr);
     }
 
+    struct physics_collider *colliderArrPtr;
     physics_id colliderId;
     u32 colliderIndex;
 
@@ -1406,6 +1507,8 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
 
             if (resultCode != MEMORY_OK)
             {
+                memory_unmap_alloc((void **)&physicsPtr);
+
                 _physics_free_material(physicsKeyPtr, materialId);
 
                 return B32_FALSE;
@@ -1416,6 +1519,18 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
             memory_set_alloc_offset_width(&tempKey, 
             sizeof(struct physics_collider)*physicsPtr->colliderCapacity, 
             sizeof(struct physics_collider)*allocatedCount, '\0');
+
+            resultCode = memory_map_alloc(&tempKey, 
+            (void **)&colliderArrPtr);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&physicsPtr);
+
+                _physics_free_material(physicsKeyPtr, materialId);
+
+                return B32_FALSE;
+            }
 
             for (u32 i = 0; i < allocatedCount; ++i)
             {
@@ -1511,7 +1626,6 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         colliderIndex = colliderId - 1;
     }
 
-    struct physics *physicsPtr;
     {
         memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, (void **)&physicsPtr);
 
@@ -1524,7 +1638,6 @@ physics_create_rigidbody(const struct memory_allocation_key *physicsKeyPtr, phys
         }
     }
 
-    struct physics_collider *colliderArrPtr;
     {
         memory_error_code resultCode = memory_map_alloc(&physicsPtr->colliderArrKey, 
         (void **)&colliderArrPtr);
@@ -2178,17 +2291,93 @@ physics_rigidbody_apply_force(const struct memory_allocation_key *physicsKeyPtr,
     {
         return B32_FALSE;
     }
-    
+
+    b32 isResult = _physics_rigidbody_alloc_force(physicsKeyPtr, rigidbodyId, direction, 
+        magnitude, duration);
+
+    return isResult;
+}
+
+b32
+physics_rigidbody_mute_force(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id forceId, b32 isMuted)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
     struct physics *physicsPtr;
-    struct physics_rigidbody *rigidbodyArrPtr;
     {
         memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
         (void **)&physicsPtr);
 
         if (resultCode != MEMORY_OK)
         {
-            return B32_FALSE:
+            return B32_FALSE;
         }
+    }
+
+    struct physics_force_object *forceObjPtr;
+
+    if (!(basic_dict_map_data(&physicsPtr->forceDictKey, (void *)&forceId, 
+        (void **)&forceObjPtr)))
+    {
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_FALSE;
+    }
+
+    forceObjPtr->forceData.isMuted = isMuted;
+
+    basic_dict_unmap_data(&physicsPtr->forceDictKey, &forceId, 
+    (void **)&forceObjPtr);
+
+    return B32_TRUE;
+}
+
+b32
+physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timestep)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(physicsKeyPtr)))
+    {
+        return B32_FALSE;
+    }
+
+    struct physics *physicsPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+    }
+
+    // no active rigidbodies; operation is already complete
+    if (physicsPtr->activeRigidbodyCount < 1)
+    {
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        return B32_TRUE;
+    }
+
+    u32 activeHeadRigidbodyIndex = physicsPtr->activeRigidbodyHeadIndex;
+
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    for (u32 activeLhsRigidbodyIndex = activeHeadRigidbodyIndex;;)
+    {
+        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
+        (void **)&physicsPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+        
+        struct physics_rigidbody *rigidbodyArrPtr;
 
         resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
         (void **)&rigidbodyArrPtr);
@@ -2199,278 +2388,166 @@ physics_rigidbody_apply_force(const struct memory_allocation_key *physicsKeyPtr,
 
             return B32_FALSE;
         }
-    }
 
-    if (rigidbodyId > physicsPtr->rigidbodyCapacity)
-    {
+        struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[activeLhsRigidbodyIndex];
+        physics_id rigidbodyId = rigidbodyPtr->id;
+
         memory_unmap_alloc((void **)&rigidbodyArrPtr);
         memory_unmap_alloc((void **)&physicsPtr);
 
-        return B32_FALSE;
-    }
-
-    struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[rigidbodyId - 1];
-
-    struct physics_force force;
-
-    return B32_TRUE;
-}
-
-void
-physics_rigidbody_force_set_active(struct physics *context, physics_id rigidbodyId, struct physics_force_id *forceIdPtr, b32 isActive)
-{
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[(i32)rigidbodyId];
-    struct physics_force *forcePtr = &rbPtr->forceArr[(i32)forceIdPtr->id];
-
-    forcePtr->isActive = isActive;
-}
-
-const struct physics_force *
-physics_rigidbody_get_force(struct physics *context, physics_id rigidbodyId, struct physics_force_id *forceIdPtr)
-{
-    struct physics_rigidbody *rbPtr = &context->rigidbodies[(i32)rigidbodyId];
-
-    return &rbPtr->forceArr[(i32)forceIdPtr->id];
-}
-
-void
-physics_update(struct physics *context, real32 timestep)
-{
-    for (i32 i = context->log->activeMessageCount; i > 0; ++i)
-    {
-        const struct physics_log_message_id *messageIdPtr;
-
-        physics_log_pop_message(context, &messageIdPtr);
-    }
-
-    for (i32 rbIndex = 0; rbIndex < context->rigidbodyCount; ++rbIndex)
-    {
-        real32 accelerationDirection[] = {0.f, 0.f, 0.f};
-        real32 accumulatedAccelerationMagnitude = 0.f;
-
-        struct physics_rigidbody *rbPtr = &context->rigidbodies[rbIndex];
-
-        if (rbPtr->activeForceIdCount > 0) 
+        if (physicsPtr->activeRigidbodyCount > 1)
         {
-            for (i32 counter = rbPtr->activeForceIdCount; counter > 0; --counter)
+            u32 rhsCounter = 0;
+
+            for (u32 activeRhsRigidbodyIndex = activeHeadRigidbodyIndex;;)
             {
-                struct physics_force_id *forceIdPtr = rbPtr->activeForceIds;
+                resultCode = memory_map_alloc(physicsKeyPtr, 
+                (void **)&physicsPtr);
 
-                assert(forceIdPtr);
-                assert(forceIdPtr->isActive);
-                
-                struct physics_force *forcePtr = &rbPtr->forceArr[(i32)forceIdPtr->id];
-
-                if (!rbPtr->isKinematic)
+                if (resultCode != MEMORY_OK)
                 {
-                    real32 force[] = {
-                        forcePtr->direction[0]*forcePtr->magnitude,
-                        forcePtr->direction[1]*forcePtr->magnitude,
-                        forcePtr->direction[2]*forcePtr->magnitude
-                    };
-
-                    assert(rbPtr->mass > 0.f);
-
-                    real32 acceleration[] = {force[0]/rbPtr->mass,
-                        force[1]/rbPtr->mass,
-                        force[2]/rbPtr->mass};
-
-                    real32 magnitude = sqrtf(force[0]*force[0] +
-                            force[1]*force[1] +
-                            force[2]*force[2]);
-                    
-                    accumulatedAccelerationMagnitude += (forcePtr->duration > 0.f) ? (magnitude*timestep) : magnitude;
-
-                    accelerationDirection[0] += acceleration[0]/magnitude;
-                    accelerationDirection[1] += acceleration[1]/magnitude;
-                    accelerationDirection[2] += acceleration[2]/magnitude;
-
-                    real32 magnitude1 = sqrtf(accelerationDirection[0]*accelerationDirection[0] +
-                        accelerationDirection[1]*accelerationDirection[1] +
-                        accelerationDirection[2]*accelerationDirection[2]);
-
-                    accelerationDirection[0] /= magnitude1;
-                    accelerationDirection[1] /= magnitude1;
-                    accelerationDirection[2] /= magnitude1;
-                }
-
-                real32 deltaTime = (forcePtr->currentTimestamp + timestep) - forcePtr->startTimestamp;
-                
-                if ((deltaTime + forcePtr->currentTimestamp - forcePtr->startTimestamp) >= forcePtr->duration)
-                {
-                    _physics_rigidbody_free_force_id(context, (physics_id)rbIndex, forceIdPtr);
+                    return B32_FALSE;
                 }
                 
-                forcePtr->currentTimestamp = context->timeSinceStart;
-            }
+                resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
+                (void **)&rigidbodyArrPtr);
 
-            real32 resultVec[3];
-
-            resultVec[0] = accelerationDirection[0]*accumulatedAccelerationMagnitude;
-            resultVec[1] = accelerationDirection[1]*accumulatedAccelerationMagnitude;
-            resultVec[2] = accelerationDirection[2]*accumulatedAccelerationMagnitude;
-
-            rbPtr->velocity[0] += resultVec[0]*timestep;
-            rbPtr->velocity[1] += resultVec[1]*timestep;
-            rbPtr->velocity[2] += resultVec[2]*timestep;
-        }
-        
-        struct physics_material *materialPtr = physics_get_material(context, rbPtr->material);
-        struct physics_collider *colliderPtr = physics_get_collider(context, rbPtr->collider);
-
-        //real32 velocityMagnitude = sqrtf(rbPtr->velocity[0]*rbPtr->velocity[0] +
-        //    rbPtr->velocity[1]*rbPtr->velocity[1] +
-        //    rbPtr->velocity[2]*rbPtr->velocity[2]);
-
-        // apply drag
-        if (!rbPtr->isKinematic)
-        {
-            real32 dragForce[3];
-            physics_helpers_calculate_drag(dragForce, materialPtr->dragCoefficient, context->airDensity, rbPtr->velocity, 
-                (colliderPtr->bounds.right - colliderPtr->bounds.left)*(colliderPtr->bounds.top - colliderPtr->bounds.bottom));
-
-            real32 dragAcceleration[] = {dragForce[0]/rbPtr->mass, dragForce[1]/rbPtr->mass, dragForce[2]/rbPtr->mass};
-            //real32 dragAccelerationMagnitude = sqrtf(dragAcceleration[0]*dragAcceleration[0] + dragAcceleration[1]*dragAcceleration[1] +
-            //    dragAcceleration[2]*dragAcceleration[2]);
-            
-            rbPtr->velocity[0] += dragAcceleration[0]*timestep;
-            rbPtr->velocity[1] += dragAcceleration[1]*timestep;
-            rbPtr->velocity[2] += dragAcceleration[2]*timestep;
-
-            // apply friction
-            // TODO:
-
-            rbPtr->rotation[0] += rbPtr->rotationVelocity[0]*timestep;
-            rbPtr->rotation[1] += rbPtr->rotationVelocity[1]*timestep;
-            rbPtr->rotation[2] += rbPtr->rotationVelocity[2]*timestep;
-
-            const real64 phi = M_PI*2.0;
-
-            if (rbPtr->rotation[0] > phi)
-            {
-                rbPtr->rotation[0] = 0.f;
-            }
-            else if (rbPtr->rotation[0] < 0.)
-            {
-                rbPtr->rotation[0] = phi;
-            }
-            if (rbPtr->rotation[1] > phi)
-            {
-                rbPtr->rotation[1] = 0.f;
-            }
-            else if (rbPtr->rotation[1] < 0.)
-            {
-                rbPtr->rotation[1] = phi;
-            }
-            if (rbPtr->rotation[2] > phi)
-            {
-                rbPtr->rotation[2] = 0.f;
-            }
-            else if (rbPtr->rotation[2] < 0.)
-            {
-                rbPtr->rotation[2] = phi;
-            }
-
-            rbPtr->position[0] += rbPtr->velocity[0]*timestep;
-            rbPtr->position[1] += rbPtr->velocity[1]*timestep;
-            rbPtr->position[2] += rbPtr->velocity[2]*timestep;
-        }
-
-        for (i32 rbRhsIndex = 0; rbRhsIndex < context->rigidbodyCount; ++rbRhsIndex)
-        {
-            if (rbRhsIndex == rbIndex)
-            {
-                continue;
-            }
-
-            struct physics_rigidbody *rbRhsPtr = &context->rigidbodies[rbRhsIndex];
-
-            physics_id collisionKey[] = {rbPtr->id, rbRhsPtr->id};
-
-            struct basic_dict_pair *collisionPair = basic_dict_get(context->collisionDict, context->collisionArena, collisionKey);
-
-            if (!_physics_rigidbody_collider_is_overlap(context, rbPtr, rbRhsPtr))
-            {
-                if (collisionPair)
+                if (resultCode != MEMORY_OK)
                 {
-                    (&context->collisionArena[context->collisionArenaFreeAllocationIndex++])->isActive = B32_FALSE;
-                }
-            }
-            else if (!collisionPair)
-            {
-                if (!rbPtr->isKinematic)
-                {
-                    real32 rbLhsCollisionMagnitude = sqrtf(rbPtr->velocity[0]*rbPtr->velocity[0]*rbRhsPtr->mass +
-                         rbPtr->velocity[1]*rbPtr->velocity[1]*rbRhsPtr->mass +
-                         rbPtr->velocity[2]*rbPtr->velocity[2]*rbRhsPtr->mass);
-                     
-                    real32 collisionNormal[] = {rbPtr->velocity[0]/rbLhsCollisionMagnitude,
-                    rbPtr->velocity[1]/rbLhsCollisionMagnitude,
-                    rbPtr->velocity[2]/rbLhsCollisionMagnitude};
+                    memory_unmap_alloc((void **)&physicsPtr);
 
-                    real32 rbLhsCollisionDirection[] = {-collisionNormal[0], -collisionNormal[1], -collisionNormal[2]};
-
-                    rbPtr->velocity[0] += (rbLhsCollisionDirection[0]*rbLhsCollisionMagnitude)*rbRhsPtr->mass*2.f + rbRhsPtr->velocity[0]*rbRhsPtr->mass;
-                    rbPtr->velocity[1] += (rbLhsCollisionDirection[1]*rbLhsCollisionMagnitude)*rbRhsPtr->mass*2.f + rbRhsPtr->velocity[1]*rbRhsPtr->mass;
-                    rbPtr->velocity[2] += (rbLhsCollisionDirection[2]*rbLhsCollisionMagnitude)*rbRhsPtr->mass*2.f + rbRhsPtr->velocity[2]*rbRhsPtr->mass;
-                    
-                    rbRhsPtr->velocity[0] += (collisionNormal[0]*rbLhsCollisionMagnitude)*rbPtr->mass - rbPtr->velocity[0]*rbPtr->mass;
-                    rbRhsPtr->velocity[1] += (collisionNormal[0]*rbLhsCollisionMagnitude)*rbPtr->mass - rbPtr->velocity[1]*rbPtr->mass;
-                    rbRhsPtr->velocity[2] += (collisionNormal[0]*rbLhsCollisionMagnitude)*rbPtr->mass - rbPtr->velocity[2]*rbPtr->mass;
+                    return B32_FALSE;
                 }
 
-                struct physics_collision *collisionPtr;
-
-                if (context->collisionArena)
+                if (activeRhsRigidbodyIndex == activeLhsRigidbodyIndex)
                 {
-                    if (context->collisionArenaFreeAllocationIndex != context->collisionArenaCapacity)
+                    activeRhsRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
+
+                    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+                    memory_unmap_alloc((void **)&physicsPtr);
+
+                    continue;
+                }
+
+                struct physics_rigidbody *rhsRigidbodyPtr = &rigidbodyArrPtr[activeRhsRigidbodyIndex];
+                physics_id rhsRigidbodyId = rhsRigidbodyPtr->id;
+
+                memory_unmap_alloc((void **)&rigidbodyArrPtr);
+                memory_unmap_alloc((void **)&physicsPtr);
+
+                b32 isOverlap;
+                
+                _physics_rigidbody_collider_is_overlap(physicsKeyPtr, rigidbodyId, rhsRigidbodyId, 
+                &isOverlap);
+
+                if (isOverlap)
+                {
+                    resultCode = memory_map_alloc(physicsKeyPtr, 
+                    (void **)&physicsPtr);
+
+                    if (resultCode != MEMORY_OK)
                     {
-                        collisionPtr = &context->collisionArena[context->collisionArenaFreeAllocationIndex++];
+                        return B32_FALSE;
                     }
-                    else 
+
+                    u64 key;
+
+                    ((physics_id *)&key)[0] = rigidbodyId;
+                    ((physics_id *)&key)[1] = rhsRigidbodyId;
+
+                    if (!(basic_dict_get_is_found(&physicsPtr->collisionDictKey, &key)))
                     {
-                        if (!context->collisionArena[0].isActive)
-                        {
-                            context->collisionArenaFreeAllocationIndex = -1;
-                        }
-                        else 
-                        {
-                            context->collisionArena = memory_realloc(context->memoryContext, context->collisionArena, 
-                                sizeof(context->collisionArena[0])*(context->collisionArenaCapacity *= 
-                                    PHYSICS_COLLISION_ARENA_LENGTH_REALLOC_MULTIPLIER));
-                            
-                            assert(context->collisionArena);
-                        }
-                        
-                        collisionPtr = &context->collisionArena[++context->collisionArenaFreeAllocationIndex];
+                        basic_dict_push_data(&physicsPtr->collisionDictKey, &key, NULL, 
+                        NULL, NULL);
+                    }
+
+                    memory_unmap_alloc((void **)&physicsPtr);
+                }
+
+                if (rhsRigidbodyPtr->nextRigidbodyIndex == physicsPtr->activeRigidbodyHeadIndex)
+                {
+                    break;
+                }
+            }
+        }
+
+        u64 bytesRead;
+        struct physics_force force;
+
+        // add force to physics list
+        while (!(circular_buffer_read_bytes(&rigidbodyPtr->forcesArenaKey, 
+            sizeof(struct physics_force), (void *)&force, 
+            &bytesRead)))
+        {
+            if (bytesRead == sizeof(struct physics_force))
+            {
+                const struct memory_allocation_key forceObjNodeKey;
+                struct physics_force_object *forceObjPtr;
+
+                if (physicsPtr->freeForceCount > 0)
+                {
+                    if (!(basic_list_get_next_node(&physicsPtr->freeForceListKey, NULL, 
+                        &forceObjNodeKey)))
+                    {
+                        continue;
+                    }
+
+                    if (!(basic_list_move_node(&physicsPtr->freeForceListKey, 
+                        &physicsPtr->activeForceListKey, &forceObjNodeKey)))
+                    {
+                        continue;
+                    }
+
+                    if (!(basic_list_map_data(&forceObjNodeKey, (void **)&forceObjPtr)))
+                    {
+                        continue;
                     }
                 }
                 else 
                 {
-                    assert (context->collisionArenaCapacity < 1);
+                    if (!(basic_list_insert_front(&physicsPtr->activeForceListKey, 0, 
+                        sizeof(struct physics_force_object), physicsKeyPtr, 
+                        &forceObjNodeKey)))
+                    {
+                        continue;
+                    }
                     
-                    context->collisionArena = collisionPtr = memory_alloc(context->memoryContext, sizeof(struct physics_collision)*
-                        (++context->collisionArenaCapacity));
+                    if (!(basic_list_map_data(&forceObjNodeKey, (void **)&forceObjPtr)))
+                    {
+                        continue;
+                    }
                 }
 
-                collisionPtr->wideId = g_COLLISION_ID_COUNTER++;
-                collisionPtr->rbLhsId = rbPtr->id;
-                collisionPtr->rbRhsId = rbRhsPtr->id;
-                collisionPtr->isActive = B32_TRUE;
+                forceObjPtr->rigidbodyId = rigidbodyPtr->id;
+
+                memcpy(&forceObjPtr->forceData, &force, sizeof(struct physics_force));
+
+                basic_list_unmap_data(&physicsPtr->activeForceListKey, &forceObjNodeKey, 
+                (void **)&forceObjPtr);
             }
         }
-    }
-    
-    for (struct physics_log_message_id *messageIdPtr = context->log->activeMessageIdQueue;
-        messageIdPtr;)
-    {
-        //struct physics_log_message *messagePtr = &context->log->messageArr[(i32)messageIdPtr->id];
 
-        //messageIdPtr = messageIdPtr->next != context->log->activeMessageIdQueue ? messageIdPtr->next : NULL;
-        physics_log_pop_message(context, NULL);
+        circular_buffer_reset(&rigidbodyPtr->forcesArenaKey);
+
+        memory_unmap_alloc((void **)&rigidbodyArrPtr);
+        memory_unmap_alloc((void **)&physicsPtr);
+
+        if (rigidbodyPtr->nextRigidbodyIndex != physicsPtr->activeRigidbodyHeadIndex)
+        {
+            activeRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
+        }
     }
 
-    context->timeSinceStart += timestep;
+    // TODO: handle collisions
+
+    // TODO: apply forces
+
+    // TODO: apply friction and drag
+
+    memory_unmap_alloc((void **)&rigidbodyArrPtr);
+    memory_unmap_alloc((void **)&physicsPtr);
+
+    return B32_TRUE;
 }
 
 struct physics_rigidbody *

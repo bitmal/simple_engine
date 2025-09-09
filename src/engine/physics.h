@@ -82,8 +82,8 @@ physics_rigidbody_apply_force(const struct memory_allocation_key *physicsKeyPtr,
     physics_id rigidbodyId, real32 direction[3], real32 magnitude, real32 duration);
 
 b32
-physics_rigidbody_toggle_force(const struct memory_allocation_key *physicsKeyPtr, 
-    physics_id rigidbodyId, physics_id forceId, b32 isMuted);
+physics_rigidbody_mute_force(const struct memory_allocation_key *physicsKeyPtr, 
+    physics_id forceId, b32 isMuted);
 
 b32
 physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timestep);
