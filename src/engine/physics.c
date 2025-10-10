@@ -134,7 +134,7 @@ static u32 g_MATERIAL_ALLOCATION_ID_COUNTER = 0;
 static u32 g_COLLIDER_ALLOCATION_ID_COUNTER = 0;
 static u32 g_RIGIDBODY_ALLOCATION_ID_COUNTER = 0;
 
-b32
+static b32
 _physics_collision_hash_func(struct basic_dict *dictPtr, void *key,
     utils_hash *outHashPtr)
 {
@@ -154,7 +154,7 @@ _physics_collision_hash_func(struct basic_dict *dictPtr, void *key,
     return B32_TRUE;
 }
 
-b32
+static b32
 _physics_create_key_copy_func(struct basic_dict *dictPtr, void *keyPtr, 
     const struct memory_raw_allocation_key *outRawKeyKeyPtr)
 {
@@ -185,7 +185,7 @@ _physics_create_key_copy_func(struct basic_dict *dictPtr, void *keyPtr,
     return B32_TRUE;
 }
 
-b32
+static b32
 _physics_force_hash_func(struct basic_dict *dictPtr, void *keyPtr, utils_hash *outHashPtr)
 {
     if (!dictPtr)
@@ -215,19 +215,29 @@ _physics_force_hash_func(struct basic_dict *dictPtr, void *keyPtr, utils_hash *o
 
     i32 key = *(i32 *)keyPtr;
 
-    key = ~key + (key << 15); // key = (key << 15) - key - 1;
-    key = key ^ (key >> 12);
-    key = key + (key << 2);
+    // https://gist.github.com/badboy/6267743
+    // see "knuth" multiplicative method.
+    // multiply by sparse bit pattern
+    // and multiply using bit shifts and adds
+    // to obtain hash.
+    // different machines will either A) provide multiplication in hardware
+    // or B) not. a compromise is to use bit shifts and adds to simulate
+    // hardware multiplication, using a prime or odd constant. It does the same thing,
+    // has the same performance, and is guaranteed to work on all machines
+    const i32 c2=0x27d4eb2d;
+
+    key = (key ^ 61) ^ (key >> 16);
+    key = key + (key << 3);
     key = key ^ (key >> 4);
-    key = key * 2057; // key = (key + (key << 3)) + (key << 11);
-    key = key ^ (key >> 16);
+    key = key * c2;
+    key = key ^ (key >> 15);
 
     *outHashPtr = (u64)(((real64)key/INT32_MAX)*(real64)(UINT64_MAX - 1)) + 1;
 
     return B32_TRUE;
 }
 
-b32
+static b32
 _physics_force_key_copy_func(struct basic_dict *dictPtr, void *keyPtr, 
     const struct memory_raw_allocation_key *outRawKeyKeyPtr)
 {
@@ -2343,216 +2353,6 @@ physics_update(const struct memory_allocation_key *physicsKeyPtr, real32 timeste
     {
         return B32_FALSE;
     }
-
-    struct physics *physicsPtr;
-    {
-        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
-        (void **)&physicsPtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            return B32_FALSE;
-        }
-    }
-
-    // no active rigidbodies; operation is already complete
-    if (physicsPtr->activeRigidbodyCount < 1)
-    {
-        memory_unmap_alloc((void **)&physicsPtr);
-
-        return B32_TRUE;
-    }
-
-    u32 activeHeadRigidbodyIndex = physicsPtr->activeRigidbodyHeadIndex;
-
-    memory_unmap_alloc((void **)&physicsPtr);
-
-    for (u32 activeLhsRigidbodyIndex = activeHeadRigidbodyIndex;;)
-    {
-        memory_error_code resultCode = memory_map_alloc(physicsKeyPtr, 
-        (void **)&physicsPtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            return B32_FALSE;
-        }
-        
-        struct physics_rigidbody *rigidbodyArrPtr;
-
-        resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
-        (void **)&rigidbodyArrPtr);
-
-        if (resultCode != MEMORY_OK)
-        {
-            memory_unmap_alloc((void **)&physicsPtr);
-
-            return B32_FALSE;
-        }
-
-        struct physics_rigidbody *rigidbodyPtr = &rigidbodyArrPtr[activeLhsRigidbodyIndex];
-        physics_id rigidbodyId = rigidbodyPtr->id;
-
-        memory_unmap_alloc((void **)&rigidbodyArrPtr);
-        memory_unmap_alloc((void **)&physicsPtr);
-
-        if (physicsPtr->activeRigidbodyCount > 1)
-        {
-            for (u32 activeRhsRigidbodyIndex = activeHeadRigidbodyIndex;;)
-            {
-                resultCode = memory_map_alloc(physicsKeyPtr, 
-                (void **)&physicsPtr);
-
-                if (resultCode != MEMORY_OK)
-                {
-                    return B32_FALSE;
-                }
-                
-                resultCode = memory_map_alloc(&physicsPtr->rigidbodyArrKey, 
-                (void **)&rigidbodyArrPtr);
-
-                if (resultCode != MEMORY_OK)
-                {
-                    memory_unmap_alloc((void **)&physicsPtr);
-
-                    return B32_FALSE;
-                }
-
-                if (activeRhsRigidbodyIndex == activeLhsRigidbodyIndex)
-                {
-                    activeRhsRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
-
-                    memory_unmap_alloc((void **)&rigidbodyArrPtr);
-                    memory_unmap_alloc((void **)&physicsPtr);
-
-                    continue;
-                }
-
-                struct physics_rigidbody *rhsRigidbodyPtr = &rigidbodyArrPtr[activeRhsRigidbodyIndex];
-                physics_id rhsRigidbodyId = rhsRigidbodyPtr->id;
-
-                memory_unmap_alloc((void **)&rigidbodyArrPtr);
-                memory_unmap_alloc((void **)&physicsPtr);
-
-                b32 isOverlap;
-                
-                _physics_rigidbody_collider_is_overlap(physicsKeyPtr, rigidbodyId, rhsRigidbodyId, 
-                &isOverlap);
-
-                if (isOverlap)
-                {
-                    resultCode = memory_map_alloc(physicsKeyPtr, 
-                    (void **)&physicsPtr);
-
-                    if (resultCode != MEMORY_OK)
-                    {
-                        return B32_FALSE;
-                    }
-
-                    u64 key;
-
-                    ((physics_id *)&key)[0] = rigidbodyId;
-                    ((physics_id *)&key)[1] = rhsRigidbodyId;
-
-                    if (!(basic_dict_get_is_found(&physicsPtr->collisionDictKey, &key)))
-                    {
-                        basic_dict_push_data(&physicsPtr->collisionDictKey, &key, NULL, 
-                        NULL, NULL);
-                    }
-
-                    struct physics_collision collData;
-
-                    collData.id = ++g_COLLISION_ID_COUNTER;
-                    collData.rbLhsId = rigidbodyId;
-                    collData.rbRhsId = rhsRigidbodyId;
-
-                    circular_buffer_write_bytes(&physicsPtr->collisionArenaKey, sizeof(struct physics_collision), 
-                    (void *)&collData);
-
-                    memory_unmap_alloc((void **)&physicsPtr);
-                }
-
-                if (rhsRigidbodyPtr->nextRigidbodyIndex == physicsPtr->activeRigidbodyHeadIndex)
-                {
-                    break;
-                }
-            }
-        }
-
-        u64 bytesRead;
-        struct physics_force force;
-
-        // add force to physics list
-        while (!(circular_buffer_read_bytes(&rigidbodyPtr->forcesArenaKey, 
-            sizeof(struct physics_force), (void *)&force, 
-            &bytesRead)))
-        {
-            if (bytesRead == sizeof(struct physics_force))
-            {
-                const struct memory_allocation_key forceObjNodeKey;
-                struct physics_force_object *forceObjPtr;
-
-                if (physicsPtr->freeForceCount > 0)
-                {
-                    if (!(basic_list_get_next_node(&physicsPtr->freeForceListKey, NULL, 
-                        &forceObjNodeKey)))
-                    {
-                        continue;
-                    }
-
-                    if (!(basic_list_move_node(&physicsPtr->freeForceListKey, 
-                        &physicsPtr->activeForceListKey, &forceObjNodeKey)))
-                    {
-                        continue;
-                    }
-
-                    if (!(basic_list_map_data(&forceObjNodeKey, (void **)&forceObjPtr)))
-                    {
-                        continue;
-                    }
-                }
-                else 
-                {
-                    if (!(basic_list_insert_front(&physicsPtr->activeForceListKey, 0, 
-                        sizeof(struct physics_force_object), physicsKeyPtr, 
-                        &forceObjNodeKey)))
-                    {
-                        continue;
-                    }
-                    
-                    if (!(basic_list_map_data(&forceObjNodeKey, (void **)&forceObjPtr)))
-                    {
-                        continue;
-                    }
-                }
-
-                forceObjPtr->rigidbodyId = rigidbodyPtr->id;
-
-                memcpy(&forceObjPtr->forceData, &force, sizeof(struct physics_force));
-
-                basic_list_unmap_data(&physicsPtr->activeForceListKey, &forceObjNodeKey, 
-                (void **)&forceObjPtr);
-            }
-        }
-
-        circular_buffer_reset(&rigidbodyPtr->forcesArenaKey);
-
-        u32 nextRigidbodyIndex = rigidbodyPtr->nextRigidbodyIndex;
-
-        memory_unmap_alloc((void **)&rigidbodyArrPtr);
-        memory_unmap_alloc((void **)&physicsPtr);
-
-        if (rigidbodyPtr->nextRigidbodyIndex != activeHeadRigidbodyIndex)
-        {
-            activeLhsRigidbodyIndex = nextRigidbodyIndex;
-        }
-    }
-
-    // TODO: handle collisions
-
-    // TODO: apply forces
-
-    // TODO: apply friction and drag
-    memory_unmap_alloc((void **)&physicsPtr);
 
     return B32_TRUE;
 }

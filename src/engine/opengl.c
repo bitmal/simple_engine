@@ -1,12 +1,16 @@
 #include "opengl.h"
 #include "basic_dict.h"
 #include "vec4.h"
+#include "constants.h"
 #include "utils.h"
 #include "types.h"
 #include "memory.h"
+#include "basic_list.h"
 
 #include "GL/glew.h"
 
+#include <SDL3/SDL_oldnames.h>
+#include <SDL3/SDL_video.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -14,13 +18,13 @@
 
 struct opengl_attrib
 {
-    GLuint location;
+    GLuint glLocation;
 };
 
 struct opengl_uniform
 {
-    GLuint location;
-    GLenum type;
+    GLuint glLocation;
+    GLenum glType;
     GLsizei typeLength;
 };
 
@@ -28,18 +32,18 @@ struct opengl_program
 {
     GLuint glId;
     i32 attribCount;
-    struct opengl_attrib *attribs;
+    const struct memory_allocation_key attribArrKey;
     i32 uniformCount;
-    struct opengl_uniform *uniforms;
+    const struct memory_allocation_key uniformArrKey;
 };
 
-struct opengl_vao
+struct opengl_vertex_array
 {
     GLuint glId;
 
-    opengl_id program;
-    opengl_id vertexBuffer;
-    opengl_id elementBuffer;
+    opengl_id programId;
+    opengl_id vertexBufferId;
+    opengl_id elementBufferId;
 };
 
 struct opengl_buffer
@@ -50,39 +54,59 @@ struct opengl_buffer
 struct opengl_buffer_target
 {
     enum opengl_buffer_target_type type;
-    opengl_id buffer;
+    opengl_id bufferId;
 };
 
 struct opengl_texture
 {
-    GLuint textureGLid;
-    GLuint samplerGLid;
-    GLenum internalFormat;
-    opengl_id buffer;
+    GLuint textureGLId;
+    GLuint samplerGLId;
+    GLenum glInternalFormat;
+    opengl_id bufferId;
 };
 
 struct opengl
 {
-    struct memory *memoryContext;
+    SDL_GLContext glContext;
+    SDL_Window *sdlWindow;
+    const struct memory_context_key memoryKey;
+    const struct memory_page_key contextPageKey;
+    const struct memory_page_key heapPageKey;
     real32 bgColor[4];
-    i32 programCount;
-    struct opengl_program *programs;
-    opengl_id activeProgram;
-    i32 vaoCount;
-    struct opengl_vao *vertexArrays;
-    opengl_id boundVao;
-    i32 bufferCount;
-    struct opengl_buffer *buffers;
+    const struct memory_allocation_key programListKey;
+    opengl_id activeProgramId;
+    u32 vertexArrayCount;
+    u32 vertexArrayCapacity;
+    const struct memory_allocation_key vertexArrayArrKey;
+    opengl_id boundVertexArray;
+    u32 bufferCount;
+    u32 bufferCapacity;
+    const struct memory_allocation_key bufferArrKey;
     struct opengl_buffer_target bufferTargets[OPENGL_BUFFER_TARGET_LENGTH];
-    i32 textureCount;
-    struct opengl_texture *textures;
+    u32 textureCount;
+    u32 textureCapacity;
+    const struct memory_allocation_key textureArrKey;
+    b32 isCurrent;
 };
 
 struct opengl_sort_context
 {
-    struct opengl_program *program;
-    struct opengl_program_info *programInfo;
+    opengl_id programId;
+    struct opengl_program_info programInfo;
 };
+
+struct opengl_current_context_info
+{
+    opengl_id id;
+    SDL_Window *sdlWindow;
+    SDL_GLContext sdlGLContext;
+};
+
+static i32 g_CURRENT_CONTEXT_ID_COUNTER;
+static u32 g_CURRENT_CONTEXT_COUNT;
+static u32 g_CURRENT_CONTEXT_CAPACITY;
+static const struct memory_raw_allocation_key g_CURRENT_CONTEXT_ARR;
+static const struct memory_allocation_key g_CURRENT_CONTEXT_DICT;
 
 static GLenum
 __opengl_get_gl_target(enum opengl_buffer_target_type target)
@@ -179,242 +203,731 @@ __opengl_sort_attrib_replace_func(struct memory *mem, void *lhs, size_t lhsIndex
     *lhsAttrib = *rhsAttrib;
 }
 
-const char *
-opengl_helper_type_to_literal_str(u32 type)
+static b32 
+_opengl_context_info_hash_func(struct basic_dict *dictPtr, void *key, 
+    utils_hash *outHashPtr)
+{
+    if (!dictPtr)
+    {
+        return B32_FALSE;
+    }
+
+    if (!key)
+    {
+        return B32_FALSE;
+    }
+
+    if (!outHashPtr)
+    {
+        return B32_FALSE;
+    }
+
+    const i32 c2 = 0x27d4eb2d; // a prime or an odd constant
+    i32 keyVal = *(i32 *)key;
+
+    keyVal = (keyVal ^ 61) ^ (keyVal >> 16);
+    keyVal = keyVal + (keyVal << 3);
+    keyVal = keyVal ^ (keyVal >> 4);
+    keyVal = keyVal * c2;
+    keyVal = keyVal ^ (keyVal >> 15);
+
+    *outHashPtr = (utils_hash)(((real32)keyVal/INT32_MAX)*UINT64_MAX);
+
+    return B32_TRUE;
+}
+
+static b32 
+_opengl_context_info_key_copy_func(struct basic_dict *dictPtr, void *keyPtr, 
+    const struct memory_raw_allocation_key *outRawKeyKeyPtr)
+{
+    if (!dictPtr)
+    {
+        return B32_FALSE;
+    }
+
+    if (!keyPtr)
+    {
+        return B32_FALSE;
+    }
+
+    if (!outRawKeyKeyPtr)
+    {
+        return B32_FALSE;
+    }
+
+    const struct memory_raw_allocation_key rawKeyKey;
+    i32 *allocPtr;
+    {
+        memory_error_code resultCode = memory_raw_alloc(&rawKeyKey, 
+        sizeof(i32));
+
+        if (resultCode != MEMORY_OK)
+        {
+            return B32_FALSE;
+        }
+
+        resultCode = memory_map_raw_allocation(&rawKeyKey, 
+        (void **)&allocPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_raw_free(&rawKeyKey);
+
+            return B32_FALSE;
+        }
+    }
+
+    *allocPtr = *(i32 *)keyPtr;
+
+    memory_unmap_raw_allocation(&rawKeyKey, (void **)&allocPtr);
+
+    memcpy((void *)outRawKeyKeyPtr, &rawKeyKey, sizeof(struct memory_raw_allocation_key));
+
+    return B32_TRUE;
+}
+
+opengl_result_code
+opengl_helper_type_to_literal_str(u32 type, u64 bufferLength, char *outBuffer)
 {
     const char *_ptr;
-    //const u64 offset = sizeof("GL_") - 1;
+    u64 strLength;
 
     switch(type)
     {
         case GL_FLOAT:
         {
             _ptr = "GL_FLOAT";
+            strLength = sizeof("GL_FLOAT") - 1;
         } break;
         
         case GL_INT:
         {
             _ptr = "GL_INT";
+            strLength = sizeof("GL_INT") - 1;
         } break;
         
         case GL_UNSIGNED_INT:
         {
             _ptr = "GL_UNSIGNED_INT";
+            strLength = sizeof("GL_UNSIGNED_INT") - 1;
         } break;
         
         case GL_FLOAT_VEC2:
         {
             _ptr = "GL_FLOAT_VEC2";
+            strLength = sizeof("GL_FLOAT_VEC2") - 1;
         } break;
         
         case GL_FLOAT_VEC3:
         {
             _ptr = "GL_FLOAT_VEC3";
+            strLength = sizeof("GL_FLOAT_VEC3") - 1;
         } break;
         
         case GL_FLOAT_VEC4:
         {
             _ptr = "GL_FLOAT_VEC4";
+            strLength = sizeof("GL_FLOAT_VEC4") - 1;
         } break;
         
         case GL_INT_VEC2:
         {
             _ptr = "GL_INT_VEC2";
+            strLength = sizeof("GL_INT_VEC2") - 1;
         } break;
         
         case GL_INT_VEC3:
         {
             _ptr = "GL_INT_VEC3";
+            strLength = sizeof("GL_INT_VEC3") - 1;
         } break;
         
         case GL_INT_VEC4:
         {
             _ptr = "GL_INT_VEC4";
+            strLength = sizeof("GL_INT_VEC4") - 1;
         } break;
         
         case GL_UNSIGNED_INT_VEC2:
         {
             _ptr = "GL_UNSIGNED_INT_VEC2";
+            strLength = sizeof("GL_UNSIGNED_INT_VEC2") - 1;
         } break;
         
         case GL_UNSIGNED_INT_VEC3:
         {
             _ptr = "GL_UNSIGNED_INT_VEC3";
+            strLength = sizeof("GL_UNSIGNED_INT_VEC3") - 1;
         } break;
         
         case GL_UNSIGNED_INT_VEC4:
         {
             _ptr = "GL_UNSIGNED_INT_VEC4";
+            strLength = sizeof("GL_UNSIGNED_INT_VEC4") - 1;
         } break;
         
         case GL_FLOAT_MAT4:
         {
             _ptr = "GL_FLOAT_MAT4";
+            strLength = sizeof("GL_FLOAT_MAT4") - 1;
         } break;
 
         default:
         {
             _ptr = "GL_NONE";
+            strLength = sizeof("GL_NONE") - 1;
         }
     }
 
-    return _ptr; // + offset;
+    if (strLength >= bufferLength)
+    {
+        return OPENGL_ERROR_CODE_BUFFER_TOO_SMALL;
+    }
+
+    strncpy(outBuffer, _ptr, strLength);
+
+    return OPENGL_OK;
 }
 
-u32
-opengl_helper_literal_str_to_type(const char *typeStr)
+opengl_result_code
+opengl_helper_literal_str_to_type(const char *typeStr, u32 *outResult)
 {
+    if (!outResult)
+    {
+        return OPENGL_ERROR_NULL_ARGUMENT;
+    }
+
     if (!strcmp(typeStr, "GL_FLOAT"))
     {
-        return GL_FLOAT;
+        *outResult = GL_FLOAT;
     }
     else if (!strcmp(typeStr, "GL_INT"))
     {
-        return GL_INT;
+        *outResult = GL_INT;
     }
     else if (!strcmp(typeStr, "GL_UNSIGNED_INT"))
     {
-        return GL_UNSIGNED_INT;
+        *outResult = GL_UNSIGNED_INT;
     }
     else if (!strcmp(typeStr, "GL_FLOAT_VEC2"))
     {
-        return GL_FLOAT_VEC2;
+        *outResult = GL_FLOAT_VEC2;
     }
     else if (!strcmp(typeStr, "GL_INT_VEC2"))
     {
-        return GL_INT_VEC2;
+        *outResult = GL_INT_VEC2;
     }
     else if (!strcmp(typeStr, "GL_UNSIGNED_INT_VEC2"))
     {
-        return GL_UNSIGNED_INT_VEC2;
+        *outResult = GL_UNSIGNED_INT_VEC2;
     }
     else if (!strcmp(typeStr, "GL_FLOAT_VEC3"))
     {
-        return GL_FLOAT_VEC3;
+        *outResult = GL_FLOAT_VEC3;
     }
     else if (!strcmp(typeStr, "GL_INT_VEC3"))
     {
-        return GL_INT_VEC3;
+        *outResult = GL_INT_VEC3;
     }
     else if (!strcmp(typeStr, "GL_UNSIGNED_INT_VEC3"))
     {
-        return GL_UNSIGNED_INT_VEC3;
+        *outResult = GL_UNSIGNED_INT_VEC3;
     }
     else if (!strcmp(typeStr, "GL_FLOAT_VEC4"))
     {
-        return GL_FLOAT_VEC4;
+        *outResult = GL_FLOAT_VEC4;
     }
     else if (!strcmp(typeStr, "GL_INT_VEC4"))
     {
-        return GL_INT_VEC4;
+        *outResult = GL_INT_VEC4;
     }
     else if (!strcmp(typeStr, "GL_UNSIGNED_INT_VEC4"))
     {
-        return GL_UNSIGNED_INT_VEC4;
+        *outResult = GL_UNSIGNED_INT_VEC4;
     }
     else if (!strcmp(typeStr, "GL_FLOAT_MAT4"))
     {
-        return GL_FLOAT_MAT4;
+        *outResult = GL_FLOAT_MAT4;
+    }
+    else
+    {
+        *outResult = GL_NONE;
+
+        return OPENGL_ERROR_UNKNOWN_TYPE;
     }
 
-    return GL_NONE;
+    return OPENGL_OK;
 }
 
-size_t
-opengl_helper_get_type_size(u32 type)
+opengl_result_code
+opengl_helper_get_type_size(u32 type, u32 *outResult)
 {
+    if (!outResult)
+    {
+        return OPENGL_ERROR_NULL_ARGUMENT;
+    }
+
     switch(type)
     {
         case GL_FLOAT:
         {
-            return sizeof(GLfloat);
+            *outResult = sizeof(GLfloat);
         } break;
         
         case GL_INT:
         {
-            return sizeof(GLint);
+            *outResult = sizeof(GLint);
         } break;
         
         case GL_UNSIGNED_INT:
         {
-            return sizeof(GLuint);
+            *outResult = sizeof(GLuint);
         } break;
         
         case GL_FLOAT_VEC2:
         {
-            return sizeof(GLfloat)*2;
+            *outResult = sizeof(GLfloat)*2;
         } break;
         
         case GL_FLOAT_VEC3:
         {
-            return sizeof(GLfloat)*3;
+            *outResult = sizeof(GLfloat)*3;
         } break;
         
         case GL_FLOAT_VEC4:
         {
-            return sizeof(GLfloat)*4;
+            *outResult = sizeof(GLfloat)*4;
         } break;
         
         case GL_INT_VEC2:
         {
-            return sizeof(GLint)*2;
+            *outResult = sizeof(GLint)*2;
         } break;
         
         case GL_INT_VEC3:
         {
-            return sizeof(GLint)*3;
+            *outResult = sizeof(GLint)*3;
         } break;
         
         case GL_INT_VEC4:
         {
-            return sizeof(GLint)*4;
+            *outResult = sizeof(GLint)*4;
         } break;
         
         case GL_UNSIGNED_INT_VEC2:
         {
-            return sizeof(GLuint)*2;
+            *outResult = sizeof(GLuint)*2;
         } break;
         
         case GL_UNSIGNED_INT_VEC3:
         {
-            return sizeof(GLuint)*3;
+            *outResult = sizeof(GLuint)*3;
         } break;
         
         case GL_UNSIGNED_INT_VEC4:
         {
-            return sizeof(GLuint)*4;
+            *outResult = sizeof(GLuint)*4;
         } break;
         
         case GL_FLOAT_MAT4:
         {
-            return sizeof(GLfloat)*16;
+            *outResult = sizeof(GLfloat)*16;
         } break;
 
         default:
         {
-            return 0;
-        }
+            *outResult = 0;
+
+            return OPENGL_ERROR_UNKNOWN_TYPE;
+        } break;
     }
+
+    return OPENGL_OK;
 }
 
-struct opengl *
-opengl_create_context(struct memory *memoryContext)
+opengl_result_code
+opengl_create_context(const struct memory_context_key *memoryKeyPtr,
+    SDL_Window *sdlWindow,
+    const struct memory_allocation_key *outContextKeyPtr)
 {
-    struct opengl *context = memory_alloc(memoryContext, sizeof(struct opengl));
-    memset(context, 0, sizeof(struct opengl));
-
-    context->memoryContext = memoryContext;
-
-    context->activeProgram = OPENGL_NULL_ID;
-    context->boundVao = OPENGL_NULL_ID;
-
-    for (int target = 0; target < OPENGL_BUFFER_TARGET_LENGTH; ++target)
+    if ((MEMORY_IS_CONTEXT_NULL(memoryKeyPtr)))
     {
-        context->bufferTargets[target].type = target;
-        context->bufferTargets[target].buffer = OPENGL_NULL_ID;
+        if (outContextKeyPtr)
+        {
+            memory_get_null_allocation_key(outContextKeyPtr);
+        }
+
+        return OPENGL_NOT_OK;
     }
 
-    return context;
+    if (!outContextKeyPtr)
+    {
+        return OPENGL_NOT_OK;
+    }
+
+    if (!sdlWindow)
+    {
+        memory_get_null_allocation_key(outContextKeyPtr);
+
+        return OPENGL_ERROR_NULL_CONTEXT;
+    }
+
+    const struct memory_page_key contextPageKey;
+    const struct memory_page_key heapPageKey;
+    {
+        memory_error_code resultCode = memory_alloc_page(memoryKeyPtr, 
+            sizeof(struct opengl) + memory_get_size_of_allocator(), 
+            &contextPageKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_get_null_allocation_key(outContextKeyPtr);
+
+            return B32_FALSE;
+        }
+
+        resultCode = memory_alloc_page(memoryKeyPtr, OPENGL_MEMORY_SIZE -
+            memory_get_size_of_page_header()*2 - sizeof(struct opengl) - memory_get_size_of_allocator(), 
+            &heapPageKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free_page(&contextPageKey);
+            
+            memory_get_null_allocation_key(outContextKeyPtr);
+
+            return OPENGL_NOT_OK;
+        }
+    }
+
+    const struct memory_allocation_key contextKey;
+    struct opengl *contextPtr;
+    {
+        memory_error_code resultCode = memory_alloc(&contextPageKey, 
+            sizeof(struct opengl), NULL, &contextKey);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free_page(&heapPageKey);
+            memory_free_page(&contextPageKey);
+
+            memory_get_null_allocation_key(outContextKeyPtr);
+
+            return OPENGL_NOT_OK;
+        }
+
+        memory_set_alloc_offset_width(&contextKey, 0, 
+        sizeof(struct opengl), '\0');
+
+        resultCode = memory_map_alloc(&contextKey, (void **)&contextPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_free_page(&heapPageKey);
+            memory_free_page(&contextPageKey);
+            
+            memory_get_null_allocation_key(outContextKeyPtr);
+
+            return OPENGL_NOT_OK;
+        }
+    }
+
+    contextPtr->sdlWindow = sdlWindow;
+    contextPtr->glContext = SDL_GL_CreateContext(sdlWindow);
+
+    if (!contextPtr->glContext)
+    {
+        memory_free_page(&heapPageKey);
+        memory_free_page(&contextPageKey);
+        
+        memory_get_null_allocation_key(outContextKeyPtr);
+
+        return OPENGL_NOT_OK;
+    }
+
+    memcpy((void *)&contextPtr->contextPageKey, &contextPageKey, 
+        sizeof(struct memory_page_key));
+    
+    memcpy((void *)&contextPtr->heapPageKey, &heapPageKey, 
+        sizeof(struct memory_page_key));
+
+    memcpy((void *)&contextPtr->memoryKey, memoryKeyPtr, 
+        sizeof(struct memory_context_key));
+
+    contextPtr->activeProgramId = OPENGL_NULL_ID;
+    contextPtr->boundVertexArray = OPENGL_NULL_ID;
+
+    if (!(basic_list_create(&heapPageKey, &contextPtr->programListKey)))
+    {
+        memory_free_page(&heapPageKey);
+        memory_free_page(&contextPageKey);
+        
+        memory_get_null_allocation_key(outContextKeyPtr);
+
+        return OPENGL_NOT_OK;
+    }
+
+
+    if ((MEMORY_IS_ALLOCATION_NULL(&g_CURRENT_CONTEXT_DICT)))
+    {
+        const struct memory_allocation_key resultContextInfoDictKey;
+        u64 keySize = sizeof(i32);
+
+        if ((basic_dict_create(&heapPageKey, &_opengl_context_info_hash_func, 
+            &_opengl_context_info_key_copy_func, (
+            utils_generate_next_prime_number(100)), &keySize, 
+            NULL, &resultContextInfoDictKey)))
+        {
+            memcpy((void *)&g_CURRENT_CONTEXT_DICT, &resultContextInfoDictKey, 
+            sizeof(struct memory_allocation_key));
+        }
+        else 
+        {
+            memory_unmap_alloc((void **)&contextPtr);
+
+            memory_free_page(&heapPageKey);
+            memory_free_page(&contextPageKey);
+
+            memory_get_null_allocation_key(outContextKeyPtr);
+
+            return B32_FALSE;
+        }
+    }
+
+    if (g_CURRENT_CONTEXT_COUNT == g_CURRENT_CONTEXT_CAPACITY)
+    {
+        if (g_CURRENT_CONTEXT_CAPACITY > 0)
+        {
+            const struct memory_allocation_key tempKey;
+
+            memory_error_code resultCode = memory_realloc(sizeof(struct opengl_current_context_info), NULL, 
+            &tempKey);
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&contextPtr);
+
+                memory_free_page(&heapPageKey);
+                memory_free_page(&contextPageKey);
+
+                memory_get_null_allocation_key(outContextKeyPtr);
+
+                return B32_FALSE;
+            }
+            
+            memcpy((void *)&g_CURRENT_CONTEXT_ARR, &tempKey, 
+            sizeof(struct memory_allocation_key));
+        }
+        else 
+        {
+            const struct memory_allocation_key tempKey;
+
+            memory_error_code resultCode = memory_raw_alloc(&heapPageKey, 
+
+            if (resultCode != MEMORY_OK)
+            {
+                memory_unmap_alloc((void **)&contextPtr);
+
+                memory_free_page(&heapPageKey);
+                memory_free_page(&contextPageKey);
+
+                memory_get_null_allocation_key(outContextKeyPtr);
+
+                return B32_FALSE;
+            }
+
+            memcpy((void *)&g_CURRENT_CONTEXT_ARR, &tempKey, 
+            sizeof(struct memory_allocation_key));
+        }
+    }
+
+    contextPtr->isCurrent = B32_TRUE;
+
+    memory_unmap_alloc((void **)&contextPtr);
+
+    memcpy((void *)outContextKeyPtr, &contextKey, sizeof(struct memory_allocation_key));
+
+    return OPENGL_OK;
+}
+
+opengl_result_code
+opengl_make_current(const struct memory_allocation_key *contextKeyPtr,
+    SDL_Window *sdlWindow)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(contextKeyPtr)))
+    {
+        return OPENGL_ERROR_NULL_CONTEXT;
+    }
+
+    if (!sdlWindow)
+    {
+        return OPENGL_ERROR_NULL_ARGUMENT;
+    }
+
+    struct opengl *contextPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(contextKeyPtr, 
+        (void **)&contextPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return OPENGL_NOT_OK;
+        }
+    }
+
+    if (!SDL_GL_MakeCurrent(sdlWindow, contextPtr->glContext))
+    {
+        memory_unmap_alloc((void **)&contextPtr);
+
+        return OPENGL_NOT_OK;
+    }
+
+    if (!(MEMORY_IS_ALLOCATION_NULL(&g_CURRENT_CONTEXT_KEY)))
+    {
+        struct opengl *prevContextPtr;
+
+        memory_error_code resultCode = memory_map_alloc(&g_CURRENT_CONTEXT_KEY, 
+        (void **)&prevContextPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            memory_unmap_alloc((void **)&contextPtr);
+
+            return OPENGL_NOT_OK;
+        }
+
+        prevContextPtr->isCurrent = B32_FALSE;
+    }
+
+    contextPtr->isCurrent = B32_TRUE;
+
+    memory_unmap_alloc((void **)&contextPtr);
+
+    memcpy((void *)&g_CURRENT_CONTEXT_KEY, contextKeyPtr, 
+    sizeof(struct memory_allocation_key));
+
+    return OPENGL_OK;
+}
+
+opengl_result_code
+opengl_destroy_context(const struct memory_allocation_key *ioContextKeyPtr)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(ioContextKeyPtr)))
+    {
+        return OPENGL_ERROR_NULL_CONTEXT;
+    }
+
+    struct opengl *contextPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(ioContextKeyPtr, 
+        (void **)&contextPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            return OPENGL_NOT_OK;
+        }
+    }
+
+    if (!(SDL_GL_DestroyContext(contextPtr->glContext)))
+    {
+        memory_unmap_alloc((void **)&contextPtr);
+
+        return OPENGL_NOT_OK;
+    }
+
+
+    memory_free_page(contextPtr->heapPageKey);
+
+    const struct memory_page_key tempKey;
+
+    memcpy((void *)&tempKey, &contextPtr->contextPageKey, 
+    sizeof(struct memory_page_key));
+
+    memory_unmap_alloc((void **)&contextPtr);
+
+    memory_free_page(&tempKey);
+
+    memory_get_null_allocation_key(ioContextKeyPtr);
+
+    return OPENGL_OK;
+}
+
+opengl_result_code
+opengl_get_sdl_gl_context(const struct memory_alocation_key *contextKeyPtr,
+    SDL_GLContext *outSDLGLContext)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(contextKeyPtr)))
+    {
+        if (outSDLGLContext)
+        {
+            *outSDLGLContext = NULL;
+        }
+
+        return OPENGL_ERROR_NULL_CONTEXT;
+    }
+
+    if (!outSDLGLContext)
+    {
+        return OPENGL_ERROR_NULL_ARGUMENT;
+    }
+
+    struct opengl *contextPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(contextKeyPtr, 
+        (void **)&contextPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            *outSDLGLContext = NULL;
+
+            return OPENGL_NOT_OK;
+        }
+    }
+
+    *outSDLGLContext = contextPtr->glContext;
+
+    memory_unmap_alloc((void **)&contextPtr);
+
+    return OPENGL_OK;
+}
+
+opengl_result_code
+opengl_get_sdl_window(const struct memory_alocation_key *contextKeyPtr,
+    SDL_Window *outSDLWindow)
+{
+    if ((MEMORY_IS_ALLOCATION_NULL(contextKeyPtr)))
+    {
+        if (outSDLWindow)
+        {
+            *outSDLWindow = NULL;
+        }
+
+        return OPENGL_ERROR_NULL_CONTEXT;
+    }
+
+    if (!outSDLWindow)
+    {
+        return OPENGL_ERROR_NULL_ARGUMENT;
+    }
+
+    struct opengl *contextPtr;
+    {
+        memory_error_code resultCode = memory_map_alloc(contextKeyPtr, 
+        (void **)&contextPtr);
+
+        if (resultCode != MEMORY_OK)
+        {
+            *outSDLWindow = NULL;
+
+            return OPENGL_NOT_OK;
+        }
+    }
+    
+    *outSDLWindow = contextPtr->sdlWindow;
+
+    memory_unmap_alloc((void **)&contextPtr);
+
+    return OPENGL_OK;
 }
 
 void 

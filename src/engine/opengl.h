@@ -2,20 +2,31 @@
 #define __OPENGL_H
 
 #include "types.h"
+#include "memory.h"
+
 #include <GL/glew.h>
+#include <SDL3/SDL.h>
 
 #include <stdlib.h>
+#include <stdint.h>
 
 #define OPENGL_PROGRAM_ATTRIB_POSITION 0
 #define OPENGL_PROGRAM_ATTRIB_COLOR 1 
 #define OPENGL_PROGRAM_ATTRIB_TEX 2
 #define OPENGL_PROGRAM_ATTRIB_ANY 3 
 
-typedef i32 opengl_id;
-struct opengl;
-struct basic_dict;
-struct memory;
-#define OPENGL_NULL_ID (opengl_id)-1
+typedef u32 opengl_id;
+#define OPENGL_NULL_ID ((opengl_id)UINT32_MAX)
+
+typedef i32 opengl_result_code;
+
+#define OPENGL_OK ((opengl_result_code)0)
+#define OPENGL_NOT_OK ((opengl_result_code)-1)
+
+#define OPENGL_ERROR_CODE_BUFFER_TOO_SMALL ((opengl_result_code)-2)
+#define OPENGL_ERROR_NULL_ARGUMENT ((opengl_result_code)-3)
+#define OPENGL_ERROR_UNKNOWN_TYPE ((opengl_result_code)-4)
+#define OPENGL_ERROR_NULL_CONTEXT ((opengl_result_code)-5)
 
 enum opengl_buffer_target_type
 {
@@ -40,9 +51,9 @@ struct opengl_texture_info
     u32 height;
 };
 
-struct opengl_vao_info
+struct opengl_vertex_array_info
 {
-    opengl_id vao;
+    opengl_id vertexArrayId;
 };
 
 struct opengl_attrib_info
@@ -73,20 +84,38 @@ struct opengl_program_info
     const struct basic_dict *uniformDict;
 };
 
-const char *
-opengl_helper_type_to_literal_str(u32 type);
+opengl_result_code
+opengl_helper_type_to_literal_str(u32 type, u64 bufferLength, char *outBuffer);
 
-u32
-opengl_helper_literal_str_to_type(const char *typeStr);
+opengl_result_code
+opengl_helper_literal_str_to_type(const char *typeStr, u32 *outResult);
 
-size_t
-opengl_helper_get_type_size(u32 type);
+opengl_result_code
+opengl_helper_get_type_size(u32 type, u32 *outResult);
 
-struct opengl *
-opengl_create_context(struct memory *memoryContext);
+opengl_result_code
+opengl_create_context(const struct memory_context_key *memoryKeyPtr,
+    SDL_Window *sdlWindow,
+    const struct memory_allocation_key *outContextKeyPtr);
 
-void 
-opengl_set_background_color(struct opengl *context, const real32 *v4);
+opengl_result_code
+opengl_make_current(const struct memory_allocation_key *contextKeyPtr,
+    SDL_Window *sdlWindow);
+
+opengl_result_code
+opengl_destroy_context(const struct memory_allocation_key *ioContextKeyPtr);
+
+opengl_result_code
+opengl_get_sdl_gl_context(const struct memory_alocation_key *contextKeyPtr,
+    SDL_GLContext *outSDLGLContext);
+
+opengl_result_code
+opengl_get_sdl_window(const struct memory_alocation_key *contextKeyPtr,
+    SDL_Window *outSDLWindow);
+
+opengl_result_code 
+opengl_set_background_color(const struct memory_allocation_key *contextKeyPtr, 
+    const real32 v[4]);
 
 struct opengl_program_info
 opengl_load_program(struct opengl *context, const char *programName);
