@@ -19,7 +19,7 @@
 struct memory_raw_allocator
 {
     u16 identifier;
-    const struct memory_raw_allocation_key allocKey;
+    const struct memory_allocation_key allocKey;
     u64 byteSize;
 };
 
@@ -557,7 +557,7 @@ _memory_get_is_raw_allocation_operation_ok()
 }
 
 memory_error_code
-memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize)
+memory_raw_alloc(u64 byteSize, const struct memory_allocation_key *outRawAllocKeyPtr)
 {
     u16 rawAllocationCount = g_MEMORY_RAW_ALLOCATION_ACTIVE_LIST_COUNT + g_MEMORY_RAW_ALLOCATION_FREE_LIST_COUNT;
     {
@@ -832,27 +832,39 @@ memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 
 
     ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationId = rawAllocationId;
     ((struct memory_raw_allocation_key *)outRawAllocKeyPtr)->rawAllocationInfoBranchIndex = rawAllocationInfoMapBranchIndex;
+    ((struct memory_allocation_key *)outRawAllocKeyPtr)->isManaged = B32_FALSE;
 
     return MEMORY_OK;
 }
 
 memory_error_code
-memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr,
-    const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize)
+memory_raw_realloc(const struct memory_allocation_key *rawAllocKeyPtr, u64 byteSize)
 {
-    if (rawAllocKeyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL)
+    if (!rawAllocKeyPtr)
+    {
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    if (rawAllocKeyPtr->isManaged)
+    {
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    const struct memory_raw_allocation_key *keyPtr = (void *)rawAllocKeyPtr;
+
+    if (keyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL)
     {
         return MEMORY_ERROR_NULL_ID;
     }
 
-    u16 rawAllocBranchInfoIndex = (u16)((real64)rawAllocKeyPtr->rawAllocationId/MEMORY_MAX_RAW_ALLOCS*
+    u16 rawAllocBranchInfoIndex = (u16)((real64)keyPtr->rawAllocationId/MEMORY_MAX_RAW_ALLOCS*
         g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_COUNT);
 
     struct memory_raw_allocation_info_map_branch_info *branchInfoPtr = 
         &g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_BRANCH_INFO_TABLE[rawAllocBranchInfoIndex];
 
     struct memory_raw_allocation_info *allocInfoPtr = &g_MEMORY_RAW_ALLOCATION_INFO_MAP[
-        rawAllocBranchInfoIndex][rawAllocKeyPtr->rawAllocationInfoBranchIndex];
+        rawAllocBranchInfoIndex][keyPtr->rawAllocationInfoBranchIndex];
 
     if (!allocInfoPtr->isActive)
     {
@@ -876,7 +888,7 @@ memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr,
 }
 
 memory_error_code
-memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
+memory_raw_free(const struct memory_allocation_key *rawAllocKeyPtr)
 {
     if (!rawAllocKeyPtr)
     {
@@ -886,7 +898,14 @@ memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
         return MEMORY_ERROR_NULL_ARGUMENT;
     }
 
-    if ((rawAllocKeyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL))
+    if (rawAllocKeyPtr->isManaged)
+    {
+        return MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION;
+    }
+
+    const struct memory_raw_allocation_key *keyPtr = (void *)rawAllocKeyPtr;
+
+    if ((keyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL))
     {
         utils_fprintfln(stderr, "%s(Line: %d): 'rawAllocKeyPtr' argument "
             "cannot be a NULL ID. Cannot free allocation." , __func__, __LINE__);
@@ -907,11 +926,11 @@ memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
         }
     }
 
-    u16 rawAllocationInfoMapBucketIndex = (u16)((real64)rawAllocKeyPtr->rawAllocationId/
+    u16 rawAllocationInfoMapBucketIndex = (u16)((real64)keyPtr->rawAllocationId/
         MEMORY_MAX_RAW_ALLOCS*g_MEMORY_RAW_ALLOCATION_INFO_MAP_BUCKET_COUNT) - 1;
 
     struct memory_raw_allocation_info *rawAllocInfoPtr = &g_MEMORY_RAW_ALLOCATION_INFO_MAP[
-        rawAllocationInfoMapBucketIndex][rawAllocKeyPtr->rawAllocationInfoBranchIndex];
+        rawAllocationInfoMapBucketIndex][keyPtr->rawAllocationInfoBranchIndex];
 
     if (!rawAllocInfoPtr->isActive)
     {
@@ -961,15 +980,20 @@ memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr)
 
     rawAllocInfoPtr->isActive = B32_TRUE;
 
-    *(memory_short_id*)&(rawAllocKeyPtr->rawAllocationId) = MEMORY_SHORT_ID_NULL;
+    *(memory_short_id*)&(keyPtr->rawAllocationId) = MEMORY_SHORT_ID_NULL;
 
     return MEMORY_OK;
 }
 
 memory_error_code
-memory_map_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr)
+memory_map_raw_allocation(const struct memory_allocation_key *rawAllocKeyPtr, void **outDataPtr)
 {
-    if (rawAllocKeyPtr->rawAllocationId == MEMORY_SHORT_ID_NULL)
+    if (!rawAllocKeyPtr)
+    {
+        return MEMORY_ERROR_NULL_ARGUMENT;
+    }
+
+    if (rawAllocKeyPtr->managed.rawAllocationId == MEMORY_SHORT_ID_NULL)
     {
         return MEMORY_ERROR_NULL_ID;
     }

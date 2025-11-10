@@ -52,15 +52,11 @@ enum memory_event_type
 #define MEMORY_IS_PAGE_NULL(pageKeyPtr) ((pageKeyPtr) ? (((pageKeyPtr)->pageId == MEMORY_SHORT_ID_NULL) ? \
     MEMORY_IS_CONTEXT_NULL((&(pageKeyPtr)->contextKey)) : B32_FALSE) : B32_TRUE)
 
-#define MEMORY_IS_RAW_ALLOCATION_NULL(rawAllocationPtr) ((rawAllocationPtr) ? ((rawAllocationPtr)->rawAllocationId == \
-    MEMORY_SHORT_ID_NULL ? B32_FALSE : B32_TRUE) : B32_FALSE)
+#define MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr) (allocationKeyPtr ? (allocationKeyPtr->isManaged ? \
+    (allocationKeyPtr->managed.allocId == MEMORY_SHORT_ID_NULL) ? B32_TRUE : \
+    MEMORY_IS_CONTEXT_NULL(&allocationKeyPtr->managed.contextKey)) : B32_TRUE)
 
-#define MEMORY_IS_ALLOCATION_NULL(allocationKeyPtr) ((allocationKeyPtr) ? (((allocationKeyPtr)->allocId == MEMORY_INT_ID_NULL) ? \
-    MEMORY_IS_CONTEXT_NULL((&(allocationKeyPtr)->contextKey)) : B32_FALSE) : B32_TRUE)
-
-#define MEMORY_IS_ALLOCATION_KEY_EQUAL(lhsKeyPtr, rhsKeyPtr) (((lhsKeyPtr) && (rhsKeyPtr)) ? \
-    (((lhsKeyPtr)->allocId == (rhsKeyPtr)->allocId) && ((lhsKeyPtr)->allocInfoIndex == (rhsKeyPtr)->allocInfoIndex) && \
-    ((lhsKeyPtr)->contextKey.contextId == (rhsKeyPtr)->contextKey.contextId)) : B32_FALSE)
+#define MEMORY_IS_ALLOCATION_KEY_EQUAL(lhsKeyPtr, rhsKeyPtr) 
 
 #define MEMORY_LABEL_REGION_ALLOCATION_BYTE_OFFSET ((p64)0)
 
@@ -82,11 +78,24 @@ struct memory_raw_allocation_key
     u16 rawAllocationInfoBranchIndex;
 };
 
-struct memory_allocation_key
+struct memory_managed_allocation_key
 {
     memory_int_id allocId;
     u32 allocInfoIndex;
     const struct memory_context_key contextKey;
+};
+
+struct memory_allocation_key
+{
+    u8 header;
+
+    union
+    {
+        struct memory_raw_allocation_key raw;
+        struct memory_managed_allocation_key managed;
+    };
+
+    b32 isManaged;
 };
 
 struct memory_context_diagnostic_info
@@ -124,23 +133,22 @@ struct memory_diagnostic_info
 #define MEMORY_ERROR_NOT_AN_ACTIVE_ALLOCATION ((memory_error_code)15)
 
 memory_error_code
-memory_raw_alloc(const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
+memory_raw_alloc(u64 byteSize, const struct memory_allocation_key *outRawAllocKeyPtr);
 
 memory_error_code
-memory_raw_realloc(const struct memory_raw_allocation_key *rawAllocKeyPtr,
-    const struct memory_raw_allocation_key *outRawAllocKeyPtr, u64 byteSize);
+memory_raw_realloc(const struct memory_allocation_key *rawAllocKeyPtr, u64 byteSize);
 
 memory_error_code
-memory_raw_free(const struct memory_raw_allocation_key *rawAllocKeyPtr);
+memory_raw_free(const struct memory_allocation_key *rawAllocKeyPtr);
 
 memory_error_code
-memory_map_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr);
+memory_map_raw_allocation(const struct memory_allocation_key *rawAllocKeyPtr, void **outDataPtr);
 
 memory_error_code
-memory_unmap_raw_allocation(const struct memory_raw_allocation_key *rawAllocKeyPtr, void **outDataPtr);
+memory_unmap_raw_allocation(const struct memory_allocation_key *rawAllocKeyPtr, void **outDataPtr);
 
 memory_error_code
-memory_set_raw_alloc_offset_width(const struct memory_raw_allocation_key *rawAllocationKeyPtr, p64 byteOffset, 
+memory_set_raw_alloc_offset_width(const struct memory_allocation_key *rawAllocationKeyPtr, p64 byteOffset, 
     u64 byteWidth, u8 value);
 
 memory_error_code
@@ -209,7 +217,8 @@ memory_error_code
 memory_get_alloc_key_is_ok(const struct memory_allocation_key *allocKeyPtr);
 
 memory_error_code
-memory_context_get_diagnostic_info(const struct memory_context_key *memoryContextKeyPtr, const struct memory_context_diagnostic_info *outDiagInfoPtr);
+memory_context_get_diagnostic_info(const struct memory_context_key *memoryContextKeyPtr, 
+    const struct memory_context_diagnostic_info *outDiagInfoPtr);
 
 memory_error_code
 memory_get_diagnostic_info(const struct memory_diagnostic_info *outDiagInfoPtr);
@@ -218,7 +227,7 @@ u64
 memory_sizeof(const struct memory_allocation_key *allocKeyPtr);
 
 u64
-memory_raw_sizeof(const struct memory_raw_allocation_key *rawAllocKeyPtr);
+memory_raw_sizeof(const struct memory_allocation_key *rawAllocKeyPtr);
 
 b32
 memory_get_null_allocation_key(const struct memory_allocation_key *outAllocationKeyPtr);
